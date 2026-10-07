@@ -1,88 +1,54 @@
 #!/usr/bin/env bash
-# Armored Fist WASM build: the SAME C units as tools/build_native.sh, compiled with emcc to a node
-# (headless) target. The 32-bit-flat g_mem model, the DOS/hardware shims, the driver overlays, and the
-# harness (tools/native_main.c, reused via #ifdef __EMSCRIPTEN__) are all portable C -- so the wasm
-# build renders the SAME framebuffer as native, which is the project's hard invariant (native<->wasm
-# bit-identical). Non-portable native diagnostics (SIGSEGV/backtrace, mprotect FIST_FBTRAP) and the
-# SIGALRM/setitimer host timer are #ifdef'd out; the tick runs cooperatively (one INT-8 tick per pump).
-#
-# Usage: tools/build.sh [out.js]    (default /tmp/fisttest/fistrun.js)
-# Sources come from the temporary build directory if `make patch` produced it, else straight from re_out/.
-set -e
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-OUTJS="${1:-/tmp/fisttest/fistrun.js}"
-mkdir -p "$(dirname "$OUTJS")"
-
-EMCC="${EMCC:-$(ls "$HOME"/Git/emsdk/upstream/emscripten/emcc 2>/dev/null || echo emcc)}"
-EMCC="$(command -v "$EMCC")"
-
-source "$ROOT/tools/work_dir.sh"
-if [ -f "$FIST_BUILDDIR/fist.c" ]; then SRCDIR="$FIST_BUILDDIR"; else SRCDIR="$ROOT/re_out"; fi
-echo "[build.sh] wasm sources from $SRCDIR  (emcc=$EMCC)"
-
-# Same compiler looseness as the native build: the decompile is faithful C with Ghidra type slack
-# (int<->ptr, implicit decls, return-type slack) that is not a correctness signal at this stage.
-# -O2 by default: verify proved -O2 wasm is BYTE-IDENTICAL to -O0 native across all 159 flows, so the
-# node-wasm + DoD-gate build runs ~5x faster with zero output change.  (32-bit NATIVE stays -O0 -- -O2
-# HANGS the x86 build on the mission-cockpit, a decompile-UB the wasm backend does not hit.)  FIST_DEBUG=1
-# restores -O0 -g for gdb tracing.
-FOPT="-O2"; [ -n "${FIST_DEBUG:-}" ] && FOPT="-O0 -g"
-F="$FOPT -std=gnu11 -w \
-  -fno-strict-aliasing -Wno-int-conversion -Wno-implicit-function-declaration \
-  -Wno-builtin-declaration-mismatch -Wno-return-type -Wno-incompatible-pointer-types"
-INCL="-I$SRCDIR -I$ROOT/re_out"
-
-# Engine unit + harness (native_main is reused as the wasm main via #ifdef __EMSCRIPTEN__).
-UNITS_C="$SRCDIR/fist.c $ROOT/tools/native_main.c $SRCDIR/fist_dos.c $SRCDIR/fist_vga.c $SRCDIR/fist_pic.c \
-         $SRCDIR/fist_icall.c $SRCDIR/fist_modules.c $SRCDIR/fist_sb.c $SRCDIR/fist_opl.c"
-# Driver overlay units, when present (weak fmap/base symbols in fist_modules.c resolve against them).
-for m in mga snd ext; do
-  [ -f "$SRCDIR/fist_$m.c" ] && UNITS_C="$UNITS_C $SRCDIR/fist_$m.c"
-done
-
-OBJS=""; err=0
-for c in $UNITS_C; do
-  o="${OBJDIR:-/tmp}/wasm_$(basename "$c" .c).o"
-  if ! "$EMCC" -c $F $INCL "$c" -o "$o" 2>${OBJDIR:-/tmp}/fist_wcc.txt; then
-    echo "ERROR compiling $(basename "$c"):"; cat ${OBJDIR:-/tmp}/fist_wcc.txt; err=1
-  fi
-  OBJS="$OBJS $o"
-done
-# OPL FM: the DOSBox 0.74-3 DBOPL core (C++) + extern "C" bridge, compiled with em++ (same core as native).
-EMXX="$(dirname "$EMCC")/em++"
-CXXF="-O2 -std=gnu++11 -w -fno-rtti -fno-exceptions -fno-strict-aliasing"
-for pair in "$SRCDIR/fist_opl_dbopl.cpp:-I$SRCDIR -I$SRCDIR/opl" "$SRCDIR/opl/dbopl.cpp:-I$SRCDIR/opl"; do
-  src="${pair%%:*}"; inc="${pair#*:}"
-  o="${OBJDIR:-/tmp}/wasm_$(basename "$src" .cpp).o"
-  if ! "$EMXX" -c $CXXF $inc "$src" -o "$o" 2>${OBJDIR:-/tmp}/fist_wcc.txt; then
-    echo "ERROR compiling $(basename "$src"):"; cat ${OBJDIR:-/tmp}/fist_wcc.txt; err=1
-  fi
-  OBJS="$OBJS $o"
-done
-[ "$err" = 1 ] && { echo "build aborted (compile errors)"; exit 1; }
-
-# Link. g_mem[0x200000] is a 2 MB static array (grown to host the extender terrain-load heap);
-# INITIAL_MEMORY + growth cover it plus the C heap.
-# EXIT_RUNTIME=1 so main()'s return (or the FIST_RUNMS _exit) terminates the node process, like native.
-# NODERAWFS=1 gives node's real filesystem so the harness's relative paths (re_out/*.bin, armoredfist/*)
-# resolve from the repo root exactly as native. wasm_pre.js mirrors process.env into ENV for getenv().
-# EMULATE_FUNCTION_POINTER_CASTS: the engine's whole indirect-call surface is untyped K&R `code`
-# (typedef int code();) resolved at runtime by fist_icall to any __allregs target; on x86 an untyped
-# `(*fp)(args)` calls whatever the resolved function is regardless of its declared arity (cdecl caller-
-# cleanup). wasm's call_indirect instead type-checks the table slot, so a call site's derived signature
-# (from its args) vs the callee's declared signature must match exactly or it traps ("null function or
-# function signature mismatch"). This flag makes emcc emit adapter thunks so an untyped-cast indirect
-# call reaches any target regardless of signature -- i.e. it restores the NATIVE untyped-call ABI on
-# wasm, uniformly and without touching a single engine call site or callee. It changes NO behavior or
-# output (the same C runs), only the ABI mismatch wasm would otherwise impose -- so it is the mechanism
-# that lets the wasm build render byte-for-byte what native renders. (DD2's alternative -- per-dispatch-
-# family arity normalization -- is the doctrine-pure long game; this restores the invariant at once.)
-"$EMCC" $OBJS -o "$OUTJS" \
-  -sSTACK_SIZE=16777216 -sINITIAL_MEMORY=67108864 -sALLOW_MEMORY_GROWTH=1 -sMAXIMUM_MEMORY=536870912 \
-  -sEXIT_RUNTIME=1 -sERROR_ON_UNDEFINED_SYMBOLS=0 -sNODERAWFS=1 -sENVIRONMENT=node \
-  -sEMULATE_FUNCTION_POINTER_CASTS=1 \
-  -sBINARYEN_EXTRA_PASSES=pass-arg=max-func-params@64 \
-  -sEXPORTED_RUNTIME_METHODS='["ENV","callMain"]' \
-  --pre-js "$ROOT/tools/wasm_pre.js" --emit-symbol-map 2>${OBJDIR:-/tmp}/fist_wlink.txt \
-  || { echo "LINK FAILED:"; tail -25 ${OBJDIR:-/tmp}/fist_wlink.txt; exit 1; }
-echo "[build.sh] built $OUTJS (wasm)"
+set -euo pipefail
+root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+output=${FIST_REWRITE_BUILD_ROOT:-/tmp/wasm-fist-rewrite}
+export PYTHONPYCACHEPREFIX=${PYTHONPYCACHEPREFIX:-/tmp/wasm-fist-python-cache}
+case "${1:-all}" in
+    native|wasm|all) target=${1:-all} ;;
+    *) echo "Usage: $0 [native|wasm|all]" >&2; exit 2 ;;
+esac
+if [[ $target == native || $target == all ]]; then
+    cmake -S "$root" -B "$output/native" -G Ninja \
+        -DCMAKE_C_COMPILER=clang -DCMAKE_BUILD_TYPE=RelWithDebInfo
+    cmake --build "$output/native"
+    ctest --test-dir "$output/native" --output-on-failure --no-tests=error
+fi
+if [[ $target == wasm || $target == all ]]; then
+    emcmake cmake -S "$root" -B "$output/wasm" -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo
+    cmake --build "$output/wasm"
+    timeout 30s node "$root/tests/check_wasm.cjs" "$output/wasm/fist_renderer_probe.js"
+    python3 "$root/tests/test_scenario.py" --target wasm --build-root "$output"
+    python3 "$root/tests/test_ground_command.py" --target wasm --build-root "$output"
+    python3 "$root/tests/test_ground_goal.py" --target wasm --build-root "$output"
+    python3 "$root/tests/test_ground_route.py" --target wasm --build-root "$output"
+    python3 "$root/tests/test_geometry.py" --target wasm --build-root "$output"
+    python3 "$root/tests/test_orders.py" --target wasm --build-root "$output"
+    python3 "$root/tests/test_units.py" --target wasm --build-root "$output"
+    python3 "$root/tests/test_vehicle_start.py" --target wasm --build-root "$output"
+    python3 "$root/tests/test_weapon_control.py" --target wasm --build-root "$output"
+    python3 "$root/tests/test_vehicle_damage.py" --target wasm --build-root "$output"
+    python3 "$root/tests/test_primary_fire.py" --target wasm --build-root "$output"
+    python3 "$root/tests/test_mission_world.py" --target wasm --build-root "$output"
+    python3 "$root/tests/test_mission_combat.py" --target wasm --build-root "$output"
+    python3 "$root/tests/test_world_step.py" --target wasm --build-root "$output"
+    python3 "$root/tests/test_aircraft_death.py" --target wasm --build-root "$output"
+    python3 "$root/tests/test_destruction.py" --target wasm --build-root "$output"
+    python3 "$root/tests/test_other_damage.py" --target wasm --build-root "$output"
+    python3 "$root/tests/test_projectile_flight.py" --target wasm --build-root "$output"
+    python3 "$root/tests/test_collision.py" --target wasm --build-root "$output"
+    python3 "$root/tests/test_projectile_launch.py" --target wasm --build-root "$output"
+    python3 "$root/tests/test_object_pool.py" --target wasm --build-root "$output"
+    python3 "$root/tests/test_vehicle_maintenance.py" --target wasm --build-root "$output"
+    python3 "$root/tests/test_vehicle_history.py" --target wasm --build-root "$output"
+    python3 "$root/tests/test_vehicle_motion.py" --target wasm --build-root "$output"
+    python3 "$root/tests/test_mission_driving.py" --target wasm --build-root "$output"
+    python3 "$root/tests/test_driving.py" --target wasm --build-root "$output"
+    python3 "$root/tests/test_vehicle.py" --target wasm --build-root "$output"
+    python3 "$root/tests/test_model_bitmap.py" --target wasm --build-root "$output"
+    python3 "$root/tests/test_models.py" --target wasm --build-root "$output"
+    python3 "$root/tests/test_ground.py" --target wasm --build-root "$output"
+    python3 "$root/tests/test_heightfield.py" --target wasm --build-root "$output"
+    python3 "$root/tests/test_terrain_assets.py" --target wasm --build-root "$output"
+    timeout 30s node "$root/tests/check_wasm.cjs" "$output/wasm/fist_vehicle_scene_probe.js"
+    python3 "$root/tests/test_terrain_scene.py" --target wasm --build-root "$output"
+fi

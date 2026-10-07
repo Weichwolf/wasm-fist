@@ -64,14 +64,14 @@ build/style/memory gates pass. Scope and remaining playable-mission requirements
 
 Verified on 2026-10-07:
 
-- `bash tools/rewrite/build.sh all`: terminal zero, 28 native CTest gates and all 26 WASM Python
+- `bash tools/build.sh all`: terminal zero, 28 native CTest gates and all 26 WASM Python
   gates plus both renderer probes. After include/probe/observable changes, the final native
-  refresh `bash tools/rewrite/build.sh native` passes all 28 gates in 275.63 seconds. Both
+  refresh `bash tools/build.sh native` passes all 28 gates in 275.63 seconds. Both
   production trees report no pending Ninja work; no binaries were rebuilt under their tests.
-- `python3 tools/rewrite/check_style.py`: terminal zero, strict LLVM 19.1.x formatting/tidy for
+- `python3 tools/check_style.py`: terminal zero, strict LLVM 19.1.x formatting/tidy for
   all 73 owned C units. Initial direct-include, adjacent-parameter and narrow-loop diagnostics
   were fixed without rule changes; final direct preview and complete gates pass.
-- `/tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_mission_driving.py --target all --originals --oracle`: all five groups, zero skips, 16.110 seconds. Per target: 89 fixtures,
+- `/tmp/wasm-fist-decoder-oracle/bin/python tests/test_mission_driving.py --target all --originals --oracle`: all five groups, zero skips, 16.110 seconds. Per target: 89 fixtures,
   808 complete timed boundaries, 883 installed objects, 46 explicit rejections. Includes every
   ground class, all RNG cursors, pause/partitions/weapon edges, selected physical orphan under an
   overwritten registry, source/detail failures, all ten supported pinned contexts (671 objects)

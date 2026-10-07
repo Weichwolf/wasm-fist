@@ -72,14 +72,14 @@ bearing, animation, runtime initialization and model mission-palette mapping rem
 ## Verification and visual evidence
 
 ```sh
-bash tools/rewrite/build.sh all
-python3 tools/rewrite/check_style.py
+bash tools/build.sh all
+python3 tools/check_style.py
 PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
-  /tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_model_bitmap.py \
+  /tmp/wasm-fist-decoder-oracle/bin/python tests/test_model_bitmap.py \
   --originals --oracle --review-dir /tmp/wasm-fist-model-review
 ```
 
-Unicorn uses `tools/rewrite/oracle_requirements.txt`; it is optional verification tooling, not a
+Unicorn uses `tests/oracle_requirements.txt`; it is optional verification tooling, not a
 runtime dependency. The DOS image pin/executor is shared with the previous model oracle. The
 kernel pin is SHA256 102a5465e03f3b0397041b1bd783d33992ac2c14bb6e42a713af610ec08c3ab1.
 `original_sprite_oracle.py` executes actual original priority insertion, full unfiltered sprite
@@ -117,10 +117,10 @@ Sanitizer reproduction:
 ```sh
 clang -std=c11 -Wall -Wextra -Wpedantic -Wno-unused-parameter -Wno-unused-function -Werror \
   -fno-strict-aliasing -ffast-math -fsanitize=address,undefined -fno-omit-frame-pointer -g -O1 \
-  -Isrc -Itools/rewrite src/assets/model.c src/assets/palette.c src/render/model_bitmap.c \
-  tools/rewrite/probe_io.c tools/rewrite/probe_source.c tools/rewrite/model_bitmap_probe.c \
+  -Isrc -Itests src/assets/model.c src/assets/palette.c src/render/model_bitmap.c \
+  tests/probe_io.c tests/probe_source.c tests/model_bitmap_probe.c \
   -o /tmp/wasm-fist-model-bitmap-sanitized
 ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
-  PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache python3 tools/rewrite/test_model_bitmap.py \
+  PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache python3 tests/test_model_bitmap.py \
   --target native --native-probe /tmp/wasm-fist-model-bitmap-sanitized --originals
 ```

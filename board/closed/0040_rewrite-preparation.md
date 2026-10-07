@@ -18,13 +18,13 @@ Preparation on 2026-10-06, parent/reference `349ad31a9fd21b350d435651bb2e90afda4
   C/patches/legacy shims and provisioning are unchanged. Originals remain ignored and read-only.
 - softgl pinned to latest published master `7963be1d5b5e1bebbe97ece2c655228c8bc0a838`.
   Both compile databases contain only C translation units and no meshoptimizer/tool sources.
-- Fresh sequential native/WASM builds: `bash tools/rewrite/build.sh all` passed. Native CTest
+- Fresh sequential native/WASM builds: `bash tools/build.sh all` passed. Native CTest
   renderer integration passed; complete Node WASM probe exited zero. Both printed
   `softgl integration: 320x200 RGBA8 fnv1a=3fa856ed`.
-- `python3 tools/rewrite/check_style.py` passed with LLVM 19.1.7. All owned C is present in the
+- `python3 tools/check_style.py` passed with LLVM 19.1.7. All owned C is present in the
   checked compile database; headers are formatting-checked and included by translation units.
   Negative controls proved that bad formatting and identifier naming produce failing exits.
-- `python3 tools/rewrite/verify_browser.py --screenshot /tmp/wasm-fist-rewrite/browser.png` passed
+- `python3 tests/verify_browser.py --screenshot /tmp/wasm-fist-rewrite/browser.png` passed
   with locked Playwright 1.63.0 and actual Chromium 154.0.8037.92. Cross-origin isolation was true;
   canvas size was 320×200, black opaque corner, blue top `[13,14,229,255]`, red bottom-left
   `[220,19,16,255]`, completed checksum matched and no browser runtime errors occurred. Screenshot

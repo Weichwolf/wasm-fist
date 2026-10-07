@@ -86,7 +86,7 @@ now shares one common helper; production simulation contains no representation c
   Native takes 15.939 seconds, WASM 23.663 seconds. Complete first-difference/input regression
   remains green: three original-only groups / all 47 files / 376 read/seek returns / 109040 bytes,
   zero skips in 0.511 seconds. Full 0081 acceptance remains unproved.
-- Final `CTEST_PARALLEL_LEVEL=4 bash tools/rewrite/build.sh all` exits zero: 32 native CTests
+- Final `CTEST_PARALLEL_LEVEL=4 bash tools/build.sh all` exits zero: 32 native CTests
   (55.26 seconds), 30 WASM Python groups and both renderer/pixel gates. The subsequently expanded
   retention fixture and additional orphan-world group pass separately as recorded above.
   Both Ninja trees are current. LLVM 19.1.7 format/tidy passes all 76 owned C translation units;

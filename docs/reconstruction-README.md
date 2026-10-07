@@ -1,5 +1,8 @@
 # wasm-fist — Armored Fist (1994) → native + WebAssembly
 
+Historical instructions for the frozen `ghidra` branch and `reference/reconstruction-v1` tag.
+Active rewrite development is described in [development.md](development.md).
+
 A faithful, **bit-identical** port of NovaLogic's 1994 *Armored Fist* (`FIST.DAT` — a 16-bit segmented
 DOS protected-mode engine with **Voxel-Space** terrain, hand-written 386 assembly by Kyle Freeman) to
 reproducible C compiling to native and WebAssembly. The target: given the same mission, RNG seed and

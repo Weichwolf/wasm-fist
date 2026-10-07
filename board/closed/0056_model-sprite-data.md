@@ -23,11 +23,11 @@ buffer; both files and families preserve complete record/texel data independentl
 
 Verified 2026-10-06:
 
-- `bash tools/rewrite/build.sh all`: six native CTest contracts and all WASM gates passed.
+- `bash tools/build.sh all`: six native CTest contracts and all WASM gates passed.
   Constructed-fixture gates deliberately skip the separately requested original corpus.
-- `python3 tools/rewrite/check_style.py`: LLVM 19.1.7 strict formatting/tidy passed for all 18
+- `python3 tools/check_style.py`: LLVM 19.1.7 strict formatting/tidy passed for all 18
   owned C translation units; no checks or requested compiler flags were weakened.
-- `/tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_models.py --originals --oracle`
+- `/tmp/wasm-fist-decoder-oracle/bin/python tests/test_models.py --originals --oracle`
   (native and WASM): all six groups passed with no skips. All 34 families/170 pinned inputs,
   612 records and 1679860 texels are checked completely, not through checksums/filters.
 - The independent original-instruction oracle confirms every sprite's dimensions/complete

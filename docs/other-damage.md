@@ -44,9 +44,9 @@ Recheck the render-table byte load and later unsigned destruction-word compariso
 
 ```sh
 objdump -D -b binary -m i386 -M intel,addr16,data16 \
-  --start-address=0xc4fb --stop-address=0xc507 re_out/fist_dat_image.bin
+  --start-address=0xc4fb --stop-address=0xc507 /tmp/wasm-fist-reference-images/fist_dat_image.bin
 objdump -D -b binary -m i386 -M intel,addr16,data16 \
-  --start-address=0xbc9a --stop-address=0xbcbf re_out/fist_dat_image.bin
+  --start-address=0xbc9a --stop-address=0xbcbf /tmp/wasm-fist-reference-images/fist_dat_image.bin
 ```
 
 `b274` and `b396` use the next RNG word's low byte: `base + 1 + ((low * spread) >> 8)`.
@@ -105,17 +105,17 @@ are explicit producer requests; this step does not claim audible PCM or visible 
 ## Verification and reproduction
 
 ```sh
-bash tools/rewrite/build.sh all
-python3 tools/rewrite/check_style.py
+bash tools/build.sh all
+python3 tools/check_style.py
 PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
-  /tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_other_damage.py --originals --oracle
+  /tmp/wasm-fist-decoder-oracle/bin/python tests/test_other_damage.py --originals --oracle
 PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
-  /tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_vehicle_damage.py --originals --oracle
+  /tmp/wasm-fist-decoder-oracle/bin/python tests/test_vehicle_damage.py --originals --oracle
 PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
-  /tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_projectile_flight.py --originals --oracle
+  /tmp/wasm-fist-decoder-oracle/bin/python tests/test_projectile_flight.py --originals --oracle
 ```
 
-The optional oracle uses pinned Unicorn 2.1.4 from `tools/rewrite/oracle_requirements.txt`.
+The optional oracle uses pinned Unicorn 2.1.4 from `tests/oracle_requirements.txt`.
 It executes complete untouched dispatch, target, allocator and effect-update methods. It checks
 all modeled actor fields, every unrelated target/source/live-orphan payload byte, initialized
 effects' complete 55 bytes, complete pool metadata, census, roster, random state and actual
@@ -148,16 +148,16 @@ For ASan/UBSan/leak verification, compile after the single-writer production bui
 mkdir -p /tmp/wasm-fist-0071-sanitizer
 clang -std=c11 -Wall -Wextra -Wpedantic -Wno-unused-parameter -Wno-unused-function -Werror \
   -fno-strict-aliasing -ffast-math -fsanitize=address,undefined -fno-omit-frame-pointer -g -O1 \
-  -Isrc -Itools/rewrite src/assets/units.c src/assets/scenario.c src/assets/vehicle.c src/assets/klc.c \
+  -Isrc -Itests src/assets/units.c src/assets/scenario.c src/assets/vehicle.c src/assets/klc.c \
   src/sim/random.c src/sim/rotation.c src/sim/vehicle_state.c src/sim/ground.c \
   src/sim/object_pool.c src/sim/collision.c src/sim/projectile_launch.c src/sim/projectile_flight.c \
   src/sim/smoke_animation.c \
   src/sim/vehicle_damage.c src/sim/damage_common.c src/sim/other_damage.c \
-  tools/rewrite/probe_io.c tools/rewrite/object_pool_probe_io.c tools/rewrite/combat_probe_io.c \
-  tools/rewrite/other_damage_probe.c \
+  tests/probe_io.c tests/object_pool_probe_io.c tests/combat_probe_io.c \
+  tests/other_damage_probe.c \
   -o /tmp/wasm-fist-0071-sanitizer/other_damage_probe
 ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
-  PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache python3 tools/rewrite/test_other_damage.py \
+  PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache python3 tests/test_other_damage.py \
   --originals --target native --native-probe /tmp/wasm-fist-0071-sanitizer/other_damage_probe
 ```
 

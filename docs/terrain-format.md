@@ -7,15 +7,15 @@ views borrow the archive. Every decode/lookup failure preserves the caller's out
 
 ## Original evidence
 
-The runtime-kernel instruction image `re_out/fist_image.bin` has SHA-256
+The runtime-kernel instruction image `/tmp/wasm-fist-reference-images/fist_image.bin` has SHA-256
 `102a5465e03f3b0397041b1bd783d33992ac2c14bb6e42a713af610ec08c3ab1` at the frozen reference.
 Recheck the evidence with:
 
 ```sh
 objdump -D -b binary -m i386 -M intel \
-  --start-address=0x643c --stop-address=0x686c re_out/fist_image.bin
+  --start-address=0x643c --stop-address=0x686c /tmp/wasm-fist-reference-images/fist_image.bin
 objdump -D -b binary -m i386 -M intel \
-  --start-address=0x6250 --stop-address=0x643c re_out/fist_image.bin
+  --start-address=0x6250 --stop-address=0x643c /tmp/wasm-fist-reference-images/fist_image.bin
 ```
 
 `646d` recognizes KLC1. `659a/65a0` read dword width/height; `65be–65d6` copy 768 palette bytes.
@@ -96,13 +96,13 @@ and full gameplay are outside that oracle's scope. The pinned manifest contains 
 names, dimensions, sizes and hashes; original bytes remain ignored and read-only.
 
 ```sh
-bash tools/rewrite/build.sh all
-python3 tools/rewrite/check_style.py
+bash tools/build.sh all
+python3 tools/check_style.py
 python3 -m venv /tmp/wasm-fist-decoder-oracle
-/tmp/wasm-fist-decoder-oracle/bin/pip install -r tools/rewrite/oracle_requirements.txt
+/tmp/wasm-fist-decoder-oracle/bin/pip install -r tests/oracle_requirements.txt
 # If the ignored instruction image is absent, regenerate it from provisioned originals:
 make kernel-image
-/tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_terrain_assets.py --originals
+/tmp/wasm-fist-decoder-oracle/bin/python tests/test_terrain_assets.py --originals
 ```
 
 On 2026-10-06 all eleven groups passed on both targets without skips in the original gate. Every

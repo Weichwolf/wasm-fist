@@ -38,9 +38,9 @@ and the original altitude clamp, with actual original instructions:
 
 ```sh
 PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
-  /tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/verify_original_terrain_coordinates.py
+  /tmp/wasm-fist-decoder-oracle/bin/python tests/verify_original_terrain_coordinates.py
 objdump -D -b binary -m i386 -M intel \
-  --start-address=0x395e --stop-address=0x3a17 re_out/fist_image.bin
+  --start-address=0x395e --stop-address=0x3a17 /tmp/wasm-fist-reference-images/fist_image.bin
 ```
 
 The sampler oracle uses a single sentinel in a complete synthetic 1024-square plane. Four
@@ -75,23 +75,23 @@ runtime dependency; the entire scene and softgl build graph remain C.
 
 ```sh
 export PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache
-bash tools/rewrite/build.sh all
-python3 tools/rewrite/check_style.py
+bash tools/build.sh all
+python3 tools/check_style.py
 # Complete original scene on both targets; inputs are copied and hash-verified:
-python3 tools/rewrite/test_terrain_scene.py --originals
+python3 tests/test_terrain_scene.py --originals
 # Native output, using AZER1's roster-zero vehicle position and heading:
 /tmp/wasm-fist-rewrite/native/fist_terrain_preview \
   armoredfist/FISTDATA/AZER1.FSG armoredfist/FISTDATA /tmp/azer1.ppm
 # Output directory must be empty. The tool copies only required pinned inputs.
-python3 tools/rewrite/prepare_terrain_preview.py \
+python3 tests/prepare_terrain_preview.py \
   --scenario armoredfist/FISTDATA/AZER1.FSG
-python3 tools/rewrite/verify_browser.py --terrain \
+python3 tests/verify_browser.py --terrain \
   --screenshot /tmp/wasm-fist-rewrite/azer1-terrain-browser.png
-python3 tools/rewrite/serve.py
+python3 tools/serve.py
 ```
 
 Open `http://localhost:8000/terrain.html`. Omitting `--scenario` prepares constructed asymmetric
-terrain for CI without original content. Original files remain ignored/read-only; all copied
+terrain for local checks without original content. Original files remain ignored/read-only; all copied
 inputs, manifests, builds and captures stay under `/tmp`. The manifest lists complete sizes and
 SHA-256; the browser rejects changed, missing or incomplete input before shared C decodes it.
 

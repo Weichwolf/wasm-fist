@@ -52,16 +52,16 @@ unchanged. Reserved address-zero/one return entries explicitly fail the prefix g
 ## Verification
 
 ```sh
-bash tools/rewrite/build.sh all
-PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache python3 tools/rewrite/check_style.py
+bash tools/build.sh all
+PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache python3 tools/check_style.py
 PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
-  /tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_vehicle_maintenance.py \
+  /tmp/wasm-fist-decoder-oracle/bin/python tests/test_vehicle_maintenance.py \
   --target all --originals --oracle
 PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
-  /tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_vehicle_history.py \
+  /tmp/wasm-fist-decoder-oracle/bin/python tests/test_vehicle_history.py \
   --target all --originals --oracle
 PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
-  /tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_mission_driving.py \
+  /tmp/wasm-fist-decoder-oracle/bin/python tests/test_mission_driving.py \
   --target all --originals --oracle
 ```
 
@@ -92,7 +92,7 @@ cmake --build /tmp/wasm-fist-maintenance-sanitized \
   --target fist_vehicle_motion_probe fist_driving_probe fist_driving_preview
 PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
   ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
-  /tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_vehicle_maintenance.py \
+  /tmp/wasm-fist-decoder-oracle/bin/python tests/test_vehicle_maintenance.py \
   --target native --originals --oracle \
   --native-probe /tmp/wasm-fist-maintenance-sanitized/fist_vehicle_motion_probe
 ```

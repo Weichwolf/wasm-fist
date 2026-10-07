@@ -14,7 +14,7 @@ remains the visual baseline. Scripted death/effect sequences do not prove a play
 
 ## Original method and field evidence
 
-The untouched load image `re_out/fist_dat_image.bin` has SHA-256
+The untouched load image `/tmp/wasm-fist-reference-images/fist_dat_image.bin` has SHA-256
 `d46f480dd2214b2693b4192a42aa79fb7bffb8d692fd67ddc3d746dfdea9c5e5`.
 Addresses below are load-module offsets, CS=0, DGROUP=0x1c000. The actual word update table
 at DGROUP e454 maps both types 5 and 6 to **9e2b**. Callback table **CS:9f0f** is indexed
@@ -23,13 +23,13 @@ The independent oracle pins both tables before executing original instructions.
 
 ```sh
 objdump -D -b binary -m i386 -M intel,addr16,data16 \
-  --start-address=0x9e2b --stop-address=0x9f0f re_out/fist_dat_image.bin
+  --start-address=0x9e2b --stop-address=0x9f0f /tmp/wasm-fist-reference-images/fist_dat_image.bin
 objdump -D -b binary -m i386 -M intel,addr16,data16 \
-  --start-address=0xa03f --stop-address=0xa069 re_out/fist_dat_image.bin
+  --start-address=0xa03f --stop-address=0xa069 /tmp/wasm-fist-reference-images/fist_dat_image.bin
 objdump -D -b binary -m i386 -M intel,addr16,data16 \
-  --start-address=0x19caa --stop-address=0x19cfd re_out/fist_dat_image.bin
+  --start-address=0x19caa --stop-address=0x19cfd /tmp/wasm-fist-reference-images/fist_dat_image.bin
 objdump -D -b binary -m i386 -M intel,addr16,data16 \
-  --start-address=0x1b201 --stop-address=0x1b21a re_out/fist_dat_image.bin
+  --start-address=0x1b201 --stop-address=0x1b21a /tmp/wasm-fist-reference-images/fist_dat_image.bin
 ```
 
 | Payload offset (hex) | Recovered contract |
@@ -108,13 +108,13 @@ earlier slots, proving that post-release smoke can also allocate without aliasin
 
 ```sh
 export PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache
-bash tools/rewrite/build.sh all
-python3 tools/rewrite/check_style.py
-/tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_aircraft_death.py --target native --originals --oracle
-/tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_aircraft_death.py --target wasm --originals --oracle
-/tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_other_damage.py --originals --oracle
-/tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_destruction.py --originals --oracle
-/tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_projectile_flight.py --originals --oracle
+bash tools/build.sh all
+python3 tools/check_style.py
+/tmp/wasm-fist-decoder-oracle/bin/python tests/test_aircraft_death.py --target native --originals --oracle
+/tmp/wasm-fist-decoder-oracle/bin/python tests/test_aircraft_death.py --target wasm --originals --oracle
+/tmp/wasm-fist-decoder-oracle/bin/python tests/test_other_damage.py --originals --oracle
+/tmp/wasm-fist-decoder-oracle/bin/python tests/test_destruction.py --originals --oracle
+/tmp/wasm-fist-decoder-oracle/bin/python tests/test_projectile_flight.py --originals --oracle
 ```
 
 Six required groups cover the complete ground-byte domain, altitude/offset wrap, phase and
@@ -154,15 +154,15 @@ Compile the sanitizer probe sequentially after the production build is terminal:
 mkdir -p /tmp/wasm-fist-0073-sanitizer
 clang -std=c11 -Wall -Wextra -Wpedantic -Wno-unused-parameter -Wno-unused-function -Werror \
   -fno-strict-aliasing -ffast-math -fsanitize=address,undefined -fno-omit-frame-pointer -g -O1 \
-  -Isrc -Itools/rewrite src/assets/units.c src/assets/scenario.c src/assets/vehicle.c src/assets/klc.c \
+  -Isrc -Itests src/assets/units.c src/assets/scenario.c src/assets/vehicle.c src/assets/klc.c \
   src/sim/random.c src/sim/rotation.c src/sim/vehicle_state.c src/sim/ground.c \
   src/sim/object_pool.c src/sim/collision.c src/sim/projectile_launch.c src/sim/projectile_flight.c \
   src/sim/smoke_animation.c src/sim/vehicle_damage.c src/sim/damage_common.c src/sim/other_damage.c \
-  src/sim/smoke.c src/sim/aircraft_death.c tools/rewrite/probe_io.c \
-  tools/rewrite/object_pool_probe_io.c tools/rewrite/combat_probe_io.c \
-  tools/rewrite/aircraft_death_probe.c -o /tmp/wasm-fist-0073-sanitizer/aircraft_death_probe
+  src/sim/smoke.c src/sim/aircraft_death.c tests/probe_io.c \
+  tests/object_pool_probe_io.c tests/combat_probe_io.c \
+  tests/aircraft_death_probe.c -o /tmp/wasm-fist-0073-sanitizer/aircraft_death_probe
 ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
-  PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache python3 tools/rewrite/test_aircraft_death.py \
+  PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache python3 tests/test_aircraft_death.py \
   --originals --target native --native-probe /tmp/wasm-fist-0073-sanitizer/aircraft_death_probe
 ```
 

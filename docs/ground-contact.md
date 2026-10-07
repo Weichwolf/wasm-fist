@@ -79,14 +79,14 @@ transfer, exact mission/control ordering and interactive integration are subsequ
 ## Verification
 
 ```sh
-bash tools/rewrite/build.sh all
-python3 tools/rewrite/check_style.py
+bash tools/build.sh all
+python3 tools/check_style.py
 PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
-  /tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_ground.py --originals --oracle
+  /tmp/wasm-fist-decoder-oracle/bin/python tests/test_ground.py --originals --oracle
 PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
-  /tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_vehicle_start.py --originals --oracle
+  /tmp/wasm-fist-decoder-oracle/bin/python tests/test_vehicle_start.py --originals --oracle
 PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
-  /tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_vehicle_motion.py --originals --oracle
+  /tmp/wasm-fist-decoder-oracle/bin/python tests/test_vehicle_motion.py --originals --oracle
 ```
 
 Default gates test every heading value, all 65536 byte pairs in the roll footprint, signed
@@ -114,13 +114,13 @@ For native memory instrumentation:
 ```sh
 clang -std=c11 -Wall -Wextra -Wpedantic -Wno-unused-parameter -Wno-unused-function \
   -fno-strict-aliasing -ffast-math -Werror -O1 -g -fsanitize=address,undefined \
-  -fno-omit-frame-pointer -Isrc -Itools/rewrite \
+  -fno-omit-frame-pointer -Isrc -Itests \
   src/sim/ground.c src/sim/vehicle_state.c src/sim/random.c src/assets/klc.c \
-  tools/rewrite/probe_io.c tools/rewrite/vehicle_probe_io.c tools/rewrite/ground_probe.c \
+  tests/probe_io.c tests/vehicle_probe_io.c tests/ground_probe.c \
   -o /tmp/wasm-fist-0063-ground-sanitized
 ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=halt_on_error=1 \
   PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
-  /tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_ground.py --target native \
+  /tmp/wasm-fist-decoder-oracle/bin/python tests/test_ground.py --target native \
   --native-probe /tmp/wasm-fist-0063-ground-sanitized --originals
 ```
 

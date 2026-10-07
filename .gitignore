@@ -1,26 +1,14 @@
-# Original game assets (install with `make provision`)
+# Original game files: provision with make provision; keep read-only.
 /armoredfist/
-# extracted runtime-kernel image (regenerate via `make kernel-image`)
-re_out/fist_image.bin
-# build outputs
-build/
-web/fist/
+# Build outputs belong under /tmp.
+/build/
 *.o
 *.wasm
-# Ghidra / JDK / project DB (large, regenerable)
-third_party/ghidra*/
-third_party/jdk*/
-third_party/*_ghidra_proj/
-# host toolchains live outside the repo (~/Git/emsdk)
-# scratch
-/tmp/
 *.tmp
-scratch/refcap/
-scratch/oracle/
-third_party/
-web/fist.js
-web/fist.data
-web/fist.js.symbols
-scratch/
-
 __pycache__/
+# Frozen reconstruction and its external tools belong on ghidra or under /tmp.
+/re_out/
+/patches/
+/third_party/
+/scratch/
+/ref/

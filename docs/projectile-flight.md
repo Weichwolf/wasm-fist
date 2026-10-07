@@ -33,15 +33,15 @@ addresses before executing them. Reproduce the instruction evidence:
 
 ```sh
 objdump -D -b binary -m i386 -M intel,addr16,data16 \
-  --start-address=0xb5e7 --stop-address=0xb6c9 re_out/fist_dat_image.bin
+  --start-address=0xb5e7 --stop-address=0xb6c9 /tmp/wasm-fist-reference-images/fist_dat_image.bin
 objdump -D -b binary -m i386 -M intel,addr16,data16 \
-  --start-address=0xba33 --stop-address=0xbb1b re_out/fist_dat_image.bin
+  --start-address=0xba33 --stop-address=0xbb1b /tmp/wasm-fist-reference-images/fist_dat_image.bin
 objdump -D -b binary -m i386 -M intel,addr16,data16 \
-  --start-address=0x9bc6 --stop-address=0x9be8 re_out/fist_dat_image.bin
+  --start-address=0x9bc6 --stop-address=0x9be8 /tmp/wasm-fist-reference-images/fist_dat_image.bin
 objdump -D -b binary -m i386 -M intel,addr16,data16 \
-  --start-address=0xe1a6 --stop-address=0xe1d1 re_out/fist_dat_image.bin
+  --start-address=0xe1a6 --stop-address=0xe1d1 /tmp/wasm-fist-reference-images/fist_dat_image.bin
 objdump -D -b binary -m i386 -M intel \
-  --start-address=0x11a6 --stop-address=0x11cb re_out/fist_image.bin
+  --start-address=0x11a6 --stop-address=0x11cb /tmp/wasm-fist-reference-images/fist_image.bin
 ```
 
 Actual e454 dispatch resolves types 8/4/18 to b5e7/bab4/9bc6. Shell age at +2d increments modulo
@@ -106,10 +106,10 @@ must run before later voice gates just as bfce does. None of these requests clai
 ## Verification scope and commands
 
 ```sh
-bash tools/rewrite/build.sh all
-python3 tools/rewrite/check_style.py
+bash tools/build.sh all
+python3 tools/check_style.py
 PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
-  /tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_projectile_flight.py --originals --oracle
+  /tmp/wasm-fist-decoder-oracle/bin/python tests/test_projectile_flight.py --originals --oracle
 ```
 
 The new mandatory native CTest/WASM Node gate has seven groups. The separately requested original
@@ -146,14 +146,14 @@ Sanitizer reproduction with the same production flags (after the main build is t
 mkdir -p /tmp/wasm-fist-0069-sanitizer
 clang -std=c11 -Wall -Wextra -Wpedantic -Wno-unused-parameter -Wno-unused-function -Werror \
   -fno-strict-aliasing -ffast-math -fsanitize=address,undefined -fno-omit-frame-pointer -g -O1 \
-  -Isrc -Itools/rewrite src/assets/units.c src/assets/scenario.c src/assets/vehicle.c src/assets/klc.c \
+  -Isrc -Itests src/assets/units.c src/assets/scenario.c src/assets/vehicle.c src/assets/klc.c \
   src/sim/random.c src/sim/rotation.c src/sim/vehicle_state.c src/sim/ground.c \
   src/sim/object_pool.c src/sim/collision.c src/sim/projectile_launch.c src/sim/projectile_flight.c \
   src/sim/smoke_animation.c \
-  tools/rewrite/probe_io.c tools/rewrite/object_pool_probe_io.c \
-  tools/rewrite/projectile_flight_probe.c -o /tmp/wasm-fist-0069-sanitizer/projectile_flight_probe
+  tests/probe_io.c tests/object_pool_probe_io.c \
+  tests/projectile_flight_probe.c -o /tmp/wasm-fist-0069-sanitizer/projectile_flight_probe
 ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
-  PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache python3 tools/rewrite/test_projectile_flight.py \
+  PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache python3 tests/test_projectile_flight.py \
   --originals --target native --native-probe /tmp/wasm-fist-0069-sanitizer/projectile_flight_probe
 ```
 

@@ -37,10 +37,10 @@ instruction evidence and reproduction commands.
 
 Verified on 2026-10-06 with LLVM 19.1.7 and pinned Unicorn 2.1.4:
 
-- Final `bash tools/rewrite/build.sh all`: all 21 native CTest and complete WASM build gates
+- Final `bash tools/build.sh all`: all 21 native CTest and complete WASM build gates
   pass, including the new required damage probe. Routine build gates explicitly omit original
   corpus; every required complete-corpus gate below has no skips.
-- Final `python3 tools/rewrite/check_style.py`: strict format/tidy passes all 57 owned C units.
+- Final `python3 tools/check_style.py`: strict format/tidy passes all 57 owned C units.
   The final header-comment-only clarification also passes the direct format check.
 - Final `test_other_damage.py --originals --oracle`: all nine groups pass both production
   targets in 570.618 seconds, without skips. Per target: 14,510 fixtures, 17,218 complete damage

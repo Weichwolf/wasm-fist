@@ -14,10 +14,10 @@ DCBS record framing; fail incomplete/malformed input. Do not link the reconstruc
 Preparation parent `aef14d1`, reference `349ad31`; verified on 2026-10-06. Original reader machine
 code d501/d7b5/d7e1 and BINF consumer/writer evidence are recorded in `docs/scenario-format.md`.
 
-- `bash tools/rewrite/build.sh all` passed sequential native/WASM builds; native CTest passed
+- `bash tools/build.sh all` passed sequential native/WASM builds; native CTest passed
   renderer integration and scenario contracts. WASM passed renderer and seven synthetic scenario
   groups (the explicitly separate original-data group is skipped in the default CI gate).
-- `python3 tools/rewrite/test_scenario.py --originals` passed all eight groups with no skips:
+- `python3 tests/test_scenario.py --originals` passed all eight groups with no skips:
   47 pinned original missions, 574215 input bytes, 4213 records, 28 asset combinations, complete
   output equality with an independent format interpretation on both targets. Hashes are unchanged.
 - The reaching INDIA4 failure showed a 16-byte space-padded sky name with no NUL. Fixed bounded
@@ -25,7 +25,7 @@ code d501/d7b5/d7e1 and BINF consumer/writer evidence are recorded in `docs/scen
 - Tests cover all truncated synthetic prefixes, unchanged output on failure, full signed 32-bit
   positions, zero-count rosters, unknown chunk skipping, duplicate/missing chunks, invalid record
   counts/lengths, incomplete/trailing/invalid TERM and bad filename fields.
-- `python3 tools/rewrite/check_style.py` passed strict LLVM 19.1.7 checks for every owned C unit;
+- `python3 tools/check_style.py` passed strict LLVM 19.1.7 checks for every owned C unit;
   `git diff --check` passed. No compiler/style check was weakened.
 
 The probe reads files to EOF, compares all known payload and unit-state bytes and uses NODERAWFS

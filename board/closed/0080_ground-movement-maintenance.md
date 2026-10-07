@@ -52,11 +52,11 @@ living-class, battle, PCM, outcome or final ten-run acceptance claim follows fro
 
 Verified on 2026-10-07 with production fast-math and strict owned-code warnings:
 
-- `bash tools/rewrite/build.sh all`: terminal zero, all 30 native CTest gates (170.99 seconds),
+- `bash tools/build.sh all`: terminal zero, all 30 native CTest gates (170.99 seconds),
   all 28 WASM Python gates and both renderer probes. The final current native CTest rerun
   passes all 30 gates in 233.50 seconds. Both production Ninja trees report no pending work;
   compilation was sequential, and tests never read binaries while they were being rebuilt.
-- `python3 tools/rewrite/check_style.py`: terminal zero, all 73 owned C units, LLVM 19.1.7.
+- `python3 tools/check_style.py`: terminal zero, all 73 owned C units, LLVM 19.1.7.
   No style/analyzer/warning policy is weakened.
 - Required `test_vehicle_maintenance.py --originals --oracle`: all seven groups, zero skips,
   321424 fixtures / 328128 complete boundaries per target; native 79.953 / WASM 155.001 seconds.

@@ -18,16 +18,16 @@ wire layout, ownership and oracle boundaries are recorded in `docs/terrain-forma
 - `src/assets/klc.c`, `resource.c` and `palette.c` implement the documented readers. Shared view
   and endian helpers have one owner; test probes share their complete EOF reader. Generated
   engine code and dependency sources are unchanged and are not linked into the asset readers.
-- `bash tools/rewrite/build.sh all` passed sequential native/WASM production builds, all three
+- `bash tools/build.sh all` passed sequential native/WASM production builds, all three
   native CTest contracts and Node renderer/scenario/terrain contracts. Default gates run ten
   synthetic terrain groups and explicitly skip only the separately requested original group.
-- `/tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_terrain_assets.py --originals`
+- `/tmp/wasm-fist-decoder-oracle/bin/python tests/test_terrain_assets.py --originals`
   passed all eleven groups with no skips on both targets: 22 complete KLC/SKY files, 3,146,880
   pixels, all embedded palette bytes and all 32 complete PAL.RES members. Expected output is
   obtained by executing the original instructions, with full byte comparison and pinned hashes.
-- `python3 tools/rewrite/test_scenario.py --originals` passed all eight groups without skips
+- `python3 tests/test_scenario.py --originals` passed all eight groups without skips
   across all 47 original missions on native/WASM after the shared helper extraction.
-- `python3 tools/rewrite/check_style.py` passed strict LLVM 19.1.7 checks for all nine owned C
+- `python3 tools/check_style.py` passed strict LLVM 19.1.7 checks for all nine owned C
   translation units and formatting of their headers. Compiler/tidy checks were not weakened.
 - An isolated native asset-probe build with `-fsanitize=address,undefined -fno-omit-frame-pointer`
   passed all eleven terrain groups including complete originals, with no sanitizer failures.

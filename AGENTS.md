@@ -12,14 +12,17 @@ Original pixel/palette/PCM bit identity is no longer an acceptance target.
 - Recover formats and gameplay rules from original files/behavior and frozen reconstruction.
   Prove hypotheses before acceptance. No silent stubs, invented gameplay constants or disabled
   checks that conceal missing functionality.
-- `reference/reconstruction-v1` is immutable. Preserve `re_out/`, `patches/`, legacy shims/tools
-  and `board/reference/` as evidence. Do not link generated engine code into the rewrite.
+- `reference/reconstruction-v1` is immutable. `re_out/`, `patches/` and legacy shims/tools
+  live on `ghidra`; reference tests provision pinned images under `/tmp` with
+  `tests/reference_images.py`. `board/reference/` retains historical work-item evidence.
+  Do not restore generated engine code or reconstruction dependencies to this checkout.
   Historical register/segment/bit-parity requirements apply to that reference work only.
 - softgl is a pinned `deps/softgl` submodule. Keep dependency changes separate and justified.
   Runtime and renderer stay C11. meshoptimizer is for offline tools only; do not link it.
+  Keep softgl as the only dependency in `deps/`; external reference tools belong under `/tmp`.
 - Keep `armoredfist/` ignored and read-only; provision originals and run isolated copies.
 - Enforce `.clang-format` and `.clang-tidy` with LLVM 19.1.x on owned rewrite C/headers.
-  Run `python3 tools/rewrite/check_style.py` and `bash tools/rewrite/build.sh all` for C,
+  Run `python3 tools/check_style.py` and `bash tools/build.sh all` for C,
   build configuration or dependency changes. Warnings fail; do not weaken checks to get a pass.
 - Use the requested compiler flags in `CMakeLists.txt`; keep `-Werror` for owned code.
   Fast-math is enabled: verify simulation/audio behavior with the production build.

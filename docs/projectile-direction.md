@@ -55,10 +55,10 @@ it does not claim the class's fire eligibility, input dispatch or targeted aimin
 ## Verification
 
 ```sh
-bash tools/rewrite/build.sh all
-python3 tools/rewrite/check_style.py
+bash tools/build.sh all
+python3 tools/check_style.py
 PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
-  /tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_vehicle_motion.py --originals --oracle
+  /tmp/wasm-fist-decoder-oracle/bin/python tests/test_vehicle_motion.py --originals --oracle
 ```
 
 The mandatory native/WASM motion gate observes full heading and elevation turns in both math
@@ -76,12 +76,12 @@ clang -std=c11 -O2 -g -Wall -Wextra -Wpedantic \
   -Wno-unused-parameter -Wno-unused-function -Werror \
   -fno-strict-aliasing -ffast-math \
   -fsanitize=address,undefined -fno-sanitize-recover=all \
-  -Isrc -Itools/rewrite \
-  tools/rewrite/vehicle_motion_probe.c tools/rewrite/probe_io.c \
-  tools/rewrite/vehicle_probe_io.c src/sim/rotation.c src/sim/vehicle_state.c \
+  -Isrc -Itests \
+  tests/vehicle_motion_probe.c tests/probe_io.c \
+  tests/vehicle_probe_io.c src/sim/rotation.c src/sim/vehicle_state.c \
   src/sim/vehicle_motion.c src/sim/random.c \
   -o /tmp/wasm-fist-0065-sanitized-probe
 ASAN_OPTIONS=detect_leaks=1 PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
-  python3 tools/rewrite/test_vehicle_motion.py --target native --originals \
+  python3 tests/test_vehicle_motion.py --target native --originals \
   --native-probe /tmp/wasm-fist-0065-sanitized-probe
 ```

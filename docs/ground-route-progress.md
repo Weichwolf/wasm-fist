@@ -82,10 +82,10 @@ remain whole-transaction rejections and are not counted as playable missions.
 
 ```sh
 PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
-  /tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_ground_route.py \
+  /tmp/wasm-fist-decoder-oracle/bin/python tests/test_ground_route.py \
   --target all --originals --oracle
-python3 tools/rewrite/check_style.py
-CTEST_PARALLEL_LEVEL=4 bash tools/rewrite/build.sh all
+python3 tools/check_style.py
+CTEST_PARALLEL_LEVEL=4 bash tools/build.sh all
 ```
 
 Full phase admission/counters/heading sampling, target references, remaining throttle/maneuver callbacks,

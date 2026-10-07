@@ -51,7 +51,7 @@ the original ground-query branch. The probe now checks missing-height rejection 
 reaching, horizontal low-altitude boundary; simulation kernels are unchanged. The corrected
 both-target and memory gates above prove that contract.
 
-Final `bash tools/rewrite/build.sh all` passes all 27 native CTest gates (150.59 seconds),
+Final `bash tools/build.sh all` passes all 27 native CTest gates (150.59 seconds),
 all 25 WASM Python gates and both renderer probes. Required original fire, ground damage,
 remaining damage, aircraft and collision regressions pass on both targets with zero skips.
 Aircraft retains all 59,488 fixtures/67,466 class updates/124,648 smoke states/15,565 effect

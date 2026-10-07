@@ -38,150 +38,150 @@ add_library(fist_app STATIC src/app/driving.c src/app/driving_view.c)
 target_include_directories(fist_app PUBLIC src)
 target_link_libraries(fist_app PUBLIC fist_assets fist_sim fist_render PRIVATE fist_build_options)
 target_compile_options(fist_app PRIVATE -Werror)
-add_executable(fist_driving_probe tools/rewrite/driving_probe.c)
+add_executable(fist_driving_probe tests/driving_probe.c)
 target_link_libraries(fist_driving_probe PRIVATE fist_app fist_probe_io fist_build_options)
 target_compile_options(fist_driving_probe PRIVATE -Werror)
 if(EMSCRIPTEN)
     set_target_properties(fist_driving_probe PROPERTIES SUFFIX ".js")
     target_link_options(fist_driving_probe PRIVATE -sNODERAWFS=1 -sEXIT_RUNTIME=1 -sALLOW_MEMORY_GROWTH=1)
 endif()
-add_executable(fist_weapon_control_probe tools/rewrite/weapon_control_probe.c)
+add_executable(fist_weapon_control_probe tests/weapon_control_probe.c)
 target_link_libraries(fist_weapon_control_probe PRIVATE fist_sim fist_probe_io fist_build_options)
 target_compile_options(fist_weapon_control_probe PRIVATE -Werror)
 if(EMSCRIPTEN)
     set_target_properties(fist_weapon_control_probe PROPERTIES SUFFIX ".js")
     target_link_options(fist_weapon_control_probe PRIVATE -sNODERAWFS=1 -sEXIT_RUNTIME=1 -sALLOW_MEMORY_GROWTH=1)
 endif()
-add_executable(fist_object_pool_probe tools/rewrite/object_pool_probe.c)
+add_executable(fist_object_pool_probe tests/object_pool_probe.c)
 target_link_libraries(fist_object_pool_probe PRIVATE fist_sim fist_probe_io fist_build_options)
 target_compile_options(fist_object_pool_probe PRIVATE -Werror)
 if(EMSCRIPTEN)
     set_target_properties(fist_object_pool_probe PROPERTIES SUFFIX ".js")
     target_link_options(fist_object_pool_probe PRIVATE -sNODERAWFS=1 -sEXIT_RUNTIME=1)
 endif()
-add_executable(fist_mission_combat_probe tools/rewrite/mission_combat_probe.c)
+add_executable(fist_mission_combat_probe tests/mission_combat_probe.c)
 target_link_libraries(fist_mission_combat_probe PRIVATE fist_sim fist_probe_io fist_build_options)
 target_compile_options(fist_mission_combat_probe PRIVATE -Werror)
 if(EMSCRIPTEN)
     set_target_properties(fist_mission_combat_probe PROPERTIES SUFFIX ".js")
     target_link_options(fist_mission_combat_probe PRIVATE -sNODERAWFS=1 -sEXIT_RUNTIME=1 -sALLOW_MEMORY_GROWTH=1)
 endif()
-add_executable(fist_mission_world_probe tools/rewrite/mission_world_probe.c)
+add_executable(fist_mission_world_probe tests/mission_world_probe.c)
 target_link_libraries(fist_mission_world_probe PRIVATE fist_sim fist_probe_io fist_build_options)
 target_compile_options(fist_mission_world_probe PRIVATE -Werror)
 if(EMSCRIPTEN)
     set_target_properties(fist_mission_world_probe PROPERTIES SUFFIX ".js")
     target_link_options(fist_mission_world_probe PRIVATE -sNODERAWFS=1 -sEXIT_RUNTIME=1 -sALLOW_MEMORY_GROWTH=1)
 endif()
-add_executable(fist_ground_command_probe tools/rewrite/ground_command_probe.c)
+add_executable(fist_ground_command_probe tests/ground_command_probe.c)
 target_link_libraries(fist_ground_command_probe PRIVATE fist_sim fist_probe_io fist_build_options)
 target_compile_options(fist_ground_command_probe PRIVATE -Werror)
 if(EMSCRIPTEN)
     set_target_properties(fist_ground_command_probe PROPERTIES SUFFIX ".js")
     target_link_options(fist_ground_command_probe PRIVATE -sNODERAWFS=1 -sEXIT_RUNTIME=1 -sALLOW_MEMORY_GROWTH=1)
 endif()
-add_executable(fist_ground_goal_probe tools/rewrite/ground_goal_probe.c)
+add_executable(fist_ground_goal_probe tests/ground_goal_probe.c)
 target_link_libraries(fist_ground_goal_probe PRIVATE fist_sim fist_probe_io fist_build_options)
 target_compile_options(fist_ground_goal_probe PRIVATE -Werror)
 if(EMSCRIPTEN)
     set_target_properties(fist_ground_goal_probe PROPERTIES SUFFIX ".js")
     target_link_options(fist_ground_goal_probe PRIVATE -sNODERAWFS=1 -sEXIT_RUNTIME=1 -sALLOW_MEMORY_GROWTH=1)
 endif()
-add_executable(fist_geometry_probe tools/rewrite/geometry_probe.c)
+add_executable(fist_geometry_probe tests/geometry_probe.c)
 target_link_libraries(fist_geometry_probe PRIVATE fist_sim fist_probe_io fist_build_options)
 target_compile_options(fist_geometry_probe PRIVATE -Werror)
 if(EMSCRIPTEN)
     set_target_properties(fist_geometry_probe PROPERTIES SUFFIX ".js")
     target_link_options(fist_geometry_probe PRIVATE -sNODERAWFS=1 -sEXIT_RUNTIME=1 -sALLOW_MEMORY_GROWTH=1)
 endif()
-add_executable(fist_world_step_probe tools/rewrite/world_step_probe.c)
+add_executable(fist_world_step_probe tests/world_step_probe.c)
 target_link_libraries(fist_world_step_probe PRIVATE fist_sim fist_probe_io fist_build_options)
 target_compile_options(fist_world_step_probe PRIVATE -Werror)
 if(EMSCRIPTEN)
     set_target_properties(fist_world_step_probe PROPERTIES SUFFIX ".js")
     target_link_options(fist_world_step_probe PRIVATE -sNODERAWFS=1 -sEXIT_RUNTIME=1 -sALLOW_MEMORY_GROWTH=1)
 endif()
-add_executable(fist_aircraft_death_probe tools/rewrite/aircraft_death_probe.c)
+add_executable(fist_aircraft_death_probe tests/aircraft_death_probe.c)
 target_link_libraries(fist_aircraft_death_probe PRIVATE fist_sim fist_probe_io fist_build_options)
 target_compile_options(fist_aircraft_death_probe PRIVATE -Werror)
 if(EMSCRIPTEN)
     set_target_properties(fist_aircraft_death_probe PROPERTIES SUFFIX ".js")
     target_link_options(fist_aircraft_death_probe PRIVATE -sNODERAWFS=1 -sEXIT_RUNTIME=1 -sALLOW_MEMORY_GROWTH=1)
 endif()
-add_executable(fist_destruction_probe tools/rewrite/destruction_probe.c)
+add_executable(fist_destruction_probe tests/destruction_probe.c)
 target_link_libraries(fist_destruction_probe PRIVATE fist_sim fist_probe_io fist_build_options)
 target_compile_options(fist_destruction_probe PRIVATE -Werror)
 if(EMSCRIPTEN)
     set_target_properties(fist_destruction_probe PROPERTIES SUFFIX ".js")
     target_link_options(fist_destruction_probe PRIVATE -sNODERAWFS=1 -sEXIT_RUNTIME=1 -sALLOW_MEMORY_GROWTH=1)
 endif()
-add_executable(fist_other_damage_probe tools/rewrite/other_damage_probe.c)
+add_executable(fist_other_damage_probe tests/other_damage_probe.c)
 target_link_libraries(fist_other_damage_probe PRIVATE fist_sim fist_probe_io fist_build_options)
 target_compile_options(fist_other_damage_probe PRIVATE -Werror)
 if(EMSCRIPTEN)
     set_target_properties(fist_other_damage_probe PROPERTIES SUFFIX ".js")
     target_link_options(fist_other_damage_probe PRIVATE -sNODERAWFS=1 -sEXIT_RUNTIME=1 -sALLOW_MEMORY_GROWTH=1)
 endif()
-add_executable(fist_vehicle_damage_probe tools/rewrite/vehicle_damage_probe.c)
+add_executable(fist_vehicle_damage_probe tests/vehicle_damage_probe.c)
 target_link_libraries(fist_vehicle_damage_probe PRIVATE fist_sim fist_probe_io fist_build_options)
 target_compile_options(fist_vehicle_damage_probe PRIVATE -Werror)
 if(EMSCRIPTEN)
     set_target_properties(fist_vehicle_damage_probe PROPERTIES SUFFIX ".js")
     target_link_options(fist_vehicle_damage_probe PRIVATE -sNODERAWFS=1 -sEXIT_RUNTIME=1 -sALLOW_MEMORY_GROWTH=1)
 endif()
-add_executable(fist_projectile_flight_probe tools/rewrite/projectile_flight_probe.c)
+add_executable(fist_projectile_flight_probe tests/projectile_flight_probe.c)
 target_link_libraries(fist_projectile_flight_probe PRIVATE fist_sim fist_probe_io fist_build_options)
 target_compile_options(fist_projectile_flight_probe PRIVATE -Werror)
 if(EMSCRIPTEN)
     set_target_properties(fist_projectile_flight_probe PROPERTIES SUFFIX ".js")
     target_link_options(fist_projectile_flight_probe PRIVATE -sNODERAWFS=1 -sEXIT_RUNTIME=1 -sALLOW_MEMORY_GROWTH=1)
 endif()
-add_executable(fist_collision_probe tools/rewrite/collision_probe.c)
+add_executable(fist_collision_probe tests/collision_probe.c)
 target_link_libraries(fist_collision_probe PRIVATE fist_sim fist_probe_io fist_build_options)
 target_compile_options(fist_collision_probe PRIVATE -Werror)
 if(EMSCRIPTEN)
     set_target_properties(fist_collision_probe PROPERTIES SUFFIX ".js")
     target_link_options(fist_collision_probe PRIVATE -sNODERAWFS=1 -sEXIT_RUNTIME=1 -sALLOW_MEMORY_GROWTH=1)
 endif()
-add_executable(fist_projectile_launch_probe tools/rewrite/projectile_launch_probe.c)
+add_executable(fist_projectile_launch_probe tests/projectile_launch_probe.c)
 target_link_libraries(fist_projectile_launch_probe PRIVATE fist_sim fist_probe_io fist_build_options)
 target_compile_options(fist_projectile_launch_probe PRIVATE -Werror)
 if(EMSCRIPTEN)
     set_target_properties(fist_projectile_launch_probe PROPERTIES SUFFIX ".js")
     target_link_options(fist_projectile_launch_probe PRIVATE -sNODERAWFS=1 -sEXIT_RUNTIME=1)
 endif()
-add_executable(fist_vehicle_start_probe tools/rewrite/vehicle_start_probe.c)
+add_executable(fist_vehicle_start_probe tests/vehicle_start_probe.c)
 target_link_libraries(fist_vehicle_start_probe PRIVATE fist_sim fist_assets fist_probe_io fist_build_options)
 target_compile_options(fist_vehicle_start_probe PRIVATE -Werror)
 if(EMSCRIPTEN)
     set_target_properties(fist_vehicle_start_probe PROPERTIES SUFFIX ".js")
     target_link_options(fist_vehicle_start_probe PRIVATE -sNODERAWFS=1 -sEXIT_RUNTIME=1)
 endif()
-add_executable(fist_ground_probe tools/rewrite/ground_probe.c)
+add_executable(fist_ground_probe tests/ground_probe.c)
 target_link_libraries(fist_ground_probe PRIVATE fist_sim fist_assets fist_probe_io fist_build_options)
 target_compile_options(fist_ground_probe PRIVATE -Werror)
 if(EMSCRIPTEN)
     set_target_properties(fist_ground_probe PROPERTIES SUFFIX ".js")
     target_link_options(fist_ground_probe PRIVATE -sNODERAWFS=1 -sEXIT_RUNTIME=1 -sALLOW_MEMORY_GROWTH=1)
 endif()
-add_executable(fist_vehicle_motion_probe tools/rewrite/vehicle_motion_probe.c)
+add_executable(fist_vehicle_motion_probe tests/vehicle_motion_probe.c)
 target_link_libraries(fist_vehicle_motion_probe PRIVATE fist_sim fist_probe_io fist_build_options)
 target_compile_options(fist_vehicle_motion_probe PRIVATE -Werror)
 if(EMSCRIPTEN)
     set_target_properties(fist_vehicle_motion_probe PROPERTIES SUFFIX ".js")
     target_link_options(fist_vehicle_motion_probe PRIVATE -sNODERAWFS=1 -sEXIT_RUNTIME=1 -sALLOW_MEMORY_GROWTH=1)
 endif()
-add_executable(fist_scenario_probe tools/rewrite/scenario_probe.c)
-add_library(fist_probe_io STATIC tools/rewrite/probe_io.c tools/rewrite/probe_source.c tools/rewrite/vehicle_probe_io.c tools/rewrite/object_pool_probe_io.c tools/rewrite/combat_probe_io.c tools/rewrite/mission_probe_io.c)
+add_executable(fist_scenario_probe tests/scenario_probe.c)
+add_library(fist_probe_io STATIC tests/probe_io.c tests/probe_source.c tests/vehicle_probe_io.c tests/object_pool_probe_io.c tests/combat_probe_io.c tests/mission_probe_io.c)
 target_include_directories(fist_probe_io PRIVATE src)
 target_link_libraries(fist_probe_io PRIVATE fist_build_options)
 target_compile_options(fist_probe_io PRIVATE -Werror)
 target_link_libraries(fist_scenario_probe PRIVATE fist_assets fist_probe_io fist_build_options)
 target_compile_options(fist_scenario_probe PRIVATE -Werror)
-add_executable(fist_asset_probe tools/rewrite/asset_probe.c)
+add_executable(fist_asset_probe tests/asset_probe.c)
 target_link_libraries(fist_asset_probe PRIVATE fist_assets fist_probe_io fist_build_options)
 target_compile_options(fist_asset_probe PRIVATE -Werror)
-add_executable(fist_heightfield_probe tools/rewrite/heightfield_probe.c)
+add_executable(fist_heightfield_probe tests/heightfield_probe.c)
 target_link_libraries(fist_heightfield_probe PRIVATE fist_assets fist_probe_io fist_build_options)
 target_compile_options(fist_heightfield_probe PRIVATE -Werror)
 if(EMSCRIPTEN)
@@ -190,19 +190,19 @@ if(EMSCRIPTEN)
     target_link_options(fist_heightfield_probe PRIVATE -sNODERAWFS=1 -sEXIT_RUNTIME=1
         -sALLOW_MEMORY_GROWTH=1 -sMAXIMUM_MEMORY=67108864 -sABORTING_MALLOC=0)
 endif()
-add_executable(fist_terrain_probe tools/rewrite/terrain_probe.c)
+add_executable(fist_terrain_probe tests/terrain_probe.c)
 target_link_libraries(fist_terrain_probe PRIVATE fist_assets fist_probe_io fist_build_options)
 target_compile_options(fist_terrain_probe PRIVATE -Werror)
-add_executable(fist_unit_probe tools/rewrite/unit_probe.c)
+add_executable(fist_unit_probe tests/unit_probe.c)
 target_link_libraries(fist_unit_probe PRIVATE fist_assets fist_probe_io fist_build_options)
 target_compile_options(fist_unit_probe PRIVATE -Werror)
-add_executable(fist_model_probe tools/rewrite/model_probe.c)
+add_executable(fist_model_probe tests/model_probe.c)
 target_link_libraries(fist_model_probe PRIVATE fist_assets fist_probe_io fist_build_options)
 target_compile_options(fist_model_probe PRIVATE -Werror)
-add_executable(fist_vehicle_probe tools/rewrite/vehicle_probe.c)
+add_executable(fist_vehicle_probe tests/vehicle_probe.c)
 target_link_libraries(fist_vehicle_probe PRIVATE fist_assets fist_probe_io fist_build_options)
 target_compile_options(fist_vehicle_probe PRIVATE -Werror)
-add_executable(fist_model_bitmap_probe tools/rewrite/model_bitmap_probe.c)
+add_executable(fist_model_bitmap_probe tests/model_bitmap_probe.c)
 target_link_libraries(fist_model_bitmap_probe PRIVATE fist_assets fist_probe_io fist_build_options)
 target_compile_options(fist_model_bitmap_probe PRIVATE -Werror)
 if(EMSCRIPTEN)
@@ -227,7 +227,7 @@ target_include_directories(fist_render PUBLIC src)
 target_link_libraries(fist_render PRIVATE softgl fist_assets fist_build_options)
 target_compile_options(fist_render PRIVATE -Werror)
 
-add_executable(fist_driving_preview tools/rewrite/driving_preview.c)
+add_executable(fist_driving_preview tests/driving_preview.c)
 target_link_libraries(fist_driving_preview PRIVATE fist_app fist_probe_io fist_build_options)
 target_compile_options(fist_driving_preview PRIVATE -Werror)
 if(EMSCRIPTEN)
@@ -249,7 +249,7 @@ else()
     target_link_libraries(fist_driving_preview PRIVATE PkgConfig::SDL2)
 endif()
 
-add_executable(fist_terrain_preview tools/rewrite/terrain_preview.c)
+add_executable(fist_terrain_preview tests/terrain_preview.c)
 target_link_libraries(fist_terrain_preview PRIVATE fist_render fist_assets fist_probe_io fist_build_options)
 target_compile_options(fist_terrain_preview PRIVATE -Werror)
 if(EMSCRIPTEN)
@@ -265,7 +265,7 @@ if(EMSCRIPTEN)
     configure_file(src/platform/wasm/terrain.js terrain.js COPYONLY)
 endif()
 
-add_executable(fist_vehicle_scene_probe tools/rewrite/vehicle_scene_probe.c)
+add_executable(fist_vehicle_scene_probe tests/vehicle_scene_probe.c)
 target_link_libraries(fist_vehicle_scene_probe PRIVATE fist_render fist_assets fist_build_options)
 target_compile_options(fist_vehicle_scene_probe PRIVATE -Werror)
 if(EMSCRIPTEN)
@@ -275,7 +275,7 @@ if(EMSCRIPTEN)
     set_target_properties(fist_vehicle_scene_probe PROPERTIES SUFFIX ".js")
 endif()
 
-add_executable(fist_renderer_probe tools/rewrite/renderer_probe.c)
+add_executable(fist_renderer_probe tests/renderer_probe.c)
 target_link_libraries(fist_renderer_probe PRIVATE fist_render fist_build_options)
 target_compile_options(fist_renderer_probe PRIVATE -Werror)
 if(EMSCRIPTEN)
@@ -295,105 +295,105 @@ include(CTest)
 if(BUILD_TESTING AND NOT EMSCRIPTEN)
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
     add_test(NAME mission_combat_contract COMMAND ${Python3_EXECUTABLE}
-        ${CMAKE_SOURCE_DIR}/tools/rewrite/test_mission_combat.py
+        ${CMAKE_SOURCE_DIR}/tests/test_mission_combat.py
         --target native --native-probe $<TARGET_FILE:fist_mission_combat_probe>)
     add_test(NAME primary_fire_contract COMMAND ${Python3_EXECUTABLE}
-        ${CMAKE_SOURCE_DIR}/tools/rewrite/test_primary_fire.py
+        ${CMAKE_SOURCE_DIR}/tests/test_primary_fire.py
         --target native --native-probe $<TARGET_FILE:fist_projectile_launch_probe>)
     add_test(NAME mission_world_contract COMMAND ${Python3_EXECUTABLE}
-        ${CMAKE_SOURCE_DIR}/tools/rewrite/test_mission_world.py
+        ${CMAKE_SOURCE_DIR}/tests/test_mission_world.py
         --target native --native-probe $<TARGET_FILE:fist_mission_world_probe>)
     add_test(NAME ground_command_contract COMMAND ${Python3_EXECUTABLE}
-        ${CMAKE_SOURCE_DIR}/tools/rewrite/test_ground_command.py
+        ${CMAKE_SOURCE_DIR}/tests/test_ground_command.py
         --target native --native-probe $<TARGET_FILE:fist_ground_command_probe>)
     add_test(NAME ground_goal_contract COMMAND ${Python3_EXECUTABLE}
-        ${CMAKE_SOURCE_DIR}/tools/rewrite/test_ground_goal.py
+        ${CMAKE_SOURCE_DIR}/tests/test_ground_goal.py
         --target native --native-probe $<TARGET_FILE:fist_ground_goal_probe>)
     add_test(NAME geometry_contract COMMAND ${Python3_EXECUTABLE}
-        ${CMAKE_SOURCE_DIR}/tools/rewrite/test_geometry.py
+        ${CMAKE_SOURCE_DIR}/tests/test_geometry.py
         --target native --native-probe $<TARGET_FILE:fist_geometry_probe>)
     add_test(NAME ground_route_contract COMMAND ${Python3_EXECUTABLE}
-        ${CMAKE_SOURCE_DIR}/tools/rewrite/test_ground_route.py
+        ${CMAKE_SOURCE_DIR}/tests/test_ground_route.py
         --target native --native-probe $<TARGET_FILE:fist_ground_goal_probe>)
     add_test(NAME world_step_contract COMMAND ${Python3_EXECUTABLE}
-        ${CMAKE_SOURCE_DIR}/tools/rewrite/test_world_step.py
+        ${CMAKE_SOURCE_DIR}/tests/test_world_step.py
         --target native --native-probe $<TARGET_FILE:fist_world_step_probe>)
     add_test(NAME aircraft_death_contract COMMAND ${Python3_EXECUTABLE}
-        ${CMAKE_SOURCE_DIR}/tools/rewrite/test_aircraft_death.py
+        ${CMAKE_SOURCE_DIR}/tests/test_aircraft_death.py
         --target native --native-probe $<TARGET_FILE:fist_aircraft_death_probe>)
     add_test(NAME destruction_contract COMMAND ${Python3_EXECUTABLE}
-        ${CMAKE_SOURCE_DIR}/tools/rewrite/test_destruction.py
+        ${CMAKE_SOURCE_DIR}/tests/test_destruction.py
         --target native --native-probe $<TARGET_FILE:fist_destruction_probe>)
     add_test(NAME other_damage_contract COMMAND ${Python3_EXECUTABLE}
-        ${CMAKE_SOURCE_DIR}/tools/rewrite/test_other_damage.py
+        ${CMAKE_SOURCE_DIR}/tests/test_other_damage.py
         --target native --native-probe $<TARGET_FILE:fist_other_damage_probe>)
     add_test(NAME vehicle_damage_contract COMMAND ${Python3_EXECUTABLE}
-        ${CMAKE_SOURCE_DIR}/tools/rewrite/test_vehicle_damage.py
+        ${CMAKE_SOURCE_DIR}/tests/test_vehicle_damage.py
         --target native --native-probe $<TARGET_FILE:fist_vehicle_damage_probe>)
     add_test(NAME projectile_flight_contract COMMAND ${Python3_EXECUTABLE}
-        ${CMAKE_SOURCE_DIR}/tools/rewrite/test_projectile_flight.py
+        ${CMAKE_SOURCE_DIR}/tests/test_projectile_flight.py
         --target native --native-probe $<TARGET_FILE:fist_projectile_flight_probe>)
     add_test(NAME collision_contract COMMAND ${Python3_EXECUTABLE}
-        ${CMAKE_SOURCE_DIR}/tools/rewrite/test_collision.py
+        ${CMAKE_SOURCE_DIR}/tests/test_collision.py
         --target native --native-probe $<TARGET_FILE:fist_collision_probe>)
     add_test(NAME projectile_launch_contract COMMAND ${Python3_EXECUTABLE}
-        ${CMAKE_SOURCE_DIR}/tools/rewrite/test_projectile_launch.py
+        ${CMAKE_SOURCE_DIR}/tests/test_projectile_launch.py
         --target native --native-probe $<TARGET_FILE:fist_projectile_launch_probe>)
     add_test(NAME object_pool_contract COMMAND ${Python3_EXECUTABLE}
-        ${CMAKE_SOURCE_DIR}/tools/rewrite/test_object_pool.py
+        ${CMAKE_SOURCE_DIR}/tests/test_object_pool.py
         --target native --native-probe $<TARGET_FILE:fist_object_pool_probe>)
     add_test(NAME mission_driving_contract COMMAND ${Python3_EXECUTABLE}
-        ${CMAKE_SOURCE_DIR}/tools/rewrite/test_mission_driving.py
+        ${CMAKE_SOURCE_DIR}/tests/test_mission_driving.py
         --target native --native-probe $<TARGET_FILE:fist_driving_probe>)
     add_test(NAME driving_contract COMMAND ${Python3_EXECUTABLE}
-        ${CMAKE_SOURCE_DIR}/tools/rewrite/test_driving.py
+        ${CMAKE_SOURCE_DIR}/tests/test_driving.py
         --target native --native-probe $<TARGET_FILE:fist_driving_probe>)
     add_test(NAME ground_contract COMMAND ${Python3_EXECUTABLE}
-        ${CMAKE_SOURCE_DIR}/tools/rewrite/test_ground.py
+        ${CMAKE_SOURCE_DIR}/tests/test_ground.py
         --target native --native-probe $<TARGET_FILE:fist_ground_probe>)
     add_test(NAME heightfield_contract COMMAND ${Python3_EXECUTABLE}
-        ${CMAKE_SOURCE_DIR}/tools/rewrite/test_heightfield.py
+        ${CMAKE_SOURCE_DIR}/tests/test_heightfield.py
         --target native --native-probe $<TARGET_FILE:fist_heightfield_probe>)
     add_test(NAME vehicle_maintenance_contract COMMAND ${Python3_EXECUTABLE}
-        ${CMAKE_SOURCE_DIR}/tools/rewrite/test_vehicle_maintenance.py
+        ${CMAKE_SOURCE_DIR}/tests/test_vehicle_maintenance.py
         --target native --native-probe $<TARGET_FILE:fist_vehicle_motion_probe>)
     add_test(NAME vehicle_history_contract COMMAND ${Python3_EXECUTABLE}
-        ${CMAKE_SOURCE_DIR}/tools/rewrite/test_vehicle_history.py
+        ${CMAKE_SOURCE_DIR}/tests/test_vehicle_history.py
         --target native --native-probe $<TARGET_FILE:fist_vehicle_motion_probe>)
     add_test(NAME vehicle_motion_contract COMMAND ${Python3_EXECUTABLE}
-        ${CMAKE_SOURCE_DIR}/tools/rewrite/test_vehicle_motion.py
+        ${CMAKE_SOURCE_DIR}/tests/test_vehicle_motion.py
         --target native --native-probe $<TARGET_FILE:fist_vehicle_motion_probe>)
     add_test(NAME vehicle_start_contract COMMAND ${Python3_EXECUTABLE}
-        ${CMAKE_SOURCE_DIR}/tools/rewrite/test_vehicle_start.py
+        ${CMAKE_SOURCE_DIR}/tests/test_vehicle_start.py
         --target native --native-probe $<TARGET_FILE:fist_vehicle_start_probe>)
     add_test(NAME weapon_control_contract COMMAND ${Python3_EXECUTABLE}
-        ${CMAKE_SOURCE_DIR}/tools/rewrite/test_weapon_control.py
+        ${CMAKE_SOURCE_DIR}/tests/test_weapon_control.py
         --target native --native-probe $<TARGET_FILE:fist_weapon_control_probe>)
     add_test(NAME vehicle_scene_pixels COMMAND fist_vehicle_scene_probe)
     add_test(NAME renderer_integration COMMAND fist_renderer_probe)
     add_test(NAME scenario_contract COMMAND ${Python3_EXECUTABLE}
-        ${CMAKE_SOURCE_DIR}/tools/rewrite/test_scenario.py
+        ${CMAKE_SOURCE_DIR}/tests/test_scenario.py
         --target native --native-probe $<TARGET_FILE:fist_scenario_probe>)
     add_test(NAME orders_contract COMMAND ${Python3_EXECUTABLE}
-        ${CMAKE_SOURCE_DIR}/tools/rewrite/test_orders.py
+        ${CMAKE_SOURCE_DIR}/tests/test_orders.py
         --target native --native-probe $<TARGET_FILE:fist_scenario_probe>)
     add_test(NAME unit_contract COMMAND ${Python3_EXECUTABLE}
-        ${CMAKE_SOURCE_DIR}/tools/rewrite/test_units.py
+        ${CMAKE_SOURCE_DIR}/tests/test_units.py
         --target native --native-probe $<TARGET_FILE:fist_unit_probe>)
     add_test(NAME vehicle_contract COMMAND ${Python3_EXECUTABLE}
-        ${CMAKE_SOURCE_DIR}/tools/rewrite/test_vehicle.py
+        ${CMAKE_SOURCE_DIR}/tests/test_vehicle.py
         --target native --native-probe $<TARGET_FILE:fist_vehicle_probe>)
     add_test(NAME model_bitmap_contract COMMAND ${Python3_EXECUTABLE}
-        ${CMAKE_SOURCE_DIR}/tools/rewrite/test_model_bitmap.py
+        ${CMAKE_SOURCE_DIR}/tests/test_model_bitmap.py
         --target native --native-probe $<TARGET_FILE:fist_model_bitmap_probe>)
     add_test(NAME model_contract COMMAND ${Python3_EXECUTABLE}
-        ${CMAKE_SOURCE_DIR}/tools/rewrite/test_models.py
+        ${CMAKE_SOURCE_DIR}/tests/test_models.py
         --target native --native-probe $<TARGET_FILE:fist_model_probe>)
     add_test(NAME terrain_asset_contract COMMAND ${Python3_EXECUTABLE}
-        ${CMAKE_SOURCE_DIR}/tools/rewrite/test_terrain_assets.py
+        ${CMAKE_SOURCE_DIR}/tests/test_terrain_assets.py
         --target native --native-probe $<TARGET_FILE:fist_asset_probe>
         --terrain-probe $<TARGET_FILE:fist_terrain_probe>)
     add_test(NAME terrain_scene_contract COMMAND ${Python3_EXECUTABLE}
-        ${CMAKE_SOURCE_DIR}/tools/rewrite/test_terrain_scene.py
+        ${CMAKE_SOURCE_DIR}/tests/test_terrain_scene.py
         --target native --native-preview $<TARGET_FILE:fist_terrain_preview>)
 endif()

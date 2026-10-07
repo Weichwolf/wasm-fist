@@ -42,10 +42,10 @@ plane, an output that owns no image, and distinct source/output objects. Release
 ## Verification
 
 ```sh
-bash tools/rewrite/build.sh all
-python3 tools/rewrite/check_style.py
+bash tools/build.sh all
+python3 tools/check_style.py
 PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
-  /tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_heightfield.py --originals
+  /tmp/wasm-fist-decoder-oracle/bin/python tests/test_heightfield.py --originals
 ```
 
 Default native/WASM gates compare complete dimensions, palettes and pixels against independent
@@ -77,12 +77,12 @@ For native memory instrumentation:
 ```sh
 clang -std=c11 -Wall -Wextra -Wpedantic -Wno-unused-parameter -Wno-unused-function \
   -fno-strict-aliasing -ffast-math -Werror -O1 -g -fsanitize=address,undefined \
-  -fno-omit-frame-pointer -Isrc -Itools/rewrite \
-  src/assets/heightfield.c src/assets/klc.c tools/rewrite/probe_io.c \
-  tools/rewrite/heightfield_probe.c -o /tmp/wasm-fist-0062-heightfield-sanitized
+  -fno-omit-frame-pointer -Isrc -Itests \
+  src/assets/heightfield.c src/assets/klc.c tests/probe_io.c \
+  tests/heightfield_probe.c -o /tmp/wasm-fist-0062-heightfield-sanitized
 ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=halt_on_error=1 \
   PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
-  /tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_heightfield.py --target native \
+  /tmp/wasm-fist-decoder-oracle/bin/python tests/test_heightfield.py --target native \
   --native-probe /tmp/wasm-fist-0062-heightfield-sanitized --originals --no-memory-tests
 ```
 

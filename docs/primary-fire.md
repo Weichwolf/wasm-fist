@@ -16,22 +16,22 @@ unbound until complete living dispatch and actual eligibility are connected.
 
 ## Original evidence
 
-The unchanged original load module is `re_out/fist_dat_image.bin`, SHA-256
+The unchanged original load module is `/tmp/wasm-fist-reference-images/fist_dat_image.bin`, SHA-256
 `d46f480dd2214b2693b4192a42aa79fb7bffb8d692fd67ddc3d746dfdea9c5e5`.
 Addresses below are raw load-module offsets. Near code is CS zero, service CS is paragraph f69,
 and DS/SS are paragraph 1c00. A service offset must be added to **f690**, not f790.
 
 ```sh
 objdump -D -b binary -m i386 -M intel,addr16,data16 \
-  --start-address=0x7c65 --stop-address=0x7c7b re_out/fist_dat_image.bin
+  --start-address=0x7c65 --stop-address=0x7c7b /tmp/wasm-fist-reference-images/fist_dat_image.bin
 objdump -D -b binary -m i386 -M intel,addr16,data16 \
-  --start-address=0x7e29 --stop-address=0x7e77 re_out/fist_dat_image.bin
+  --start-address=0x7e29 --stop-address=0x7e77 /tmp/wasm-fist-reference-images/fist_dat_image.bin
 objdump -D -b binary -m i386 -M intel,addr16,data16 \
-  --start-address=0x170d6 --stop-address=0x170eb re_out/fist_dat_image.bin
+  --start-address=0x170d6 --stop-address=0x170eb /tmp/wasm-fist-reference-images/fist_dat_image.bin
 objdump -D -b binary -m i386 -M intel,addr16,data16 \
-  --start-address=0x17745 --stop-address=0x1778a re_out/fist_dat_image.bin
+  --start-address=0x17745 --stop-address=0x1778a /tmp/wasm-fist-reference-images/fist_dat_image.bin
 objdump -D -b binary -m i386 -M intel,addr16,data16 \
-  --start-address=0xbf3c --stop-address=0xbfb1 re_out/fist_dat_image.bin
+  --start-address=0xbf3c --stop-address=0xbfb1 /tmp/wasm-fist-reference-images/fist_dat_image.bin
 ```
 
 The first full original comparison disproved an initial mode-reset hypothesis: its first
@@ -118,16 +118,16 @@ post-selection/reload actor and full occupancy also enter the complete original 
 unrelated complete typed TRAIN1 payloads are checked for preservation in C.
 
 ```sh
-bash tools/rewrite/build.sh all
-python3 tools/rewrite/check_style.py
+bash tools/build.sh all
+python3 tools/check_style.py
 PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
-  /tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_primary_fire.py \
+  /tmp/wasm-fist-decoder-oracle/bin/python tests/test_primary_fire.py \
   --target native --originals --oracle
 PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
-  /tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_primary_fire.py \
+  /tmp/wasm-fist-decoder-oracle/bin/python tests/test_primary_fire.py \
   --target wasm --originals --oracle
 PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
-  /tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_projectile_launch.py \
+  /tmp/wasm-fist-decoder-oracle/bin/python tests/test_projectile_launch.py \
   --target all --originals --oracle
 ```
 
@@ -137,12 +137,12 @@ Build memory instrumentation sequentially after any previous compile has returne
 mkdir -p /tmp/wasm-fist-0076-sanitizer
 clang -std=c11 -Wall -Wextra -Wpedantic -Wno-unused-parameter -Wno-unused-function -Werror \
   -fno-strict-aliasing -ffast-math -fsanitize=address,undefined -fno-sanitize-recover=all \
-  -fno-omit-frame-pointer -g -O1 -Isrc -Itools/rewrite src/assets/*.c src/sim/*.c \
-  tools/rewrite/probe_io.c tools/rewrite/object_pool_probe_io.c \
-  tools/rewrite/vehicle_probe_io.c tools/rewrite/projectile_launch_probe.c -lm \
+  -fno-omit-frame-pointer -g -O1 -Isrc -Itests src/assets/*.c src/sim/*.c \
+  tests/probe_io.c tests/object_pool_probe_io.c \
+  tests/vehicle_probe_io.c tests/projectile_launch_probe.c -lm \
   -o /tmp/wasm-fist-0076-sanitizer/projectile_launch_probe
 ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
-  PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache python3 tools/rewrite/test_primary_fire.py \
+  PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache python3 tests/test_primary_fire.py \
   --target native --originals --native-probe /tmp/wasm-fist-0076-sanitizer/projectile_launch_probe
 ```
 

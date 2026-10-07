@@ -75,12 +75,12 @@ are 132 short objects, 32 extended objects and 164 total records.
 ## Verification
 
 ```sh
-bash tools/rewrite/build.sh all
-python3 tools/rewrite/check_style.py
+bash tools/build.sh all
+python3 tools/check_style.py
 PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
-  /tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_object_pool.py --originals --oracle
+  /tmp/wasm-fist-decoder-oracle/bin/python tests/test_object_pool.py --originals --oracle
 PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
-  /tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_units.py --originals --oracle
+  /tmp/wasm-fist-decoder-oracle/bin/python tests/test_units.py --originals --oracle
 ```
 
 Seven test groups cover every type and admission route, physical/registry holes, duplicate
@@ -104,12 +104,12 @@ clang -std=c11 -O2 -g -Wall -Wextra -Wpedantic \
   -Wno-unused-parameter -Wno-unused-function -Werror \
   -fno-strict-aliasing -ffast-math \
   -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer \
-  -Isrc -Itools/rewrite tools/rewrite/object_pool_probe.c tools/rewrite/probe_io.c \
+  -Isrc -Itests tests/object_pool_probe.c tests/probe_io.c \
   src/sim/object_pool.c src/assets/units.c src/assets/scenario.c \
   -o /tmp/wasm-fist-0066-pool-sanitized-probe
 ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
   PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
-  /tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_object_pool.py \
+  /tmp/wasm-fist-decoder-oracle/bin/python tests/test_object_pool.py \
   --target native --originals --oracle --native-probe /tmp/wasm-fist-0066-pool-sanitized-probe
 ```
 

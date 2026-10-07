@@ -74,13 +74,13 @@ they are not complete world ticks, real installed TRAIN1 terrain, playable missi
 WASM acceptance runs. The production scene still uses its separate player-only baseline.
 
 ```sh
-bash tools/rewrite/build.sh all
-python3 tools/rewrite/check_style.py
+bash tools/build.sh all
+python3 tools/check_style.py
 PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
-  /tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_mission_combat.py \
+  /tmp/wasm-fist-decoder-oracle/bin/python tests/test_mission_combat.py \
   --target native --originals --oracle
 PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
-  /tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_mission_combat.py \
+  /tmp/wasm-fist-decoder-oracle/bin/python tests/test_mission_combat.py \
   --target wasm --originals --oracle
 ```
 
@@ -96,14 +96,14 @@ Build memory instrumentation sequentially after any previous compile returns:
 mkdir -p /tmp/wasm-fist-0077-sanitizer
 clang -std=c11 -Wall -Wextra -Wpedantic -Wno-unused-parameter -Wno-unused-function -Werror \
   -fno-strict-aliasing -ffast-math -fsanitize=address,undefined -fno-sanitize-recover=all \
-  -fno-omit-frame-pointer -g -O1 -Isrc -Itools/rewrite src/assets/*.c src/sim/*.c \
-  tools/rewrite/probe_io.c tools/rewrite/object_pool_probe_io.c \
-  tools/rewrite/vehicle_probe_io.c tools/rewrite/combat_probe_io.c \
-  tools/rewrite/mission_probe_io.c tools/rewrite/mission_combat_probe.c -lm \
+  -fno-omit-frame-pointer -g -O1 -Isrc -Itests src/assets/*.c src/sim/*.c \
+  tests/probe_io.c tests/object_pool_probe_io.c \
+  tests/vehicle_probe_io.c tests/combat_probe_io.c \
+  tests/mission_probe_io.c tests/mission_combat_probe.c -lm \
   -o /tmp/wasm-fist-0077-sanitizer/mission_combat_probe
 ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
   PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
-  /tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_mission_combat.py \
+  /tmp/wasm-fist-decoder-oracle/bin/python tests/test_mission_combat.py \
   --target native --originals --oracle \
   --native-probe /tmp/wasm-fist-0077-sanitizer/mission_combat_probe
 ```

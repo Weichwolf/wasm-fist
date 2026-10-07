@@ -19,7 +19,7 @@ wire/output contracts and verification scope are documented in `docs/terrain-loa
 - `palette.c` implements original normal mission preparation: reserved prefix 80 from engine db47,
   selection sort 9f10, RGB8/DAC6 reductions 4a3c/a033, weighted first-minimum mapping 9e60/ac70.
   All original distance-table entries verify the recovered squared weights. No generated code is linked.
-- `bash tools/rewrite/build.sh all` passed native/WASM production builds and all default contracts:
+- `bash tools/build.sh all` passed native/WASM production builds and all default contracts:
   three native CTest entries, Node renderer/scenario and sixteen synthetic terrain groups. Only the
   separately requested original group is skipped in the default gate.
 - The explicit original terrain gate passed all seventeen groups without skips on both targets:
@@ -31,7 +31,7 @@ wire/output contracts and verification scope are documented in `docs/terrain-loa
 - Tests cover every required missing/corrupt file, direct-file precedence, no fallback on corruption
   or read errors, missing archive members, invalid map shape, owned lifetime after input destruction,
   repeated destruction, quantization, ties and reserved prefix/index zero handling.
-- `python3 tools/rewrite/check_style.py` passed strict LLVM 19.1.7 for all twelve owned C units and
+- `python3 tools/check_style.py` passed strict LLVM 19.1.7 for all twelve owned C units and
   headers; `git diff --check` passed. Checks/compiler flags were not weakened.
 - An isolated native Debug build of both asset/terrain probes with
   `-fsanitize=address,undefined -fno-omit-frame-pointer` passed all seventeen groups, including all

@@ -45,10 +45,10 @@ substituted. UI checks execute the complete original mutation tails, not the sur
 
 ```sh
 PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
-  /tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_ground_command.py \
+  /tmp/wasm-fist-decoder-oracle/bin/python tests/test_ground_command.py \
   --target all --originals --oracle
-python3 tools/rewrite/check_style.py
-CTEST_PARALLEL_LEVEL=4 bash tools/rewrite/build.sh all
+python3 tools/check_style.py
+CTEST_PARALLEL_LEVEL=4 bash tools/build.sh all
 ```
 
 Production probes release overwritten source bytes before observing owned runtime state.

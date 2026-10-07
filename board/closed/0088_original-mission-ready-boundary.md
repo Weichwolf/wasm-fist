@@ -44,7 +44,7 @@ complete isolated ground returns and 98 complete registry passes. These passes a
 8543 physical payload observations, 5185 actual kernel height transfers, 5868 tree RNG calls
 and 80 actual releases, including constructed all-28/empty/orphan cases and a reaching TRAIN1
 command. Complete DGROUP agrees outside actual stack writes. See docs/mission-ready-boundary.md
-and the reproducible required tools/rewrite/test_original_mission_ready.py command there.
+and the reproducible required tests/test_original_mission_ready.py command there.
 
 Ground resets consume no RNG, but TRAIN1's 49 trees consume 98 calls. With nonzero seeds the
 complete first controlled ab03 consumes 48993 after readiness, versus 8191 at the earlier

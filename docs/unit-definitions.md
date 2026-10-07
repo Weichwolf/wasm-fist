@@ -8,20 +8,20 @@ idempotent; failed decoding leaves the caller's output unchanged.
 
 ## Original evidence
 
-The instruction image is `re_out/fist_dat_image.bin`, SHA-256
+The instruction image is `/tmp/wasm-fist-reference-images/fist_dat_image.bin`, SHA-256
 `d46f480dd2214b2693b4192a42aa79fb7bffb8d692fd67ddc3d746dfdea9c5e5`, frozen at reference `349ad31`.
 These are raw load-module addresses. DGROUP is paragraph `0x1c00` (linear `0x1c000`); the far
 service code uses CS `0x0f69`. Raw `0x1b1a2` is therefore original `0f69:bb12`.
 
 ```sh
 objdump -D -b binary -m i386 -M intel,addr16,data16 \
-  --start-address=0xd7e1 --stop-address=0xd84e re_out/fist_dat_image.bin
+  --start-address=0xd7e1 --stop-address=0xd84e /tmp/wasm-fist-reference-images/fist_dat_image.bin
 objdump -D -b binary -m i386 -M intel,addr16,data16 \
-  --start-address=0x1b176 --stop-address=0x1b294 re_out/fist_dat_image.bin
+  --start-address=0x1b176 --stop-address=0x1b294 /tmp/wasm-fist-reference-images/fist_dat_image.bin
 objdump -D -b binary -m i386 -M intel,addr16,data16 \
-  --start-address=0x43c1 --stop-address=0x4430 re_out/fist_dat_image.bin
+  --start-address=0x43c1 --stop-address=0x4430 /tmp/wasm-fist-reference-images/fist_dat_image.bin
 objdump -D -b binary -m i386 -M intel,addr16,data16 \
-  --start-address=0x1a84c --stop-address=0x1a892 re_out/fist_dat_image.bin
+  --start-address=0x1a84c --stop-address=0x1a892 /tmp/wasm-fist-reference-images/fist_dat_image.bin
 ```
 
 `d7e1/d81e` reads count, six-byte record header, then the first state word as constructor type.
@@ -90,15 +90,15 @@ PINF remains opaque: its eight 22-byte records do not replace the roster assignm
 
 ```sh
 export PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache
-bash tools/rewrite/build.sh all
-python3 tools/rewrite/check_style.py
-python3 tools/rewrite/test_units.py --originals
+bash tools/build.sh all
+python3 tools/check_style.py
+python3 tests/test_units.py --originals
 # Optional independent instruction oracle; fail if its pinned requirements are missing:
-/tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_units.py --originals --oracle
+/tmp/wasm-fist-decoder-oracle/bin/python tests/test_units.py --originals --oracle
 ```
 
 Install the optional oracle requirements into an isolated `/tmp` virtualenv with
-`tools/rewrite/oracle_requirements.txt`. All probes and tests use temporary files under `/tmp`.
+`tests/oracle_requirements.txt`. All probes and tests use temporary files under `/tmp`.
 The normal build runs synthetic contracts on both targets; explicit original coverage requires
 all manifest-pinned missions, exact complete output and unchanged original hashes without skips.
 
@@ -128,11 +128,11 @@ ASan/UBSan with leak detection passed the same seven unit groups and complete or
 mkdir -p /tmp/wasm-fist-unit-sanitizer
 clang -std=c11 -Wall -Wextra -Wpedantic -Wno-unused-parameter -Wno-unused-function -Werror \
   -fno-strict-aliasing -ffast-math -fsanitize=address,undefined -fno-omit-frame-pointer -g -O1 \
-  -Isrc -Itools/rewrite src/assets/scenario.c src/assets/units.c \
-  tools/rewrite/probe_io.c tools/rewrite/unit_probe.c \
+  -Isrc -Itests src/assets/scenario.c src/assets/units.c \
+  tests/probe_io.c tests/unit_probe.c \
   -o /tmp/wasm-fist-unit-sanitizer/unit_probe
 ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
-  python3 tools/rewrite/test_units.py --originals --target native \
+  python3 tests/test_units.py --originals --target native \
   --native-probe /tmp/wasm-fist-unit-sanitizer/unit_probe
 ```
 

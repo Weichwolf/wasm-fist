@@ -54,19 +54,19 @@ variant clamp replaces missing inputs. This billboard does not add a ground shad
 
 ```sh
 export PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache
-bash tools/rewrite/build.sh all
-python3 tools/rewrite/check_style.py
-python3 tools/rewrite/test_terrain_scene.py --originals
-/tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/verify_original_vehicle_projection.py
-/tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_model_bitmap.py --originals --oracle
+bash tools/build.sh all
+python3 tools/check_style.py
+python3 tests/test_terrain_scene.py --originals
+/tmp/wasm-fist-decoder-oracle/bin/python tests/verify_original_vehicle_projection.py
+/tmp/wasm-fist-decoder-oracle/bin/python tests/test_model_bitmap.py --originals --oracle
 /tmp/wasm-fist-rewrite/native/fist_terrain_preview \
   armoredfist/FISTDATA/AZER1.FSG armoredfist/FISTDATA /tmp/azer1-vehicle.ppm 0 vehicle
 # Use a new empty directory; originals are copied/hash-verified and stay read-only.
-python3 tools/rewrite/prepare_terrain_preview.py --vehicle --heading 0 \
+python3 tests/prepare_terrain_preview.py --vehicle --heading 0 \
   --scenario armoredfist/FISTDATA/AZER1.FSG --output-dir /tmp/vehicle-preview/assets
 # Place links to the built WASM preview and index.html/terrain.html/terrain.js
 # in /tmp/vehicle-preview, then run the actual Chromium canvas gate:
-python3 tools/rewrite/verify_browser.py --terrain --build-dir /tmp/vehicle-preview \
+python3 tests/verify_browser.py --terrain --build-dir /tmp/vehicle-preview \
   --screenshot /tmp/vehicle-preview/wasm.png
 ```
 
@@ -112,6 +112,6 @@ cmake --build /tmp/vehicle-sanitized --target fist_terrain_preview fist_vehicle_
 ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
   /tmp/vehicle-sanitized/fist_vehicle_scene_probe
 ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
-  python3 tools/rewrite/test_terrain_scene.py --target native --originals \
+  python3 tests/test_terrain_scene.py --target native --originals \
   --native-preview /tmp/vehicle-sanitized/fist_terrain_preview
 ```

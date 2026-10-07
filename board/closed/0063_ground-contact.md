@@ -41,8 +41,8 @@ controller, interactive scene or playable mission claim from sampler/contact-onl
 
 ## Verification
 
-2026-10-06: `bash tools/rewrite/build.sh all` passes all thirteen native CTests and all WASM
-asset/scene/pixel gates. `python3 tools/rewrite/check_style.py` passes all 35 owned C units with
+2026-10-06: `bash tools/build.sh all` passes all thirteen native CTests and all WASM
+asset/scene/pixel gates. `python3 tools/check_style.py` passes all 35 owned C units with
 unchanged LLVM 19.1 rules and requested production compiler flags. A final forward/backward
 local-name correction preserves the entire native probe .text (7546 bytes) and .rodata
 (2624 bytes); the final production build/style gates pass again. Shared `sim/world.h` owns

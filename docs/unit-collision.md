@@ -70,9 +70,9 @@ query. Prevalidation prevents a late malformed candidate from consuming random v
 
 ```sh
 export PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache
-bash tools/rewrite/build.sh all
-python3 tools/rewrite/check_style.py
-/tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_collision.py --originals --oracle
+bash tools/build.sh all
+python3 tools/check_style.py
+/tmp/wasm-fist-decoder-oracle/bin/python tests/test_collision.py --originals --oracle
 ```
 
 The seven-group collision gate is required by native CTest and WASM Node. Its 35,271 valid query
@@ -102,10 +102,10 @@ Production-flags sanitizer reproduction (after the sequential production build):
 mkdir -p /tmp/wasm-fist-collision-sanitizer
 clang -std=c11 -Wall -Wextra -Wpedantic -Wno-unused-parameter -Wno-unused-function -Werror \
   -fno-strict-aliasing -ffast-math -fsanitize=address,undefined -fno-omit-frame-pointer -g -O1 \
-  -Isrc -Itools/rewrite src/assets/scenario.c src/assets/units.c src/sim/random.c \
-  src/sim/object_pool.c src/sim/collision.c tools/rewrite/probe_io.c \
-  tools/rewrite/collision_probe.c -o /tmp/wasm-fist-collision-sanitizer/collision_probe
+  -Isrc -Itests src/assets/scenario.c src/assets/units.c src/sim/random.c \
+  src/sim/object_pool.c src/sim/collision.c tests/probe_io.c \
+  tests/collision_probe.c -o /tmp/wasm-fist-collision-sanitizer/collision_probe
 ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
-  python3 tools/rewrite/test_collision.py --originals --target native \
+  python3 tests/test_collision.py --originals --target native \
   --native-probe /tmp/wasm-fist-collision-sanitizer/collision_probe
 ```

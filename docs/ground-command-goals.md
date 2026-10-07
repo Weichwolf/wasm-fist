@@ -51,10 +51,10 @@ DOS loaders and preserve all physical payloads and registry orphans at every bou
 
 ```sh
 PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
-  /tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_ground_goal.py \
+  /tmp/wasm-fist-decoder-oracle/bin/python tests/test_ground_goal.py \
   --target all --originals --oracle
-python3 tools/rewrite/check_style.py
-CTEST_PARALLEL_LEVEL=4 bash tools/rewrite/build.sh all
+python3 tools/check_style.py
+CTEST_PARALLEL_LEVEL=4 bash tools/build.sh all
 ```
 
 Required corpus coverage retains all 47 files / 960 ground snapshots, the ten currently

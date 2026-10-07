@@ -34,9 +34,9 @@ Original scale/bearing evidence, required builds and strict formatting/tidy pass
 
 ## Verification
 
-2026-10-06: required `bash tools/rewrite/build.sh all` passes all nine native CTests and WASM
-asset/scene/pixel gates. `python3 tools/rewrite/check_style.py` passes all 24 owned C units.
-`python3 tools/rewrite/test_terrain_scene.py --originals` passes all ten groups on both targets,
+2026-10-06: required `bash tools/build.sh all` passes all nine native CTests and WASM
+asset/scene/pixel gates. `python3 tools/check_style.py` passes all 24 owned C units.
+`python3 tests/test_terrain_scene.py --originals` passes all ten groups on both targets,
 including four original view directions and visible vehicle contributions against copied
 zero-texel controls. Default gates explicitly skip the two requested-original groups only.
 The optional `verify_original_vehicle_projection.py` passes 27 bearings, four actual posted

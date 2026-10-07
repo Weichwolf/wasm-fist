@@ -17,11 +17,11 @@ Verified on 2026-10-06:
   `tools/third_party/`. Root CMake includes only `deps/softgl/libsoftgl`.
 - Native and WASM compile databases each contain 24 translation units, all `.c`, with no
   meshoptimizer paths. Neither `build.ninja` contains meshoptimizer or softgl offline-tool rules.
-- `bash tools/rewrite/build.sh all` passed: both native CTest contracts and the WASM renderer
+- `bash tools/build.sh all` passed: both native CTest contracts and the WASM renderer
   and synthetic scenario contracts. The optional original-scenario suite is skipped by this
   command and is unrelated to the renderer dependency boundary.
-- `python3 tools/rewrite/check_style.py` passed with LLVM 19.1.7.
-- `python3 tools/rewrite/verify_browser.py --screenshot
+- `python3 tools/check_style.py` passed with LLVM 19.1.7.
+- `python3 tests/verify_browser.py --screenshot
   /tmp/wasm-fist-rewrite/softgl-verification.png` passed in Chromium. The screenshot was visually
   reviewed; the completed renderer checksum is `3fa856ed`, isolation is enabled, and no browser
   runtime errors occurred. This is diagnostic renderer coverage, not gameplay completion.

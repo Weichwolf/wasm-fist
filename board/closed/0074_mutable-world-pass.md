@@ -39,10 +39,10 @@ stack. No original instruction or device return is replaced by a stub.
 
 Verified on 2026-10-07:
 
-- `bash tools/rewrite/build.sh all`: all 24 native CTest gates and complete WASM gates pass.
+- `bash tools/build.sh all`: all 24 native CTest gates and complete WASM gates pass.
   The new world gate is required on both targets. Standard build gates retain their explicitly
   optional corpus/device groups; the required original/memory gates below have zero skips.
-- `python3 tools/rewrite/check_style.py`: strict LLVM 19.1.7 format/tidy passes all 66 owned C
+- `python3 tools/check_style.py`: strict LLVM 19.1.7 format/tidy passes all 66 owned C
   units. Timer lane names were corrected without changing proved byte arithmetic.
 - Required native `test_world_step.py --target native --originals --oracle`: all six groups
   pass in 212.293 seconds, without skips. Per target: 19,288 fixtures, 45,040 visits, 40,107

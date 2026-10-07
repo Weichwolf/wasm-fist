@@ -36,8 +36,8 @@ terrain installation, target solver, mission input loop or playable completion c
 
 ## Verification
 
-2026-10-06: `bash tools/rewrite/build.sh all` passes all eleven native CTests and every WASM
-asset/scene/pixel gate. `python3 tools/rewrite/check_style.py` passes all 31 owned C units with
+2026-10-06: `bash tools/build.sh all` passes all eleven native CTests and every WASM
+asset/scene/pixel gate. `python3 tools/check_style.py` passes all 31 owned C units with
 unchanged LLVM 19.1 rules and production compiler flags. Default gates explicitly skip only
 the separately requested original groups.
 

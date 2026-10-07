@@ -30,9 +30,9 @@ See `docs/object-pool.md` for addresses, field ownership, corruption proofs and 
 
 Verified on 2026-10-06:
 
-- `bash tools/rewrite/build.sh all`: all 16 native CTest gates and complete WASM gates pass.
+- `bash tools/build.sh all`: all 16 native CTest gates and complete WASM gates pass.
   The new allocator gate is mandatory on both targets.
-- `python3 tools/rewrite/check_style.py`: strict format/tidy pass for all 45 owned C units.
+- `python3 tools/check_style.py`: strict format/tidy pass for all 45 owned C units.
 - Pinned `test_object_pool.py --originals --oracle`: all seven groups pass in 17.063 seconds,
   without skips. Complete typed metadata/output traces cover every type and admission route,
   holes/reuse/reservations, duplicate bindings, reset, full arenas/registry, wrapped saved words,

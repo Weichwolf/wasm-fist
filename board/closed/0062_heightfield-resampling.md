@@ -34,8 +34,8 @@ expanded-field rendering, terrain collision, installed vehicle or playable-missi
 
 ## Verification
 
-2026-10-06: `bash tools/rewrite/build.sh all` passes all twelve native CTests and every WASM
-asset/scene/pixel gate. `python3 tools/rewrite/check_style.py` passes all 33 owned C units with
+2026-10-06: `bash tools/build.sh all` passes all twelve native CTests and every WASM
+asset/scene/pixel gate. `python3 tools/check_style.py` passes all 33 owned C units with
 unchanged LLVM 19.1 rules and requested production compiler flags.
 
 `test_heightfield.py --originals` passes all eight groups on both production targets, no skips

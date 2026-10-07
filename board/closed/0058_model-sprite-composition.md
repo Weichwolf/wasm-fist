@@ -24,11 +24,11 @@ model-format constant, reused by decoder, compositor and probe. See `docs/model-
 
 Verified 2026-10-06:
 
-- `bash tools/rewrite/build.sh all`: all eight native CTest contracts and all WASM gates pass.
+- `bash tools/build.sh all`: all eight native CTest contracts and all WASM gates pass.
   Default fixture runs deliberately skip the separately requested original corpus.
-- `python3 tools/rewrite/check_style.py`: strict LLVM 19.1.7 format/tidy passes all 22 owned C
+- `python3 tools/check_style.py`: strict LLVM 19.1.7 format/tidy passes all 22 owned C
   translation units. Checks/compiler flags are unchanged; no suppression was added.
-- `/tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_model_bitmap.py --originals
+- `/tmp/wasm-fist-decoder-oracle/bin/python tests/test_model_bitmap.py --originals
   --oracle --review-dir /tmp/wasm-fist-model-review` with the `/tmp` Python cache: all six groups
   pass on production native/WASM without skips. All 34 pinned families produce 6432 completely
   compared bitmaps per target (32 baselines and every individual part/variant at opposing facing).

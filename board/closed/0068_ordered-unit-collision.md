@@ -32,9 +32,9 @@ native behavior, including every source-type/random-byte pair at all four stream
 
 Verified on 2026-10-06:
 
-- `bash tools/rewrite/build.sh all`: all 18 native CTest gates and complete WASM gates pass.
+- `bash tools/build.sh all`: all 18 native CTest gates and complete WASM gates pass.
   The seven-group collision gate is mandatory on both targets.
-- `python3 tools/rewrite/check_style.py`: strict LLVM 19.1.7 format/tidy passes all 50 owned C units.
+- `python3 tools/check_style.py`: strict LLVM 19.1.7 format/tidy passes all 50 owned C units.
 - Pinned `test_collision.py --originals --oracle`: all seven groups pass in 132.596 seconds on
   both production targets, without skips. 35,271 query observations per target cover every
   source/target type, all eight type-26 modes, all collidable flag bytes, inclusive XY/height

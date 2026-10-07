@@ -102,7 +102,7 @@ a fabricated default. SDL and canvas only present the complete C frame.
 Native requires SDL2 development files and pkg-config. Start directly from read-only originals:
 
 ```sh
-bash tools/rewrite/build.sh all
+bash tools/build.sh all
 /tmp/wasm-fist-rewrite/native/fist_driving_preview armoredfist/FISTDATA/AZER1.FSG armoredfist/FISTDATA 2048
 ```
 
@@ -111,8 +111,8 @@ matching the recovered original default 11-bit detail; this does not replace con
 settings. Prepare browser inputs in an empty dedicated directory, then serve its build directory:
 
 ```sh
-python3 tools/rewrite/prepare_driving_preview.py --scenario armoredfist/FISTDATA/AZER1.FSG
-python3 tools/rewrite/serve.py
+python3 tests/prepare_driving_preview.py --scenario armoredfist/FISTDATA/AZER1.FSG
+python3 tools/serve.py
 ```
 
 Open `http://localhost:8000/driving.html`. `prepare_driving_preview.py` without `--scenario`
@@ -124,11 +124,11 @@ controls and the fifth-station display. This option cannot override an original 
 Verification commands:
 
 ```sh
-python3 tools/rewrite/test_driving.py
-/tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_driving.py --originals --oracle
-python3 tools/rewrite/verify_browser.py --driving --output-dir /tmp/wasm-fist-driving-review
-python3 tools/rewrite/verify_driving_native.py --scenario armoredfist/FISTDATA/AZER1.FSG --assets armoredfist/FISTDATA --output-dir /tmp/wasm-fist-driving-review
-python3 tools/rewrite/check_style.py
+python3 tests/test_driving.py
+/tmp/wasm-fist-decoder-oracle/bin/python tests/test_driving.py --originals --oracle
+python3 tests/verify_browser.py --driving --output-dir /tmp/wasm-fist-driving-review
+python3 tests/verify_driving_native.py --scenario armoredfist/FISTDATA/AZER1.FSG --assets armoredfist/FISTDATA --output-dir /tmp/wasm-fist-driving-review
+python3 tools/check_style.py
 ```
 
 The optional original oracle requires pinned Unicorn 2.1.4; see `oracle_requirements.txt`.
@@ -159,10 +159,10 @@ cmake -S . -B /tmp/wasm-fist-0065-scene-sanitized -G Ninja \
   '-DCMAKE_C_FLAGS=-fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer'
 cmake --build /tmp/wasm-fist-0065-scene-sanitized --target fist_driving_probe fist_driving_preview
 ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
-  /tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_driving.py \
+  /tmp/wasm-fist-decoder-oracle/bin/python tests/test_driving.py \
   --target native --originals --native-probe /tmp/wasm-fist-0065-scene-sanitized/fist_driving_probe
 ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
-  python3 tools/rewrite/verify_driving_native.py --settle-seconds 1 \
+  python3 tests/verify_driving_native.py --settle-seconds 1 \
   --native-preview /tmp/wasm-fist-0065-scene-sanitized/fist_driving_preview \
   --scenario /tmp/wasm-fist-rewrite/wasm/assets/AZER1.FSG \
   --assets /tmp/wasm-fist-rewrite/wasm/assets --output-dir /tmp/wasm-fist-driving-review
@@ -189,11 +189,11 @@ loading its replacement visual family and actual takeover UI remain separate wor
 ```sh
 /tmp/wasm-fist-rewrite/native/fist_driving_preview \
   armoredfist/FISTDATA/TRAIN1.FSG armoredfist/FISTDATA 2048 mission
-python3 tools/rewrite/prepare_driving_preview.py --mission \
+python3 tests/prepare_driving_preview.py --mission \
   --scenario armoredfist/FISTDATA/TRAIN1.FSG --output-dir /tmp/wasm-fist-0078-browser/assets
-python3 tools/rewrite/test_mission_driving.py
-/tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_mission_driving.py --originals --oracle
-python3 tools/rewrite/verify_driving_native.py --mission \
+python3 tests/test_mission_driving.py
+/tmp/wasm-fist-decoder-oracle/bin/python tests/test_mission_driving.py --originals --oracle
+python3 tests/verify_driving_native.py --mission \
   --scenario armoredfist/FISTDATA/TRAIN1.FSG --assets armoredfist/FISTDATA
 ```
 

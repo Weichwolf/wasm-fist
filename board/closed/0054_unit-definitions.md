@@ -19,15 +19,15 @@ Roster assignment is separate from SHDR position and DCBS record order.
 
 Verified 2026-10-06:
 
-- `bash tools/rewrite/build.sh all`: all five native CTest contracts and WASM gates passed.
+- `bash tools/build.sh all`: all five native CTest contracts and WASM gates passed.
   The default constructed-fixture gates explicitly skip local-original coverage.
-- `python3 tools/rewrite/check_style.py`: strict LLVM 19.1.7 format/tidy passed for all 16 owned C
+- `python3 tools/check_style.py`: strict LLVM 19.1.7 format/tidy passed for all 16 owned C
   translation units; no warning suppressions were added.
-- `/tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_units.py --originals --oracle`:
+- `/tmp/wasm-fist-decoder-oracle/bin/python tests/test_units.py --originals --oracle`:
   all seven groups passed on both targets with no skips. All 4213 records in 47 hash-pinned
   scenarios retain every byte; constructor class, full-width poses, every registry generation
   and all roster slots match actual original instructions within the documented scope.
-- `python3 tools/rewrite/test_scenario.py --originals`: all eight native/WASM groups passed with
+- `python3 tests/test_scenario.py --originals`: all eight native/WASM groups passed with
   no skips after centralizing the signed little-endian read contract.
 - ASan/UBSan/leak-detection unit probe: all seven groups and the complete original corpus passed.
   Exact reproduction commands are in docs/unit-definitions.md. Presentation is unchanged.

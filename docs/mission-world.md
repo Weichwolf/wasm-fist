@@ -10,19 +10,19 @@ player-only baseline; this delivery does not claim an integrated playable battle
 
 ## Original loader evidence
 
-The original load module `re_out/fist_dat_image.bin` retains SHA-256
+The original load module `/tmp/wasm-fist-reference-images/fist_dat_image.bin` retains SHA-256
 `d46f480dd2214b2693b4192a42aa79fb7bffb8d692fd67ddc3d746dfdea9c5e5`.
 Addresses below are raw load-module offsets, near CS zero, DS/SS paragraph `0x1c00`.
 
 ```sh
 objdump -D -b binary -m i386 -M intel,addr16,data16 \
-  --start-address=0xd81e --stop-address=0xd84e re_out/fist_dat_image.bin
+  --start-address=0xd81e --stop-address=0xd84e /tmp/wasm-fist-reference-images/fist_dat_image.bin
 objdump -D -b binary -m i386 -M intel,addr16,data16 \
-  --start-address=0x43c1 --stop-address=0x4430 re_out/fist_dat_image.bin
+  --start-address=0x43c1 --stop-address=0x4430 /tmp/wasm-fist-reference-images/fist_dat_image.bin
 objdump -D -b binary -m i386 -M intel,addr16,data16 \
-  --start-address=0xc296 --stop-address=0xc31e re_out/fist_dat_image.bin
+  --start-address=0xc296 --stop-address=0xc31e /tmp/wasm-fist-reference-images/fist_dat_image.bin
 objdump -D -b binary -m i386 -M intel,addr16,data16 \
-  --start-address=0x9be8 --stop-address=0x9c5d re_out/fist_dat_image.bin
+  --start-address=0x9be8 --stop-address=0x9c5d /tmp/wasm-fist-reference-images/fist_dat_image.bin
 ```
 
 `d81e` loads saved type, registry index and saved registry word, then calls the actual far
@@ -119,16 +119,16 @@ unsupported, invalid and repaired-exhaustion inputs are C-only failure assertion
 original overflow is not executed as a successful counterpart.
 
 ```sh
-bash tools/rewrite/build.sh all
-python3 tools/rewrite/check_style.py
+bash tools/build.sh all
+python3 tools/check_style.py
 PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
-  /tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_mission_world.py \
+  /tmp/wasm-fist-decoder-oracle/bin/python tests/test_mission_world.py \
   --target native --originals --oracle
 PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
-  /tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_mission_world.py \
+  /tmp/wasm-fist-decoder-oracle/bin/python tests/test_mission_world.py \
   --target wasm --originals --oracle
 PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
-  /tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_vehicle_start.py \
+  /tmp/wasm-fist-decoder-oracle/bin/python tests/test_vehicle_start.py \
   --target all --originals --oracle
 ```
 
@@ -138,13 +138,13 @@ Compile the memory probe sequentially after production builds are terminal:
 mkdir -p /tmp/wasm-fist-0075-sanitizer
 clang -std=c11 -Wall -Wextra -Wpedantic -Wno-unused-parameter -Wno-unused-function -Werror \
   -fno-strict-aliasing -ffast-math -fsanitize=address,undefined -fno-omit-frame-pointer -g -O1 \
-  -Isrc -Itools/rewrite src/assets/*.c src/sim/*.c \
-  tools/rewrite/probe_io.c tools/rewrite/object_pool_probe_io.c tools/rewrite/combat_probe_io.c \
-  tools/rewrite/vehicle_probe_io.c tools/rewrite/mission_probe_io.c \
-  tools/rewrite/mission_world_probe.c -lm \
+  -Isrc -Itests src/assets/*.c src/sim/*.c \
+  tests/probe_io.c tests/object_pool_probe_io.c tests/combat_probe_io.c \
+  tests/vehicle_probe_io.c tests/mission_probe_io.c \
+  tests/mission_world_probe.c -lm \
   -o /tmp/wasm-fist-0075-sanitizer/mission_world_probe
 ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
-  PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache python3 tools/rewrite/test_mission_world.py \
+  PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache python3 tests/test_mission_world.py \
   --target native --originals --native-probe /tmp/wasm-fist-0075-sanitizer/mission_world_probe
 ```
 

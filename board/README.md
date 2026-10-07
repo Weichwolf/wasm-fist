@@ -47,6 +47,7 @@ frozen reconstruction, not rewrite completion.
 | 0086 | Complete shared planar navigation bearing/distance and local numeric scratch delivered; both-target original/domain/corpus/build/style/memory and canonical regressions pass. Existing scene binaries/evidence are unchanged; full 0081 remains open. |
 | 0087 | Complete route progress, retained unsigned range and proved full-capacity neighbor-read repair delivered; both-target original/corpus/consuming-world/build/style/memory and current scene gates pass. Full 0081 remains open. |
 | 0088 | Complete original mission-ready registry/class reset, all-47 target clearing/releases/tree RNG and reaching TRAIN1 command boundary verified. Canonical C readiness and full 0081 remain open. |
+| 0089 | Rewrite-only master layout delivered: concise README, no workflows, root tests/tools, only softgl in deps and pinned /tmp reference images; full build/style/original/presentation gates pass and ghidra remains immutable. |
 | 0042 | Menus, settings, campaign/profile progression and persistent save/load. |
 | 0043 | All missions/maps/vehicles, AI, combat, objectives and resolved outcomes. |
 | 0044 | Keyboard/mouse/joystick, devices, audio timing and link behavior on both platforms. |

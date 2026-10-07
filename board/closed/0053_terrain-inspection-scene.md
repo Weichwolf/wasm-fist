@@ -26,12 +26,12 @@ Render workers complete before temporary buffers are freed. No offline meshoptim
 
 Verified locally on 2026-10-06:
 
-- `bash tools/rewrite/build.sh all`: all four native CTests pass; WASM triangle, scenario,
+- `bash tools/build.sh all`: all four native CTests pass; WASM triangle, scenario,
   terrain-asset and terrain-scene contracts pass. Default gates deliberately skip optional
   original corpus/scene coverage; it is required separately below.
-- `python3 tools/rewrite/check_style.py`: all fourteen owned C units and their headers pass
+- `python3 tools/check_style.py`: all fourteen owned C units and their headers pass
   LLVM 19.1.7 strict formatting/tidy. No checks or compiler flags were weakened.
-- `python3 tools/rewrite/test_terrain_scene.py --originals`: six complete groups on both
+- `python3 tests/test_terrain_scene.py --originals`: six complete groups on both
   targets with no skips. Complete size/alpha, sky/textured ground, changed headings and height,
   full-period equality, signed-limit equality, invalid headings and absent required files
   are covered. Pinned AZER1 inputs are copied, validated by shared C and hash-rechecked.

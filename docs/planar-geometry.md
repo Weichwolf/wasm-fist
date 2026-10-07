@@ -63,10 +63,10 @@ or trailing batches before emitting any output.
 
 ```sh
 PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
-  /tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_geometry.py \
+  /tmp/wasm-fist-decoder-oracle/bin/python tests/test_geometry.py \
   --target all --originals --oracle
-CTEST_PARALLEL_LEVEL=4 bash tools/rewrite/build.sh all
-python3 tools/rewrite/check_style.py
+CTEST_PARALLEL_LEVEL=4 bash tools/build.sh all
+python3 tools/check_style.py
 ```
 
 Required coverage includes every division quotient word in both fine/coarse modes, all octants,

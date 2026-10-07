@@ -28,9 +28,9 @@ The previous pool transcript writer is shared with the launch probe rather than 
 
 Verified on 2026-10-06:
 
-- `bash tools/rewrite/build.sh all`: all 17 native CTest gates and complete WASM gates pass.
+- `bash tools/build.sh all`: all 17 native CTest gates and complete WASM gates pass.
   The new eight-group launch gate is mandatory on both targets.
-- `python3 tools/rewrite/check_style.py`: strict LLVM 19.1.7 format/tidy passes all 48 owned C units.
+- `python3 tools/check_style.py`: strict LLVM 19.1.7 format/tidy passes all 48 owned C units.
 - Pinned `test_projectile_launch.py --originals --oracle`: all eight groups pass on both targets
   in 28.476 seconds, without skips. 837 complete valid fixtures yield 1,308 launch transactions
   per target, including every side byte, every physical extended origin, both rotation modes,

@@ -17,13 +17,13 @@ the preview default is explicitly zero. Runtime selection UI and gameplay remain
 
 Verified 2026-10-06:
 
-- `bash tools/rewrite/build.sh all`: five native CTest contracts and all WASM gates pass. The
+- `bash tools/build.sh all`: five native CTest contracts and all WASM gates pass. The
   new eight-group scene suite mutates actual unit poses for period/signed-width checks, proves
   SHDR/first-object changes do not move the view, and rejects missing/nonvehicle roster zero.
-- `python3 tools/rewrite/check_style.py`: strict LLVM 19.1.7 checks pass for all 16 owned C units.
-- `python3 tools/rewrite/test_terrain_scene.py --originals`: all eight groups pass on both
+- `python3 tools/check_style.py`: strict LLVM 19.1.7 checks pass for all 16 owned C units.
+- `python3 tests/test_terrain_scene.py --originals`: all eight groups pass on both
   targets, no skips; complete pinned AZER1/TRAIN1 inputs are copied and hash-rechecked.
-- `/tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_units.py --originals --oracle`:
+- `/tmp/wasm-fist-decoder-oracle/bin/python tests/test_units.py --originals --oracle`:
   all seven unit groups and all 47 original missions still pass on native/WASM with no skips.
 - External ASan/UBSan production-flag build: all eight native scene groups, including both
   original scenes and failure paths, pass with leak detection and halt-on-error enabled.

@@ -35,12 +35,12 @@ to physical slots, including overwritten registry orphans. No duplicate runtime 
 
 Verified on 2026-10-07:
 
-- `bash tools/rewrite/build.sh all`: all 25 native CTest gates pass in 196.84 seconds, followed
+- `bash tools/build.sh all`: all 25 native CTest gates pass in 196.84 seconds, followed
   by the complete WASM build/test script. The mission-world gate is required on both targets.
   Standard gates retain their explicitly optional corpus/device groups; required gates below
   have zero skips. The default WASM world gate passes six groups in 94.605 seconds, covering
   853 fixtures, 4,308 installed states, 269 explicit rejections and 65,569 tree requests.
-- `python3 tools/rewrite/check_style.py`: strict LLVM 19.1.7 format/tidy passes all 69 owned C
+- `python3 tools/check_style.py`: strict LLVM 19.1.7 format/tidy passes all 69 owned C
   units. The verification caller's reset checks were split after a real complexity error;
   the earlier partial build was explicitly stopped, not accepted. No rules were weakened.
 - Required `test_mission_world.py --target native --originals --oracle`: all six groups pass

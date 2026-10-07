@@ -31,9 +31,9 @@ shared integer remainder clock consumes all elapsed steps. Held commands use rec
 hull and maximum manual turret increments, explicit new keyboard bindings, pause edges and
 focus-loss release. Full rule/scope and reproduction commands: `docs/driving-scene.md`.
 
-- `bash tools/rewrite/build.sh all`: 14 native CTests and all WASM gates pass, including new
+- `bash tools/build.sh all`: 14 native CTests and all WASM gates pass, including new
   seven-group timed driving contract; optional corpus gates are recorded separately below.
-- `python3 tools/rewrite/check_style.py`: formatting and strict LLVM 19.1.7 tidy pass for all
+- `python3 tools/check_style.py`: formatting and strict LLVM 19.1.7 tidy pass for all
   40 owned translation units; requested production flags and owned warnings-as-errors retained.
 - Pinned Unicorn `test_driving.py --originals --oracle`: seven groups, no skips, 19.513 s;
   complete clock/control/typed state traces for all four classes, all 47 player starts and eight

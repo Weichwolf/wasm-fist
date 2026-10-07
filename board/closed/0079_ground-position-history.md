@@ -54,12 +54,12 @@ build/style and sanitizers pass. No complete playable mission or final WASM stre
 
 Verified on 2026-10-07 with production fast-math and strict owned-code warnings:
 
-- `bash tools/rewrite/build.sh all`: terminal zero, all 29 native CTest gates, all 27 WASM
+- `bash tools/build.sh all`: terminal zero, all 29 native CTest gates, all 27 WASM
   Python gates and both renderer probes. The initial native matrix passes in 155.96 seconds;
-  final `bash tools/rewrite/build.sh native` refreshes the final typed heap snapshot and
+  final `bash tools/build.sh native` refreshes the final typed heap snapshot and
   passes all 29 gates in 158.63 seconds. Both production Ninja trees report no pending work;
   no binary was rebuilt while its own tests read it.
-- `python3 tools/rewrite/check_style.py`: terminal zero, all 73 owned C units, LLVM 19.1.x.
+- `python3 tools/check_style.py`: terminal zero, all 73 owned C units, LLVM 19.1.x.
   Parameter ambiguity and allocation-type diagnostics were repaired without weakening rules.
 - Required `test_vehicle_history.py --originals --oracle`: all five groups, zero skips on
   both targets, 4028 fixtures / 20156 complete boundaries per target. Every counter/phase byte,

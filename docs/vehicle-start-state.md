@@ -87,11 +87,11 @@ Mission boot seeding and random use by later simulation methods remain separate 
 ## Reproduction
 
 ```sh
-bash tools/rewrite/build.sh all
-python3 tools/rewrite/check_style.py
+bash tools/build.sh all
+python3 tools/check_style.py
 PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
   /tmp/wasm-fist-decoder-oracle/bin/python \
-  tools/rewrite/test_vehicle_start.py --originals --oracle
+  tests/test_vehicle_start.py --originals --oracle
 ```
 
 The optional oracle uses the existing pinned `oracle_requirements.txt`; Unicorn is not linked

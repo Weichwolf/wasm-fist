@@ -33,13 +33,13 @@ pass; initialization is not claimed as a playable mission or full vehicle-update
 
 ## Verification
 
-2026-10-06: `bash tools/rewrite/build.sh all` passes all ten native CTests and every WASM
-asset/scene/pixel gate. `python3 tools/rewrite/check_style.py` passes all 27 owned C units
+2026-10-06: `bash tools/build.sh all` passes all ten native CTests and every WASM
+asset/scene/pixel gate. `python3 tools/check_style.py` passes all 27 owned C units
 with the unchanged LLVM 19.1 checks and required compiler flags. Default tests explicitly skip
 the requested original-corpus group; the complete gate has no skips.
 
 `PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache /tmp/wasm-fist-decoder-oracle/bin/python
- tools/rewrite/test_vehicle_start.py --originals --oracle` passes all seven groups on both
+ tests/test_vehicle_start.py --originals --oracle` passes all seven groups on both
 production targets (final run 85.399 s). All 960 ground snapshots across 47 hash-pinned FSGs
 and constructed cases give 3012 complete initialized observations per target. Independent
 expected writes match every byte of the original 251-byte object after actual c296, class

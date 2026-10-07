@@ -8,7 +8,7 @@ world installation and device firing input are subsequent contracts under active
 
 ## Recovered behavior
 
-The frozen DOS image is `re_out/fist_dat_image.bin`, SHA-256
+The frozen DOS image is `/tmp/wasm-fist-reference-images/fist_dat_image.bin`, SHA-256
 `d46f480dd2214b2693b4192a42aa79fb7bffb8d692fd67ddc3d746dfdea9c5e5`, reference `349ad31`.
 Actual instructions were rechecked at physical load-module offsets 17745..17789, b725..b73a,
 1ace0..1adcc, 1addb..1ae3b and 9b5c..9bc5. Service CS is `0f69`, DGROUP is `1c00`.
@@ -50,10 +50,10 @@ consumed only for FIRED/has_muzzle; sound request 255 means no dispatch request.
 
 ```sh
 export PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache
-bash tools/rewrite/build.sh all
-python3 tools/rewrite/check_style.py
-/tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_projectile_launch.py --originals --oracle
-/tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_object_pool.py --originals --oracle
+bash tools/build.sh all
+python3 tools/check_style.py
+/tmp/wasm-fist-decoder-oracle/bin/python tests/test_projectile_launch.py --originals --oracle
+/tmp/wasm-fist-decoder-oracle/bin/python tests/test_object_pool.py --originals --oracle
 ```
 
 The required native CTest and WASM Node launch gate includes eight groups. Fixture verification
@@ -90,13 +90,13 @@ Production-flags sanitizer reproduction (run after the sequential production bui
 mkdir -p /tmp/wasm-fist-launch-sanitizer
 clang -std=c11 -Wall -Wextra -Wpedantic -Wno-unused-parameter -Wno-unused-function -Werror \
   -fno-strict-aliasing -ffast-math -fsanitize=address,undefined -fno-omit-frame-pointer -g -O1 \
-  -Isrc -Itools/rewrite src/assets/scenario.c src/assets/units.c src/sim/random.c src/sim/vehicle_state.c \
+  -Isrc -Itests src/assets/scenario.c src/assets/units.c src/sim/random.c src/sim/vehicle_state.c \
   src/sim/rotation.c src/sim/object_pool.c src/sim/projectile_launch.c \
-  tools/rewrite/probe_io.c tools/rewrite/vehicle_probe_io.c \
-  tools/rewrite/object_pool_probe_io.c tools/rewrite/projectile_launch_probe.c \
+  tests/probe_io.c tests/vehicle_probe_io.c \
+  tests/object_pool_probe_io.c tests/projectile_launch_probe.c \
   -o /tmp/wasm-fist-launch-sanitizer/launch_probe
 ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
-  /tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_projectile_launch.py \
+  /tmp/wasm-fist-decoder-oracle/bin/python tests/test_projectile_launch.py \
   --originals --oracle --target native --native-probe /tmp/wasm-fist-launch-sanitizer/launch_probe
 ```
 

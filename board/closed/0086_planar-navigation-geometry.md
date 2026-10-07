@@ -57,7 +57,7 @@ in 77.619 seconds with production fast-math flags. Bulk decoding poisons/frees e
 before observations; all truncation/trailing/count/missing/argument failures emit no partial
 output. Complete original signed-extreme fold and numeric precision returns are retained.
 
-`CTEST_PARALLEL_LEVEL=4 bash tools/rewrite/build.sh all` exits zero: all 34 Native CTests
+`CTEST_PARALLEL_LEVEL=4 bash tools/build.sh all` exits zero: all 34 Native CTests
 (80.19 seconds), all 32 WASM Python suites and both renderer gates. Standard suites omit the
 optional original oracle/corpus; separate required geometry and canonical gates have zero
 skips. Full strict format/tidy passes all 79 owned C units. Required canonical driving on

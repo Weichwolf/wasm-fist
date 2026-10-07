@@ -14,9 +14,12 @@ verification tools remain available without participating in the rewrite build g
 | `src/audio/` | Shared sound events, sample decoding and final PCM mixing. |
 | `src/platform/native/` | Native window/input/audio device/storage and presentation. |
 | `src/platform/wasm/` | Browser canvas/input/audio/storage and presentation. |
-| `tools/rewrite/` | Build/style/probe tools for owned rewrite code. |
+| `tools/` | Build, strict style, serving and original-file provisioning. |
+| `tests/` | Rewrite behavior tests, C probes, fixtures, browser gates and instruction oracles. |
 | `deps/softgl/` | Pinned renderer dependency, with no game state. |
-| `board/reference/`, `re_out/`, `patches/`, legacy shims/tools | Historical evidence only. |
+| `board/reference/` | Historical work-item evidence. |
+| `ghidra` branch | Frozen generated engine, patches, shims and reconstruction tools. |
+| `/tmp/wasm-fist-reference-images/` | Verified instruction images provisioned from the immutable reference commit/originals. |
 
 The renderer, diagnostic browser presentation, shared FSG envelope/metadata decoder and
 KLC/resource/palette readers, owned unit definitions/registry/roster and directional sprite models,
@@ -60,7 +63,7 @@ knowledge must remain an explicit open task.
 The pinned dependency requires pthreads for functional worker completion: its attempted no-pthread
 configuration retains a nonzero expected worker count after failed thread creation and hangs at
 flush. The rewrite selects the dependency's supported pthread build. Browser serving therefore
-requires COOP/COEP headers from `tools/rewrite/serve.py`. Main remains the render-context owner.
+requires COOP/COEP headers from `tools/serve.py`. Main remains the render-context owner.
 
 Renderer pin: `7963be1d5b5e1bebbe97ece2c655228c8bc0a838` (latest published `origin/master`,
 rechecked on 2026-10-06). CMake includes `libsoftgl` directly. Both target build graphs are pure C

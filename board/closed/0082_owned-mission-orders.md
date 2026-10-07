@@ -63,7 +63,7 @@ prior payload/roster/RNG expectations are unchanged. See docs/mission-orders.md.
 
 ## Verified acceptance — 2026-10-07
 
-- Current production `CTEST_PARALLEL_LEVEL=4 bash tools/rewrite/build.sh all` exits zero:
+- Current production `CTEST_PARALLEL_LEVEL=4 bash tools/build.sh all` exits zero:
   31 native CTests, 29 WASM Python groups and both WASM renderer/pixel gates pass. Builds remain
   sequential; only independent native tests run concurrently. Both production Ninja trees are
   current. Required LLVM 19.1.7 formatting/tidy passes all 74 owned C translation units; warning,

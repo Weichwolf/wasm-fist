@@ -1,9 +1,0 @@
---- a/src/hardware/pic.cpp
-+++ b/src/hardware/pic.cpp
-@@ -34,0 +35 @@
-+#include "../gui/fist_sequence_endpoint.h"
-@@ -546,0 +548,4 @@
-+	if (fist_sequence_end_ms() && PIC_Ticks >= fist_sequence_end_ms()) {
-+		fist_sequence_endpoint_complete();
-+		throw 1;
-+	}

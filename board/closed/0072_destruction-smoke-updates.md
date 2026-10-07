@@ -49,10 +49,10 @@ parent→physical-smoke→impact-effect order is an integration fixture, not the
 Rechecked c105..c120 instead traverses live registry entries in increasing registry order,
 allowing later-entry allocations to update in the same pass; live integration remains required.
 
-- `bash tools/rewrite/build.sh all`: all 22 native CTest gates and the complete WASM build
+- `bash tools/build.sh all`: all 22 native CTest gates and the complete WASM build
   gates pass. Native CTest elapsed 90.76 seconds. Default gates deliberately omit separately
   requested original corpora; the following required corpus gates have zero skips.
-- `python3 tools/rewrite/check_style.py`: strict LLVM 19.1.7 format/tidy passes all 61 C units.
+- `python3 tools/check_style.py`: strict LLVM 19.1.7 format/tidy passes all 61 C units.
   Initial probe diagnostics were fixed with named offsets/explicit arithmetic and snapshots
   of bytes from the same object before invalid calls. No rule or warning was disabled; copied
   C-structure padding does not determine equality.

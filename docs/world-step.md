@@ -7,22 +7,22 @@ dispatch living class methods, bind firing input, mix PCM or resolve mission out
 
 ## Original evidence
 
-The frozen DOS load module is `re_out/fist_dat_image.bin`, SHA-256
+The frozen DOS load module is `/tmp/wasm-fist-reference-images/fist_dat_image.bin`, SHA-256
 `d46f480dd2214b2693b4192a42aa79fb7bffb8d692fd67ddc3d746dfdea9c5e5`.
 Addresses below are raw load-module offsets, CS zero, DS paragraph `0x1c00`.
 The following original instructions were rechecked, rather than relying on patch descriptions:
 
 ```sh
 objdump -D -b binary -m i386 -M intel,addr16,data16 \
-  --start-address=0x4712 --stop-address=0x47e0 re_out/fist_dat_image.bin
+  --start-address=0x4712 --stop-address=0x47e0 /tmp/wasm-fist-reference-images/fist_dat_image.bin
 objdump -D -b binary -m i386 -M intel,addr16,data16 \
-  --start-address=0x5167 --stop-address=0x5177 re_out/fist_dat_image.bin
+  --start-address=0x5167 --stop-address=0x5177 /tmp/wasm-fist-reference-images/fist_dat_image.bin
 objdump -D -b binary -m i386 -M intel,addr16,data16 \
-  --start-address=0x1a5dc --stop-address=0x1a618 re_out/fist_dat_image.bin
+  --start-address=0x1a5dc --stop-address=0x1a618 /tmp/wasm-fist-reference-images/fist_dat_image.bin
 objdump -D -b binary -m i386 -M intel,addr16,data16 \
-  --start-address=0xbeb7 --stop-address=0xbf15 re_out/fist_dat_image.bin
+  --start-address=0xbeb7 --stop-address=0xbf15 /tmp/wasm-fist-reference-images/fist_dat_image.bin
 objdump -D -b binary -m i386 -M intel,addr16,data16 \
-  --start-address=0xc0e5 --stop-address=0xc123 re_out/fist_dat_image.bin
+  --start-address=0xc0e5 --stop-address=0xc123 /tmp/wasm-fist-reference-images/fist_dat_image.bin
 ```
 
 `c0e5` calls `4712`, increments simulation word `6cde`, calls `beb7`, then decrements each
@@ -112,16 +112,16 @@ they do not weaken the original comparisons or appear as skipped required tests.
 ## Reproduction
 
 ```sh
-bash tools/rewrite/build.sh all
-python3 tools/rewrite/check_style.py
+bash tools/build.sh all
+python3 tools/check_style.py
 PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
-  /tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_world_step.py \
+  /tmp/wasm-fist-decoder-oracle/bin/python tests/test_world_step.py \
   --target native --originals --oracle
 PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
-  /tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_world_step.py \
+  /tmp/wasm-fist-decoder-oracle/bin/python tests/test_world_step.py \
   --target wasm --originals --oracle
 PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
-  /tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_destruction.py \
+  /tmp/wasm-fist-decoder-oracle/bin/python tests/test_destruction.py \
   --target all --originals --oracle
 ```
 
@@ -131,19 +131,19 @@ Compile memory probes sequentially after the production build is terminal:
 mkdir -p /tmp/wasm-fist-0074-sanitizer
 clang -std=c11 -Wall -Wextra -Wpedantic -Wno-unused-parameter -Wno-unused-function -Werror \
   -fno-strict-aliasing -ffast-math -fsanitize=address,undefined -fno-omit-frame-pointer -g -O1 \
-  -Isrc -Itools/rewrite src/assets/units.c src/assets/scenario.c src/assets/vehicle.c src/assets/klc.c \
+  -Isrc -Itests src/assets/units.c src/assets/scenario.c src/assets/vehicle.c src/assets/klc.c \
   src/sim/random.c src/sim/rotation.c src/sim/vehicle_state.c src/sim/ground.c \
   src/sim/object_pool.c src/sim/collision.c src/sim/projectile_launch.c src/sim/projectile_flight.c \
   src/sim/smoke_animation.c src/sim/vehicle_damage.c src/sim/damage_common.c src/sim/other_damage.c \
-  src/sim/smoke.c src/sim/destruction_updates.c src/sim/world_step.c tools/rewrite/probe_io.c \
-  tools/rewrite/object_pool_probe_io.c tools/rewrite/combat_probe_io.c \
-  tools/rewrite/world_step_probe.c -o /tmp/wasm-fist-0074-sanitizer/world_step_probe
+  src/sim/smoke.c src/sim/destruction_updates.c src/sim/world_step.c tests/probe_io.c \
+  tests/object_pool_probe_io.c tests/combat_probe_io.c \
+  tests/world_step_probe.c -o /tmp/wasm-fist-0074-sanitizer/world_step_probe
 ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
-  PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache python3 tools/rewrite/test_world_step.py \
+  PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache python3 tests/test_world_step.py \
   --originals --target native --native-probe /tmp/wasm-fist-0074-sanitizer/world_step_probe
 ```
 
-Use the same compiler/source command with `tools/rewrite/destruction_probe.c` instead of
+Use the same compiler/source command with `tests/destruction_probe.c` instead of
 `world_step_probe.c` and output `destruction_probe`; run `test_destruction.py --originals
 --target native --native-probe /tmp/wasm-fist-0074-sanitizer/destruction_probe` with the same
 sanitizer environment. This regression verifies the extracted observation/arithmetic owners.

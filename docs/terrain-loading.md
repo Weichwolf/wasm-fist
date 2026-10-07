@@ -15,7 +15,7 @@ planes must be square powers of two, matching the original wrapped sampling doma
 ## Original preparation and mapping
 
 Fresh instruction evidence uses the frozen kernel image/hash from [terrain format](terrain-format.md).
-The normal mission band comes from engine `db47` in `re_out/fist_dat_image.bin`: it writes `0x50`
+The normal mission band comes from engine `db47` in `/tmp/wasm-fist-reference-images/fist_dat_image.bin`: it writes `0x50`
 to TCB+0x54. Kernel `8b34` reads that field, and `8b58–8b5d` loads the named PAL and prepares it.
 
 `9f10` selection-sorts indices 80–255 by `R + 2G + B`, leaving the reserved prefix unchanged.
@@ -42,7 +42,7 @@ hook, cache workaround or replacement search supplies the expected output.
 
 ## Verification and scope
 
-`bash tools/rewrite/build.sh all` runs complete bundle and palette contracts on both targets.
+`bash tools/build.sh all` runs complete bundle and palette contracts on both targets.
 Fixtures cover direct/archive resolution, storage-view destruction, missing files, corrupt and
 trailing inputs, read errors without fallback, missing archive members, unsupported map dimensions,
 reserved colors, selection-sort ties, quantization and first-minimum mapping. Failed output remains
@@ -57,7 +57,7 @@ DOS filename folding; spelling variants are not additional physical assets.
 
 ```sh
 PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
-  /tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_terrain_assets.py --originals
+  /tmp/wasm-fist-decoder-oracle/bin/python tests/test_terrain_assets.py --originals
 ```
 
 See [oracle setup](terrain-format.md#verification). Native/WASM, LLVM 19.1.7 formatting/tidy and

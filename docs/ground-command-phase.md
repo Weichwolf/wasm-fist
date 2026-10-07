@@ -104,13 +104,13 @@ Reserved address-zero/one driver-return scaffolding still fails the prefix obser
 
 ```sh
 PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
-  /tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_original_command_boundary.py \
+  /tmp/wasm-fist-decoder-oracle/bin/python tests/test_original_command_boundary.py \
   --originals --review-dir /tmp/wasm-fist-command-review
 PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
-  /tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_vehicle_history.py \
+  /tmp/wasm-fist-decoder-oracle/bin/python tests/test_vehicle_history.py \
   --target all --originals --oracle
 PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
-  /tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_mission_driving.py \
+  /tmp/wasm-fist-decoder-oracle/bin/python tests/test_mission_driving.py \
   --target all --originals --oracle
 ```
 

@@ -131,13 +131,13 @@ binding, AI or mission outcome.
 ## Reproduction
 
 ```sh
-bash tools/rewrite/build.sh all
-python3 tools/rewrite/check_style.py
+bash tools/build.sh all
+python3 tools/check_style.py
 PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
-  /tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_vehicle_damage.py --originals --oracle
+  /tmp/wasm-fist-decoder-oracle/bin/python tests/test_vehicle_damage.py --originals --oracle
 ```
 
-The optional oracle environment uses `tools/rewrite/oracle_requirements.txt` (Unicorn 2.1.4).
+The optional oracle environment uses `tests/oracle_requirements.txt` (Unicorn 2.1.4).
 The complete required corpus flag forbids skips; routine build tests explicitly omit the corpus.
 Run sanitizer compilation after the sequential production build has completed:
 
@@ -145,16 +145,16 @@ Run sanitizer compilation after the sequential production build has completed:
 mkdir -p /tmp/wasm-fist-0070-sanitizer
 clang -std=c11 -Wall -Wextra -Wpedantic -Wno-unused-parameter -Wno-unused-function -Werror \
   -fno-strict-aliasing -ffast-math -fsanitize=address,undefined -fno-omit-frame-pointer -g -O1 \
-  -Isrc -Itools/rewrite src/assets/units.c src/assets/scenario.c src/assets/vehicle.c src/assets/klc.c \
+  -Isrc -Itests src/assets/units.c src/assets/scenario.c src/assets/vehicle.c src/assets/klc.c \
   src/sim/random.c src/sim/rotation.c src/sim/vehicle_state.c src/sim/ground.c \
   src/sim/object_pool.c src/sim/collision.c src/sim/projectile_launch.c src/sim/projectile_flight.c \
   src/sim/smoke_animation.c \
   src/sim/vehicle_damage.c src/sim/damage_common.c \
-  tools/rewrite/probe_io.c tools/rewrite/vehicle_probe_io.c \
-  tools/rewrite/object_pool_probe_io.c tools/rewrite/vehicle_damage_probe.c \
+  tests/probe_io.c tests/vehicle_probe_io.c \
+  tests/object_pool_probe_io.c tests/vehicle_damage_probe.c \
   -o /tmp/wasm-fist-0070-sanitizer/vehicle_damage_probe
 ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
-  PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache python3 tools/rewrite/test_vehicle_damage.py \
+  PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache python3 tests/test_vehicle_damage.py \
   --originals --target native --native-probe /tmp/wasm-fist-0070-sanitizer/vehicle_damage_probe
 ```
 

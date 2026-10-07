@@ -6,14 +6,14 @@ the returned chunk/unit views borrow it. Decode failure leaves the caller's outp
 
 ## Original evidence
 
-Machine code was rechecked from `re_out/fist_dat_image.bin`, SHA-256
+Machine code was rechecked from `/tmp/wasm-fist-reference-images/fist_dat_image.bin`, SHA-256
 `d46f480dd2214b2693b4192a42aa79fb7bffb8d692fd67ddc3d746dfdea9c5e5`, at frozen reference `349ad31`:
 
 ```sh
 objdump -D -b binary -m i386 -M addr16,data16,intel \
-  --start-address=0xd501 --stop-address=0xd5f9 re_out/fist_dat_image.bin
+  --start-address=0xd501 --stop-address=0xd5f9 /tmp/wasm-fist-reference-images/fist_dat_image.bin
 objdump -D -b binary -m i386 -M addr16,data16,intel \
-  --start-address=0xd7b5 --stop-address=0xd81e re_out/fist_dat_image.bin
+  --start-address=0xd7b5 --stop-address=0xd81e /tmp/wasm-fist-reference-images/fist_dat_image.bin
 ```
 
 `d501` reads six bytes per chunk at d51b/d53b, checks first tag SHDR at d529/d531, dispatches
@@ -73,9 +73,9 @@ remain open. No objects are fabricated from metadata alone.
 ## Verification
 
 ```sh
-bash tools/rewrite/build.sh all
-python3 tools/rewrite/check_style.py
-python3 tools/rewrite/test_scenario.py --originals
+bash tools/build.sh all
+python3 tools/check_style.py
+python3 tests/test_scenario.py --originals
 ```
 
 Synthetic contracts run through native CTest and the WASM build gate. The explicit original gate

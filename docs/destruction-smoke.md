@@ -14,20 +14,20 @@ visible smoke or complete playable mission.
 
 ## Original instructions and state
 
-Untouched load image `re_out/fist_dat_image.bin` has SHA-256
+Untouched load image `/tmp/wasm-fist-reference-images/fist_dat_image.bin` has SHA-256
 `d46f480dd2214b2693b4192a42aa79fb7bffb8d692fd67ddc3d746dfdea9c5e5`.
 Near addresses below are physical load-module offsets, CS=0, DGROUP=0x1c000.
 Smoke creation is physical **19caa**, far f69:a61a; its address is not near 9caa.
 
 ```sh
 objdump -D -b binary -m i386 -M intel,addr16,data16 \
-  --start-address=0xb355 --stop-address=0xb396 re_out/fist_dat_image.bin
+  --start-address=0xb355 --stop-address=0xb396 /tmp/wasm-fist-reference-images/fist_dat_image.bin
 objdump -D -b binary -m i386 -M intel,addr16,data16 \
-  --start-address=0xbc0c --stop-address=0xbce4 re_out/fist_dat_image.bin
+  --start-address=0xbc0c --stop-address=0xbce4 /tmp/wasm-fist-reference-images/fist_dat_image.bin
 objdump -D -b binary -m i386 -M intel,addr16,data16 \
-  --start-address=0x19caa --stop-address=0x19cfd re_out/fist_dat_image.bin
+  --start-address=0x19caa --stop-address=0x19cfd /tmp/wasm-fist-reference-images/fist_dat_image.bin
 objdump -D -b binary -m i386 -M intel,addr16,data16 \
-  --start-address=0x9b11 --stop-address=0x9b76 re_out/fist_dat_image.bin
+  --start-address=0x9b11 --stop-address=0x9b76 /tmp/wasm-fist-reference-images/fist_dat_image.bin
 ```
 
 | Method | Counter | Emission and persistent state |
@@ -89,12 +89,12 @@ the new smoke creator reuses them and does not execute the original corrupting u
 
 ```sh
 export PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache
-bash tools/rewrite/build.sh all
-python3 tools/rewrite/check_style.py
-/tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_destruction.py --originals --oracle
-/tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_projectile_flight.py --originals --oracle
-/tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_other_damage.py --originals --oracle
-/tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_vehicle_damage.py --originals --oracle
+bash tools/build.sh all
+python3 tools/check_style.py
+/tmp/wasm-fist-decoder-oracle/bin/python tests/test_destruction.py --originals --oracle
+/tmp/wasm-fist-decoder-oracle/bin/python tests/test_projectile_flight.py --originals --oracle
+/tmp/wasm-fist-decoder-oracle/bin/python tests/test_other_damage.py --originals --oracle
+/tmp/wasm-fist-decoder-oracle/bin/python tests/test_vehicle_damage.py --originals --oracle
 ```
 
 `original_destruction_oracle.py` reuses the pinned original executor. It executes complete
@@ -134,16 +134,16 @@ Run sanitizer compilation sequentially after the production build is terminal:
 mkdir -p /tmp/wasm-fist-0072-sanitizer
 clang -std=c11 -Wall -Wextra -Wpedantic -Wno-unused-parameter -Wno-unused-function -Werror \
   -fno-strict-aliasing -ffast-math -fsanitize=address,undefined -fno-omit-frame-pointer -g -O1 \
-  -Isrc -Itools/rewrite src/assets/units.c src/assets/scenario.c src/assets/vehicle.c src/assets/klc.c \
+  -Isrc -Itests src/assets/units.c src/assets/scenario.c src/assets/vehicle.c src/assets/klc.c \
   src/sim/random.c src/sim/rotation.c src/sim/vehicle_state.c src/sim/ground.c \
   src/sim/object_pool.c src/sim/collision.c src/sim/projectile_launch.c src/sim/projectile_flight.c \
   src/sim/smoke_animation.c src/sim/vehicle_damage.c src/sim/damage_common.c src/sim/other_damage.c \
-  src/sim/smoke.c src/sim/destruction_updates.c tools/rewrite/probe_io.c \
-  tools/rewrite/object_pool_probe_io.c tools/rewrite/combat_probe_io.c \
-  tools/rewrite/destruction_probe.c \
+  src/sim/smoke.c src/sim/destruction_updates.c tests/probe_io.c \
+  tests/object_pool_probe_io.c tests/combat_probe_io.c \
+  tests/destruction_probe.c \
   -o /tmp/wasm-fist-0072-sanitizer/destruction_probe
 ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
-  PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache python3 tools/rewrite/test_destruction.py \
+  PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache python3 tests/test_destruction.py \
   --originals --target native --native-probe /tmp/wasm-fist-0072-sanitizer/destruction_probe
 ```
 

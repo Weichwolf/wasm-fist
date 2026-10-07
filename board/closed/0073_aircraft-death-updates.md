@@ -50,10 +50,10 @@ retired owners before installing returned objects; these scripts do not implemen
 See docs/aircraft-death.md for actual instructions, field widths, configured service/device
 boundaries, observation correction, ownership and reproducible commands.
 
-- `bash tools/rewrite/build.sh all`: all 23 native CTest gates and complete WASM gates pass;
+- `bash tools/build.sh all`: all 23 native CTest gates and complete WASM gates pass;
   native CTest elapsed 150.82 seconds. Default gates explicitly omit separately requested
   original corpus/oracle coverage. All following required gates have zero skips.
-- `python3 tools/rewrite/check_style.py`: strict LLVM 19.1.7 format/tidy passes all 64 C units.
+- `python3 tools/check_style.py`: strict LLVM 19.1.7 format/tidy passes all 64 C units.
   Probe include/arithmetic diagnostics were fixed; no rule or warning was disabled. Atomic
   preservation checks capture bytes from the same object rather than copied struct padding.
 - Required `test_aircraft_death.py --target native --originals --oracle`: all six groups pass

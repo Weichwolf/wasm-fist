@@ -30,10 +30,10 @@ secondary byte and releases on zero. See original bbb7/c31e/1b39c/a93e/1b2d3/c0b
 
 Verified on 2026-10-06, LLVM 19.1.7 and pinned Unicorn 2.1.4:
 
-- `bash tools/rewrite/build.sh all`: all 20 native CTest gates and complete WASM build gates pass.
+- `bash tools/build.sh all`: all 20 native CTest gates and complete WASM build gates pass.
   The damage gate is required on both targets. Routine gates explicitly omit original corpus;
   the separate required original gates below have no skips.
-- `python3 tools/rewrite/check_style.py`: strict format/tidy pass for all 54 owned C units.
+- `python3 tools/check_style.py`: strict format/tidy pass for all 54 owned C units.
 - `test_vehicle_damage.py --originals --oracle`: all nine groups pass on both production targets
   in 315.256 seconds, without skips. Complete coverage is 22,937 fixtures, 25,467 damage,
   22,937 impact and 2,608 retirement updates per target, plus the independently executed reaching

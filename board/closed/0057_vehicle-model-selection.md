@@ -25,12 +25,12 @@ exact scope. No generated/reference source or originals were modified.
 
 Verified 2026-10-06:
 
-- `bash tools/rewrite/build.sh all`: all seven native contracts and all WASM gates pass. Default
+- `bash tools/build.sh all`: all seven native contracts and all WASM gates pass. Default
   constructed-fixture gates explicitly skip the separately requested original corpus.
-- `python3 tools/rewrite/check_style.py`: strict LLVM 19.1.7 format/tidy passes all 20 owned C
+- `python3 tools/check_style.py`: strict LLVM 19.1.7 format/tidy passes all 20 owned C
   translation units, with unchanged compiler flags and no suppressed/disabled checks.
 - `PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache
-  /tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_vehicle.py --originals --oracle`:
+  /tmp/wasm-fist-decoder-oracle/bin/python tests/test_vehicle.py --originals --oracle`:
   all six groups pass on production native and WASM with no skips. Complete outputs cover every
   model catalog entry, all 960 ground snapshots in the 47 pinned FSGs and all 65536 relative
   angles. Three complete unsigned-bearing sweeps are checked on each target. All 170 named

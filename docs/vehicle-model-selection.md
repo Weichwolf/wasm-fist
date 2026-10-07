@@ -82,13 +82,13 @@ renderer selector/variant instructions.
 ## Verification
 
 ```sh
-bash tools/rewrite/build.sh all
-python3 tools/rewrite/check_style.py
+bash tools/build.sh all
+python3 tools/check_style.py
 PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
-  /tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_vehicle.py --originals --oracle
+  /tmp/wasm-fist-decoder-oracle/bin/python tests/test_vehicle.py --originals --oracle
 ```
 
-The optional instruction oracle uses pinned Unicorn from `tools/rewrite/oracle_requirements.txt`;
+The optional instruction oracle uses pinned Unicorn from `tests/oracle_requirements.txt`;
 it is not a runtime dependency. The production builds add the vehicle contract to native CTest
 and the WASM Node gate. Default fixture runs explicitly skip the separately requested original
 corpus. `--originals` requires complete coverage and fails if any test skips.

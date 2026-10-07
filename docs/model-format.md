@@ -13,16 +13,16 @@ Destroy resets all state and is idempotent. Original game files remain read-only
 
 ## Original evidence
 
-The frozen DOS image is `re_out/fist_dat_image.bin`, SHA-256
+The frozen DOS image is `/tmp/wasm-fist-reference-images/fist_dat_image.bin`, SHA-256
 `d46f480dd2214b2693b4192a42aa79fb7bffb8d692fd67ddc3d746dfdea9c5e5` at reference `349ad31`.
 Addresses below are raw load-module offsets, CS zero. DS is DGROUP paragraph `0x1c00`.
 Frozen patches 471 and 573 locate the relevant routines; original instructions were rechecked.
 
 ```sh
 objdump -D -b binary -m i386 -M intel,addr16,data16 \
-  --start-address=0x183f --stop-address=0x1bd9 re_out/fist_dat_image.bin
+  --start-address=0x183f --stop-address=0x1bd9 /tmp/wasm-fist-reference-images/fist_dat_image.bin
 objdump -D -b binary -m i386 -M intel,addr16,data16 \
-  --start-address=0x2f91 --stop-address=0x309b re_out/fist_dat_image.bin
+  --start-address=0x2f91 --stop-address=0x309b /tmp/wasm-fist-reference-images/fist_dat_image.bin
 ```
 
 `183f` loads MAL/M00/M08, then M16 and M32 at increasing directional quality. `1a45` streams
@@ -56,7 +56,7 @@ palette indices, including zero; `.MAL` is exactly 768 DAC components, each 0..6
 `1b91..1b99` reads the directory's first pixel offset as the retained metadata extent.
 Actual sprite selection at `302d..3045` computes descriptor offset `reference*4`, loads dimensions
 into CX (CL width/CH height), and adds the uploaded-record address to its pixel offset. The kernel
-entry `ad1e` in `re_out/fist_image.bin` multiplies CL by CH to obtain the complete texel extent.
+entry `ad1e` in `/tmp/wasm-fist-reference-images/fist_image.bin` multiplies CL by CH to obtain the complete texel extent.
 No compressed pixel codec or vertex positions are invented by the model reader.
 
 The part count is `(first variant-table offset - part-table offset)/2`, the exact `1b35..1b45`
@@ -93,20 +93,20 @@ resource residency and quality settings are not implemented by this full-data lo
 All 34 original families have five files, 612 records (34 base, 170 M08, 136 M16, 272 M32),
 1,679,860 texels and 1,761,940 complete input bytes. This includes tank variants, destroyed models,
 helicopters, trees, targets, smoke, explosions, muzzle flashes and shots. Names, sizes and SHA-256
-are pinned in `tools/rewrite/model_originals.json`; no original game contents are tracked.
+are pinned in `tests/model_originals.json`; no original game contents are tracked.
 
 ## Verification
 
 ```sh
 export PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache
-bash tools/rewrite/build.sh all
-python3 tools/rewrite/check_style.py
-python3 tools/rewrite/test_models.py --originals
+bash tools/build.sh all
+python3 tools/check_style.py
+python3 tests/test_models.py --originals
 # Optional independent original-instruction gate; missing requirements fail:
-/tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_models.py --originals --oracle
+/tmp/wasm-fist-decoder-oracle/bin/python tests/test_models.py --originals --oracle
 ```
 
-The optional `/tmp` virtualenv uses `tools/rewrite/oracle_requirements.txt` (Unicorn 2.1.4).
+The optional `/tmp` virtualenv uses `tests/oracle_requirements.txt` (Unicorn 2.1.4).
 The native/WASM model probe observes complete raw records, palette and every sprite texel after
 input overwrite/free or source destruction. It exercises every part variant/piece and direction
 map, getter/null/failed-output contracts and repeated destruction. The six test groups cover
@@ -129,11 +129,11 @@ ASan/UBSan reproduction with production compiler flags:
 mkdir -p /tmp/wasm-fist-model-sanitizer
 clang -std=c11 -Wall -Wextra -Wpedantic -Wno-unused-parameter -Wno-unused-function -Werror \
   -fno-strict-aliasing -ffast-math -fsanitize=address,undefined -fno-omit-frame-pointer -g -O1 \
-  -Isrc -Itools/rewrite src/assets/model.c src/assets/palette.c tools/rewrite/probe_io.c \
-  tools/rewrite/probe_source.c tools/rewrite/model_probe.c \
+  -Isrc -Itests src/assets/model.c src/assets/palette.c tests/probe_io.c \
+  tests/probe_source.c tests/model_probe.c \
   -o /tmp/wasm-fist-model-sanitizer/model_probe
 ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
-  python3 tools/rewrite/test_models.py --originals --target native \
+  python3 tests/test_models.py --originals --target native \
   --native-probe /tmp/wasm-fist-model-sanitizer/model_probe
 ```
 

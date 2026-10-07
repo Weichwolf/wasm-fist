@@ -45,12 +45,12 @@ preserves both int32 extrema. The owned value structure has no input pointers or
 
 ```sh
 export PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache
-bash tools/rewrite/build.sh all
-python3 tools/rewrite/check_style.py
-/tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_orders.py --originals --oracle
-/tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_mission_driving.py --originals --oracle
-/tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_mission_world.py --originals --oracle
-/tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_original_command_boundary.py --originals
+bash tools/build.sh all
+python3 tools/check_style.py
+/tmp/wasm-fist-decoder-oracle/bin/python tests/test_orders.py --originals --oracle
+/tmp/wasm-fist-decoder-oracle/bin/python tests/test_mission_driving.py --originals --oracle
+/tmp/wasm-fist-decoder-oracle/bin/python tests/test_mission_world.py --originals --oracle
+/tmp/wasm-fist-decoder-oracle/bin/python tests/test_original_command_boundary.py --originals
 ```
 
 The existing scenario probe's `--orders` observes every owned field after source overwrite/release;
@@ -78,7 +78,7 @@ cmake -S . -B /tmp/wasm-fist-orders-sanitized -G Ninja \
 cmake --build /tmp/wasm-fist-orders-sanitized \
   --target fist_scenario_probe fist_mission_world_probe fist_driving_probe
 ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
-  /tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_orders.py --originals --oracle \
+  /tmp/wasm-fist-decoder-oracle/bin/python tests/test_orders.py --originals --oracle \
   --target native --native-probe /tmp/wasm-fist-orders-sanitized/fist_scenario_probe
 ```
 

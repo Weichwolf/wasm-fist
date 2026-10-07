@@ -63,7 +63,7 @@ and the expanded all-class initialization-retention fixture on both targets. The
 all four retained heading words and signed goals as well as the previous byte/word fields.
 Original command input/bank verification passes three groups, all 47 files, 376 complete loader
 returns and 109040 bytes. Both production Ninja trees are current; full strict format/tidy passes
-all 77 owned C units. `CTEST_PARALLEL_LEVEL=4 bash tools/rewrite/build.sh all` completes with exit
+all 77 owned C units. `CTEST_PARALLEL_LEVEL=4 bash tools/build.sh all` completes with exit
 zero: all 33 Native CTests (142.50 seconds), all 31 WASM Python suites and both renderer gates.
 The standard suites intentionally omit optional originals; the separate required gates above
 have zero skips and prove their complete recorded original scope. Required combined goal run

@@ -30,8 +30,8 @@ cases, complete handler evidence, reproducible coverage and the explicit impleme
 
 Verified on 2026-10-06:
 
-- `bash tools/rewrite/build.sh all`: all 14 native CTest gates and complete WASM gates pass.
-- `python3 tools/rewrite/check_style.py`: strict format and tidy pass for all 40 owned C units.
+- `bash tools/build.sh all`: all 14 native CTest gates and complete WASM gates pass.
+- `python3 tools/check_style.py`: strict format and tidy pass for all 40 owned C units.
 - Pinned `test_vehicle_motion.py --originals --oracle`: all 12 groups pass in 98.745 seconds,
   without skips, including 333,690 spatial observations and complete shot handlers for 49
   constructed poses plus all 179 original M1 actors. Existing planar/motion regressions pass.
@@ -55,9 +55,9 @@ actual instruction/table locations, bounded original comparisons and reproductio
 
 Verified on 2026-10-06:
 
-- `bash tools/rewrite/build.sh all`: all 15 native CTest gates and complete WASM gates pass.
+- `bash tools/build.sh all`: all 15 native CTest gates and complete WASM gates pass.
   The new weapon gate is required on both targets; its eight groups cover every class.
-- `python3 tools/rewrite/check_style.py`: strict format/tidy pass for all 42 owned C units.
+- `python3 tools/check_style.py`: strict format/tidy pass for all 42 owned C units.
 - Pinned `test_weapon_control.py --originals --oracle`: all eight groups pass in 148.616
   seconds, without skips. 606,611 complete state transitions include all 960 ground actors
   across all 47 original missions, full byte countdown/phase domains, all signed elevations,
@@ -93,8 +93,8 @@ are feedback observations, not a sound playback queue. See `docs/driving-scene.m
 
 Verified on 2026-10-06:
 
-- `bash tools/rewrite/build.sh all`: all 15 native CTest gates and complete WASM gates pass.
-- `python3 tools/rewrite/check_style.py`: strict format/tidy pass for all 43 owned C units.
+- `bash tools/build.sh all`: all 15 native CTest gates and complete WASM gates pass.
+- `python3 tools/check_style.py`: strict format/tidy pass for all 43 owned C units.
 - Pinned `test_driving.py --originals --oracle`: all nine groups pass in 25.934 seconds,
   without skips. Complete typed player/clock/input/feedback/store traces cover all four classes,
   selection/repeat/pause/capability edges, reload partitioning, malformed station rejection and

@@ -79,7 +79,7 @@ This is a command-boundary proof, not a complete tick or changed C driving imple
 
 ```sh
 PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
-  /tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_original_mission_ready.py \
+  /tmp/wasm-fist-decoder-oracle/bin/python tests/test_original_mission_ready.py \
   --originals --review-dir /tmp/wasm-fist-0088-review
 ```
 
