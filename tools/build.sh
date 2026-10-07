@@ -20,6 +20,7 @@ if [[ $target == wasm || $target == all ]]; then
     python3 "$root/tests/test_scenario.py" --target wasm --build-root "$output"
     python3 "$root/tests/test_ground_command.py" --target wasm --build-root "$output"
     python3 "$root/tests/test_ground_bearing.py" --target wasm --build-root "$output"
+    python3 "$root/tests/test_ground_throttle.py" --target wasm --build-root "$output"
     python3 "$root/tests/test_ground_goal.py" --target wasm --build-root "$output"
     python3 "$root/tests/test_ground_route.py" --target wasm --build-root "$output"
     python3 "$root/tests/test_geometry.py" --target wasm --build-root "$output"

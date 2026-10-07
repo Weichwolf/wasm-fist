@@ -127,6 +127,7 @@ int fist_vehicle_restore(const fist_unit_definition *definition, fist_vehicle_st
         MANEUVER = 69,
         MANEUVER_HEADING = 71,
         TARGET_REFERENCE = 151,
+        TARGET_RANGE = 153,
         CANDIDATE_REFERENCE = 157,
         SECONDARY_HEADING = 142,
         DISCOVERY_COUNT = 148,
@@ -179,6 +180,7 @@ int fist_vehicle_restore(const fist_unit_definition *definition, fist_vehicle_st
                     .retreat_count = raw[RETREAT_COUNT],
                     .maneuver_heading = fist_read_u16le(raw + MANEUVER_HEADING),
                     .target_reference = fist_read_u16le(raw + TARGET_REFERENCE),
+                    .target_range = fist_read_u16le(raw + TARGET_RANGE),
                     .candidate_reference = fist_read_u16le(raw + CANDIDATE_REFERENCE),
                     .secondary_heading = fist_read_u16le(raw + SECONDARY_HEADING),
                     .discovery_count = raw[DISCOVERY_COUNT],
@@ -290,6 +292,38 @@ int fist_vehicle_initialize(const fist_unit_definition *definition, fist_random 
 
 size_t fist_vehicle_component_size(uint16_t type) {
     return type < FIST_UNIT_GROUND_VEHICLE_COUNT ? defaults[type].component_size : 0;
+}
+
+int fist_vehicle_set_drive_profile(fist_vehicle_state *vehicle, uint8_t profile,
+                                   fist_drive_control_events *out) {
+    /* Original component destinations +d6/+c8/+ca/+d2, relative to each
+     * class's owned component start +bf/+bc/+be/+bc. */
+    static const size_t components[FIST_UNIT_GROUND_VEHICLE_COUNT] = {23, 12, 12, 22};
+    enum { COMPONENT_REFRESH = 3 };
+    if (vehicle == NULL || out == NULL || vehicle->type >= FIST_UNIT_GROUND_VEHICLE_COUNT ||
+        vehicle->component_size != fist_vehicle_component_size(vehicle->type)) {
+        return -1;
+    }
+    vehicle->control_mode = profile;
+    vehicle->components[components[vehicle->type]] = COMPONENT_REFRESH;
+    *out = (fist_drive_control_events){.refresh_drive_display = true};
+    return 0;
+}
+
+int fist_vehicle_update_drive_profile(fist_vehicle_state *vehicle, fist_drive_control_events *out) {
+    enum { AUTOMATIC_PROFILES = 2, SHIFT_PITCH = 3584 };
+    if (vehicle == NULL || out == NULL || vehicle->type >= FIST_UNIT_GROUND_VEHICLE_COUNT ||
+        vehicle->component_size != fist_vehicle_component_size(vehicle->type)) {
+        return -1;
+    }
+    if (vehicle->control_mode < AUTOMATIC_PROFILES) {
+        const uint8_t profile = vehicle->drive.terrain_pitch >= SHIFT_PITCH ? 1 : 0;
+        if (profile != vehicle->control_mode) {
+            return fist_vehicle_set_drive_profile(vehicle, profile, out);
+        }
+    }
+    *out = (fist_drive_control_events){0};
+    return 0;
 }
 
 int fist_vehicle_prepare(fist_vehicle_state *vehicle, uint8_t link_mode) {

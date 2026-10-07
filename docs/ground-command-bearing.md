@@ -138,5 +138,7 @@ canonical callbacks per target. The full ASan/UBSan required gate has the same o
 full production builds/style and actual SDL/browser/sanitized scenes also pass. Compact evidence
 and the two visually reviewed production frames remain under /tmp/wasm-fist-0094-c-review;
 see board/closed/0094_ground-command-bearing.md for exact acceptance and exclusions. The full
-C throttle/gear and parent bank, living battle/device/PCM/outcomes and final independent WASM
-streak remain open; the streak is zero.
+parent bank, living battle/device/PCM/outcomes and final independent WASM streak remain open;
+the streak is zero. Closed 0095 now supplies the consuming shared
+[throttle/profile callback](ground-command-throttle.md), including actual C target-loss repair
+continuations and complete original motion returns.

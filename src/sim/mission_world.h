@@ -187,6 +187,19 @@ int fist_mission_world_assign_command_goal(fist_mission_world *world, uint16_t s
  * Invalid used fields/payloads fail atomically, preserving the complete world. */
 int fist_mission_world_bear_command(fist_mission_world *world, uint16_t slot, bool coarse);
 
+/* Complete ad2f eight-entry throttle and unconditional ad3b profile update.
+ * Consume canonical PINF +6 only for a valid leader goal with range >8.
+ * Target mode uses retained +99, not navigation range. Publish explicit full
+ * drive-control refresh; no RNG, target lookup, route or parent dispatch.
+ * Invalid used selectors/state/output preserve the complete world and output. */
+int fist_mission_world_throttle_command(fist_mission_world *world, uint16_t slot,
+                                        fist_drive_control_events *out);
+
+/* Complete controlled-bank ad3b using the same canonical actor/profile owner.
+ * Does not inspect command mode or PINF choices. Atomic failures preserve both. */
+int fist_mission_world_update_command_profile(fist_mission_world *world, uint16_t slot,
+                                              fist_drive_control_events *out);
+
 /* Complete ad08 route progress. Mode zero consumes the platoon's first waypoint
  * when its goal is valid and the retained unsigned range is <=48; other seven
  * entries are original returns. PINF waypoint mode 3 cycles; 0/1/2 and the

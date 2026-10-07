@@ -188,3 +188,16 @@ actual ad3b/a19e/f69:7a5b profile/gear setters before remaining parent callbacks
 signed word +34 (terrain pitch), not original speed word +55; retain exact operand widths and
 component destinations rather than substituting an empty transition. Battle/device/PCM and
 the independent complete WASM streak remain open; streak zero.
+
+Closed 0095 supplies complete shared ad2f throttle and standalone ad3b, including actual
+a19e class/component setters and all four f69:7a5b display effects. Mode 6 consumes independent
+retained +99; mode 4 is a genuine throttle return. Required native/WASM and ASan/UBSan gates
+pass eight groups without skips, with 872120 scalar cases, 780 atomic rejections, 871340
+original command/setter returns and 30720 canonical callbacks through 188 all-47 worlds per
+target. Reaching tests carry 768 actual C lost/released-target goal/bearing results into
+throttle, including 352 stops, then prove 512 original motion continuations. A separate
+192-return original gate proves +99 start/readiness retention. Full build/style and actual
+native/browser/sanitized scene gates pass. See docs/ground-command-throttle.md. This parent's
+Contract/Accept remain unchanged; no partial bank is installed. Continue target feedback
+production/acquisition, maneuver/roster/diagnostic callbacks and full heading/RNG/class
+consumption. First playable battle/PCM/outcomes and the independent final streak remain open.

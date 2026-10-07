@@ -8,6 +8,7 @@
 #include "sim/mission_world.h"
 #include "sim/object_pool.h"
 #include "sim/random.h"
+#include "sim/vehicle_state.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -39,6 +40,8 @@ enum {
     TARGET = 26,
     ARTILLERY = 27
 };
+
+enum { NO_CALLBACK, BEARING_CALLBACK, THROTTLE_CALLBACK };
 
 static uint8_t *read_file(const char *path, size_t *size) {
     FILE *file = fopen(path, "rb");
@@ -221,7 +224,44 @@ static int bear_world(fist_mission_world *world, fist_mission_world *before) {
     return 0;
 }
 
-static int prepare_once(fist_mission_world *world, const fist_klc_image *height, int bearings,
+static int throttle_world(fist_mission_world *world, fist_mission_world *before) {
+    enum { LAST_MODE = 14, MODE_STEP = 2 };
+    static const size_t components[FIST_UNIT_GROUND_VEHICLE_COUNT] = {23, 12, 12, 22};
+    for (unsigned mode = 0; mode <= LAST_MODE; mode += MODE_STEP) {
+        printf("throttles %u\n", mode);
+        for (size_t index = 0; index < FIST_UNIT_REGISTRY_COUNT; ++index) {
+            const uint16_t slot = world->pool.registry[index].slot;
+            if (slot == FIST_POOL_NO_SLOT ||
+                world->pool.slots[slot].type >= FIST_UNIT_GROUND_VEHICLE_COUNT) {
+                continue;
+            }
+            /* Declared reaching bank entry in an actual prepared world. */
+            world->objects[slot].vehicle.command.mode = (uint8_t)mode;
+            fist_probe_capture(world, sizeof(*world), before);
+            fist_drive_control_events events = {.refresh_drive_display = true};
+            const int status = fist_mission_world_throttle_command(world, slot, &events);
+            fist_vehicle_state *expected = &before->objects[slot].vehicle;
+            const fist_vehicle_state *actual = &world->objects[slot].vehicle;
+            if (status == 0) {
+                expected->drive.throttle = actual->drive.throttle;
+                expected->control_mode = actual->control_mode;
+                const size_t component = components[expected->type];
+                expected->components[component] = actual->components[component];
+            }
+            if (!fist_probe_unchanged(world, sizeof(*world), before)) {
+                return -1;
+            }
+            printf("throttle %u %d %u %u\n", (unsigned)slot, status,
+                   (unsigned)actual->command.target_range, (unsigned)events.refresh_drive_display);
+        }
+        if (fist_probe_write_mission_world(world) != 0) {
+            return -1;
+        }
+    }
+    return 0;
+}
+
+static int prepare_once(fist_mission_world *world, const fist_klc_image *height, int callback,
                         fist_mission_world *before, uint8_t link) {
     fist_probe_capture(world, sizeof(*world), before);
     const int prepared = fist_mission_world_prepare(world, height, link);
@@ -231,13 +271,18 @@ static int prepare_once(fist_mission_world *world, const fist_klc_image *height,
     }
     printf("prepare %d\n", prepared);
     const int result = fist_probe_write_mission_world(world);
-    if (result == 0 && prepared == 0 && bearings != 0) {
-        return bear_world(world, before);
+    if (result == 0 && prepared == 0) {
+        if (callback == BEARING_CALLBACK) {
+            return bear_world(world, before);
+        }
+        if (callback == THROTTLE_CALLBACK) {
+            return throttle_world(world, before);
+        }
     }
     return result;
 }
 
-static int run(fist_units *units, const fist_mission_orders *orders, int bearings,
+static int run(fist_units *units, const fist_mission_orders *orders, int callback,
                const uint8_t *request, size_t size) {
     fist_klc_image height = {0};
     const uint8_t *commands = NULL;
@@ -282,7 +327,7 @@ static int run(fist_units *units, const fist_mission_orders *orders, int bearing
                 result = inject(world, command);
                 continue;
             }
-            result = prepare_once(world, &height, bearings, before, request[LINK]);
+            result = prepare_once(world, &height, callback, before, request[LINK]);
         }
     }
     free(before);
@@ -291,8 +336,13 @@ static int run(fist_units *units, const fist_mission_orders *orders, int bearing
 }
 
 int main(int argc, char **argv) {
-    if (argc != 3 && (argc != 4 || strcmp(argv[3], "--bearings") != 0)) {
+    if (argc != 3 && (argc != 4 || (strcmp(argv[3], "--bearings") != 0 &&
+                                    strcmp(argv[3], "--throttles") != 0))) {
         return EXIT_FAILURE;
+    }
+    int callback = NO_CALLBACK;
+    if (argc == 4) {
+        callback = strcmp(argv[3], "--bearings") == 0 ? BEARING_CALLBACK : THROTTLE_CALLBACK;
     }
     size_t size = 0;
     uint8_t *data = read_file(argv[1], &size);
@@ -309,7 +359,7 @@ int main(int argc, char **argv) {
     free(data);
     if (status == 0) {
         data = read_file(argv[2], &size);
-        status = data == NULL ? -1 : run(&units, &orders, argc == 4, data, size);
+        status = data == NULL ? -1 : run(&units, &orders, callback, data, size);
         free(data);
     }
     fist_units_destroy(&units);

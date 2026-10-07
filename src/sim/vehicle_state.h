@@ -6,6 +6,7 @@
 #include "sim/object_pool.h"
 #include "sim/random.h"
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -91,6 +92,9 @@ typedef struct {
     /* Original +53 unsigned navigation range; the bearing callback produces it
      * and route/throttle callbacks consume it. No inferred physical unit. */
     uint16_t range;
+    /* Original +99 target feedback range, independent of navigation +53.
+     * Restored/retained here; later aiming produces it. Throttle consumes it. */
+    uint16_t target_range;
     /* Original +28/+2a/+2c newest-first samples and +2e average. The parent
      * heading phase owns future sampling; restoration retains all words. */
     uint16_t heading_history[FIST_VEHICLE_HEADING_SAMPLES];
@@ -140,6 +144,12 @@ typedef struct {
     uint8_t components[FIST_VEHICLE_COMPONENT_BYTES];
 } fist_vehicle_state;
 
+typedef struct {
+    /* Complete f69:7a5b marks all four original drive-profile controls with 3.
+     * A producer notification, independent of platform drawing/caching. */
+    bool refresh_drive_display;
+} fist_drive_control_events;
+
 /* Restore modeled ground fields from a complete saved snapshot without class
  * initialization or RNG consumption. No input views survive; failure preserves
  * out. The mission loader calls initialization only for participating actors. */
@@ -171,6 +181,18 @@ int fist_vehicle_history_phase(fist_vehicle_state *vehicle);
  * the class components. No phase advancement or other callbacks. Invalid
  * ground type/component size preserves the complete vehicle. */
 int fist_vehicle_maintenance_phase(fist_vehicle_state *vehicle);
+
+/* Complete ground-class a19e setter, including component and display refresh.
+ * The original setter stores any supplied byte, even the current value.
+ * No throttle, motion, input, parent dispatch or RNG. Invalid actor/output
+ * preserves both. */
+int fist_vehicle_set_drive_profile(fist_vehicle_state *vehicle, uint8_t profile,
+                                   fist_drive_control_events *out);
+
+/* Complete ad3b: automatic profile bytes 0/1 switch at signed terrain pitch
+ * 3584; other retained profile bytes do nothing. Reuses the complete setter.
+ * Invalid actor/output preserves both. */
+int fist_vehicle_update_drive_profile(fist_vehicle_state *vehicle, fist_drive_control_events *out);
 
 /* Complete original component payload size; 0 for unsupported classes. */
 size_t fist_vehicle_component_size(uint16_t type);

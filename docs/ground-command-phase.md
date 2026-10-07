@@ -1,5 +1,12 @@
 # Ground command phase: recovered input and pending consumption
 
+Closed WI 0095 supplies complete shared [command throttle and drive-profile transitions](ground-command-throttle.md),
+including independent retained target feedback +99 and actual class/component/display setters.
+Required native/WASM and ASan/UBSan gates prove the complete bank, all-47 prepared worlds and
+actual C target-loss repair followed by throttle/motion. Full build/style and actual native/
+browser/sanitized scenes pass. Target feedback production/acquisition, remaining sixteen-entry
+parent callbacks and full heading/RNG/class consumption remain open under 0081.
+
 Closed WI 0094 supplies complete shared [command bearing/range and retreat-cycle state](ground-command-bearing.md).
 Its actual bank puts retreat in mode 4 and approach in mode 6. Both use packed unsigned range;
 C consumes physical lifetimes and deliberately resumes fresh route/formation navigation on
@@ -7,8 +14,9 @@ loss, preserving live orphans and in-place retypes. Complete original navigation
 repair's subsequent throttle consumption, including stopping without a valid new goal.
 Both-target original/domain/all-47 canonical, strict build/style, memory and actual scene
 gates pass. The original prepared-parent observer also executes genuine selection -> goal ->
-bearing calls. Full C throttle/gear, the sixteen-entry parent and complete 0081 acceptance
-remain pending; no partial parent bank is installed.
+bearing calls. Closed 0095 now supplies the consuming C throttle/profile callback; the
+sixteen-entry parent and complete 0081 acceptance remain pending. No partial parent bank
+is installed.
 
 Closed WI 0093 supplies complete shared [target discovery and reference lifetimes](target-discovery.md).
 Actual full b011 returns preserve branch-specific secondary operands and old-target rules.

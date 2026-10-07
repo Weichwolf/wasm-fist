@@ -302,6 +302,112 @@ int fist_mission_world_bear_command(fist_mission_world *world, uint16_t slot, bo
     return 0;
 }
 
+static int leader_throttle(fist_vehicle_state *actor, const fist_order_descriptor *descriptor) {
+    static const int16_t choices[COMMAND_CHOICES] = {96, 160, 208, 224};
+    enum { NEAR = 8, NEAR_THROTTLE = 80, CHOICE_WORD = 3 };
+    if ((actor->control_flags & GOAL_VALID) == 0) {
+        actor->drive.throttle = 0;
+    } else if (actor->command.range <= NEAR) {
+        actor->drive.throttle = NEAR_THROTTLE;
+    } else {
+        const uint16_t choice = descriptor->words[CHOICE_WORD];
+        if (choice >= COMMAND_CHOICES) {
+            return -1;
+        }
+        actor->drive.throttle = choices[choice];
+    }
+    return 0;
+}
+
+static int16_t follower_throttle(const fist_vehicle_state *actor) {
+    enum { STOP_RANGE = 3, FAR_THROTTLE = 272 };
+    static const struct {
+        uint16_t maximum;
+        int16_t throttle;
+    } bands[] = {{8, 16}, {32, 32}, {48, 128}, {80, 240}};
+    if ((actor->control_flags & GOAL_VALID) == 0 || actor->command.range <= STOP_RANGE ||
+        actor->command.range == UINT16_MAX) {
+        return 0;
+    }
+    for (size_t index = 0; index < sizeof(bands) / sizeof(bands[0]); ++index) {
+        if (actor->command.range <= bands[index].maximum) {
+            return bands[index].throttle;
+        }
+    }
+    return FAR_THROTTLE;
+}
+
+static int16_t approach_throttle(uint16_t range) {
+    enum {
+        REVERSE_RANGE = 45,
+        STOP_RANGE = 60,
+        NEAR_RANGE = 90,
+        REVERSE = -48,
+        NEAR = 80,
+        FAR = 240
+    };
+    if (range < REVERSE_RANGE) {
+        return REVERSE;
+    }
+    if (range < STOP_RANGE) {
+        return 0;
+    }
+    return range < NEAR_RANGE ? NEAR : FAR;
+}
+
+static int command_throttle(fist_vehicle_state *actor, const fist_order_descriptor *descriptor) {
+    enum { MANEUVER_STOP = 2, MANEUVER_REVERSE = 6, REVERSE = -48, MANEUVER_THROTTLE = 64 };
+    switch (actor->command.mode) {
+    case MODE_LEADER:
+        return leader_throttle(actor, descriptor);
+    case MODE_FOLLOWER:
+        actor->drive.throttle = follower_throttle(actor);
+        break;
+    case MODE_TARGET:
+        actor->drive.throttle = approach_throttle(actor->command.target_range);
+        break;
+    case MODE_MANEUVER:
+        actor->drive.throttle = MANEUVER_THROTTLE;
+        if (actor->command.maneuver == MANEUVER_STOP) {
+            actor->drive.throttle = 0;
+        } else if (actor->command.maneuver == MANEUVER_REVERSE) {
+            actor->drive.throttle = REVERSE;
+        }
+        break;
+    case MODE_MOTION:
+    case MODE_BEHAVIOR_THREE:
+        actor->drive.throttle = 0;
+        break;
+    default:
+        break; /* Modes 4 and 10 are genuine original throttle returns. */
+    }
+    return 0;
+}
+
+int fist_mission_world_throttle_command(fist_mission_world *world, uint16_t slot,
+                                        fist_drive_control_events *out) {
+    fist_vehicle_state *actor = command_actor(world, slot);
+    if (actor == NULL || out == NULL || actor->command.mode > MODE_BEHAVIOR_THREE ||
+        actor->command.mode % 2 != 0) {
+        return -1;
+    }
+    fist_vehicle_state next = *actor;
+    fist_drive_control_events events = {0};
+    if (command_throttle(&next, &world->orders.descriptors[next.platoon]) != 0 ||
+        fist_vehicle_update_drive_profile(&next, &events) != 0) {
+        return -1;
+    }
+    *actor = next;
+    *out = events;
+    return 0;
+}
+
+int fist_mission_world_update_command_profile(fist_mission_world *world, uint16_t slot,
+                                              fist_drive_control_events *out) {
+    fist_vehicle_state *actor = command_actor(world, slot);
+    return actor == NULL ? -1 : fist_vehicle_update_drive_profile(actor, out);
+}
+
 int fist_mission_world_advance_command_route(fist_mission_world *world, uint16_t slot) {
     enum { REACHED_RANGE = 48, CYCLIC = 3 };
     fist_vehicle_state *actor = command_actor(world, slot);

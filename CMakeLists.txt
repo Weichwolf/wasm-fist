@@ -101,6 +101,13 @@ if(EMSCRIPTEN)
     set_target_properties(fist_ground_goal_probe PROPERTIES SUFFIX ".js")
     target_link_options(fist_ground_goal_probe PRIVATE -sNODERAWFS=1 -sEXIT_RUNTIME=1 -sALLOW_MEMORY_GROWTH=1)
 endif()
+add_executable(fist_ground_throttle_probe tests/ground_throttle_probe.c)
+target_link_libraries(fist_ground_throttle_probe PRIVATE fist_sim fist_probe_io fist_build_options)
+target_compile_options(fist_ground_throttle_probe PRIVATE -Werror)
+if(EMSCRIPTEN)
+    set_target_properties(fist_ground_throttle_probe PROPERTIES SUFFIX ".js")
+    target_link_options(fist_ground_throttle_probe PRIVATE -sNODERAWFS=1 -sEXIT_RUNTIME=1 -sALLOW_MEMORY_GROWTH=1)
+endif()
 add_executable(fist_geometry_probe tests/geometry_probe.c)
 target_link_libraries(fist_geometry_probe PRIVATE fist_sim fist_probe_io fist_build_options)
 target_compile_options(fist_geometry_probe PRIVATE -Werror)
@@ -333,6 +340,9 @@ if(BUILD_TESTING AND NOT EMSCRIPTEN)
     add_test(NAME ground_bearing_contract COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_SOURCE_DIR}/tests/test_ground_bearing.py
         --target native --native-probe $<TARGET_FILE:fist_ground_goal_probe>)
+    add_test(NAME ground_throttle_contract COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_SOURCE_DIR}/tests/test_ground_throttle.py
+        --target native --native-probe $<TARGET_FILE:fist_ground_throttle_probe>)
     add_test(NAME ground_goal_contract COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_SOURCE_DIR}/tests/test_ground_goal.py
         --target native --native-probe $<TARGET_FILE:fist_ground_goal_probe>)
