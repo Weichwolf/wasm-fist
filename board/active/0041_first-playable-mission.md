@@ -158,8 +158,10 @@ Closed 0080 consumes the complete per-class movement-word, speed-counter and com
 with every signed speed/counter/phase, subtraction edge, all 960 saved ground states and
 canonical timed/paused behavior verified against original returns on both targets. Full
 build/style, sanitizers and actual TRAIN1 devices/frames pass. See docs/vehicle-maintenance.md.
-The actual M1 prefix now agrees through six updates. Open 0081 owns the next tick-seven,
-phase-46 heading-history/command callback and shared RNG difference. Other phase/behavior,
+The actual M1 prefix now agrees through six updates. Active 0081 owns the next tick-seven,
+phase-46 heading-history/command callback and shared RNG difference. Its verified all-47
+original PATH/PINF loader/consumer checkpoint identifies owned mission orders under 0082 as
+a prerequisite; complete command dispatch remains unimplemented. Other phase/behavior,
 contacts, living world scheduling, visible battle, audible PCM and outcomes remain required;
 this does not complete a mission.
 

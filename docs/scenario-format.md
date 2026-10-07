@@ -39,9 +39,9 @@ immediately with no alignment padding. Published missions contain each of these 
 | --- | --- | --- |
 | SHDR | 54 bytes | Version uint16 at 0; mode byte 2; limit byte 5; eight int32 positions at 6. |
 | DCBS | Variable | Count uint16, then count × (three uint16 header words + declared state bytes). |
-| PATH | 2144 bytes in originals | Borrowed full payload; path semantics remain open. |
+| PATH | 2144 bytes in originals | Eight 268-byte waypoint records; current envelope view is borrowed. |
 | STMP | 258 bytes in originals | Borrowed full payload; stamp semantics remain open. |
-| PINF | 176 bytes in originals | Borrowed full payload; player semantics remain open. |
+| PINF | 176 bytes in originals | Eight 22-byte platoon descriptors; current envelope view is borrowed. |
 | BINF | 70 bytes | Four 16-byte fields: heightmap, colormap, palette, sky; final six bytes retained. |
 | TERM | Zero bytes | Complete termination, with no trailing bytes. |
 
@@ -50,6 +50,10 @@ the complete known envelope, rejects duplicate known chunks, requires SHDR first
 last, and accepts reordered middle chunks or unknown chunks between them. PATH/STMP/PINF are
 retained as bounded opaque views, not declared semantically validated. Header reserved/extension
 bytes and BINF's tail are preserved in their chunk views.
+The actual PATH/PINF original loader and command-consumer evidence is documented in
+[ground command phase](ground-command-phase.md). Owned orders and canonical installation remain
+required under WI 0082 before complete command/AI consumption under 0081; the envelope reader
+does not infer these runtime contracts from merely retaining chunk bytes.
 
 BINF fields may terminate with NUL or fill all 16 bytes with DOS space padding: INDIA4's sky is
 `5.SKY` followed by eleven spaces without NUL. Spaces are removed like the reference DOS filename

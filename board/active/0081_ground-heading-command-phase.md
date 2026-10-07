@@ -1,0 +1,83 @@
+Type: Work item
+Title: Consume the reached ground heading and command phase
+Depends: 0080, 0082
+
+## Contract
+
+Recover the next reached complete ground phase, including its owned heading history/counter,
+shared RNG consumption and nested controlled/AI command callback. Preserve one canonical actor
+and world RNG owner. Keep the existing motion/history/maintenance/reload/contact contracts;
+do not omit nested work to make a heading-only comparison pass. Complete living behavior,
+inter-object contacts, battle scheduling/rendering and PCM remain required.
+
+## Evidence
+
+After maintenance, the actual installed TRAIN1 M1 prefix 7c1d..7c7e agrees through six updates.
+Tick seven reaches phase 46, bank byte index 14, and calls ab03 plus RNG 0291. Raw words
++28/+2a/+2c/+2e and byte +42 first differ. With zero seeds, the retained world RNG cursor
+advances from two to three; seeds remaining zero do not prove lack of random consumption.
+
+Actual ab03 stores DI, calls RNG before its global admission check, increments +42 when
+admitted and samples heading history on its low-four-bit boundary. MOVSX additions use signed
+word operands with logical 32-bit SHR before storing the average word. It resolves both
+platoon tables, selects a nested callback from controlled/AI banks and may call b152 for
+the global selected actor. The first controlled wrap selects ab82 -> f69:b4ef, raw 1ab7f;
+that service has actual behavior/flag/target/platoon-dependent branches and is not an empty
+return. Verify all other class tables, callbacks and admission/global callers before claiming
+their support. Original observation rejects reserved address-zero/one device scaffolding.
+
+## Next
+
+Reproduce the complete first difference and recover the nested callback plus caller/global
+contract. Add the required saved heading/counter state and connect the shared RNG transaction
+to actual canonical control and any still-delivered standalone boundary. Consume complete
+controlled work and explicitly account for other callback requirements. Advance the original
+living prefix again; keep the engine-audio device boundary declared until fully configured.
+
+The recovered input prerequisite is now open 0082: own/install real PATH/PINF platoon orders
+before accepting any later command callback. The original-only boundary verification below
+is a completed research checkpoint; 0081 itself remains active and its C acceptance is unproved.
+
+## Accept
+
+Both production targets pass complete original phase/callback comparisons, all saved ground
+snapshots, reaching TRAIN1 state and RNG traces, transactional failures, canonical/standalone
+timed regressions, strict builds/style and memory checks. Preserve actual native/browser
+controls and frames. Full class/battle/PCM/mission and final ten-run acceptance remain separate.
+
+## Verified input and dispatch checkpoint
+
+On 2026-10-07 the actual frozen image confirms ab03 at phase-bank byte indices 14 and 30 for
+all four classes. Both complete nested banks are recorded in docs/ground-command-phase.md.
+Controlled b111 entries are genuine RETs, while b011 performs ordered target discovery and
+b053 can mutate/reorder physical roster members. These calls require a canonical world owner;
+no heading-only implementation or fake nested return satisfies this WI.
+
+Actual original d87f/d8a9 handlers load PATH/PINF into the very records addressed by ab03.
+The old DCBS constructor setup does not load those chunks. It remains valid for its six
+accepted early prefix updates, but zero-filled route storage cannot prove later command
+behavior. The new original DOS I/O adapter executes complete read/seek handlers, verifies
+all 65536 DGROUP bytes outside declared destinations and retains RNG exactly.
+
+Required `test_original_command_boundary.py --originals` passes three groups, zero skips,
+all 47 pinned inputs, 376 complete read/seek chunk returns and 109040 loaded input bytes
+in 0.551 seconds.
+It verifies all-class phase admission and both callback banks. A real 85-object TRAIN1
+installation with explicitly constructed stale goal/flags reaches complete route restoration
+at update 15 and direction/range consumption at update 23; other 84 payloads are unchanged
+and the retained random cursor advances correctly through three real ab03 calls. This is
+not an untouched saved-actor claim: TRAIN1 already contains the first goal and its valid bit.
+The provisional expectation that its valid bit started clear was rejected from actual saved
+and initialized bytes; the accepted fixture declares the stale input explicitly.
+
+Original files, generated reference, dependencies and C runtime are unchanged. Existing
+both-target history/canonical original regressions verify the current controlled subset.
+Required history passes all five groups / 4028 fixtures / 20156 complete boundaries per target
+without skips (12.304 seconds combined). Required canonical driving passes all six groups /
+105 fixtures / 904 complete boundaries / 899 objects / 46 explicit rejections per target
+without skips (20.412 seconds combined). Production Ninja trees remain current. C/configuration
+are unchanged, so this checkpoint adds no new build/style or rendering acceptance claim.
+Reproduction and remaining ownership/callback requirements live in docs/ground-command-phase.md.
+Commit/push this verified input checkpoint and retain a compact `/tmp/wasm-fist-0081-review`
+summary; remove raw logs/traces after verification. Full 0081 acceptance, first playable
+mission and complete WASM streak remain unproved; streak zero.
