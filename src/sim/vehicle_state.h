@@ -89,6 +89,11 @@ typedef struct {
     uint8_t components[FIST_VEHICLE_COMPONENT_BYTES];
 } fist_vehicle_state;
 
+/* Restore modeled ground fields from a complete saved snapshot without class
+ * initialization or RNG consumption. No input views survive; failure preserves
+ * out. The mission loader calls initialization only for participating actors. */
+int fist_vehicle_restore(const fist_unit_definition *definition, fist_vehicle_state *out);
+
 /* Execute c296 + the complete original ground-class start defaults in typed C.
  * Borrows the definition during the call; no pointers/source bytes survive.
  * The caller supplies original random state and the 6dae link-mode byte.

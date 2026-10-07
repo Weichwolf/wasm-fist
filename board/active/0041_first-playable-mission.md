@@ -107,17 +107,23 @@ caller boundaries. Other aircraft behaviors, live type-26 firing and selected-pl
 remain open. 0074 supplies the common world tick prefix and current registry traversal, proved
 against original instructions and full existing-class mutable-pass lifetimes. See docs/world-step.md
 for the separate voice producer and traversal-only mission corpus boundaries. This does not
-install live mission payloads or execute unknown living methods. Input eligibility, visible
-battle, AI, audible events and mission outcome remain open.
+install live mission payloads or execute unknown living methods. Closed 0075 now supplies typed
+saved-mission installation, physical roster/orphans, retained file-order initialization RNG and
+complete conditional tree updates. All 85 TRAIN1 records and ten supported contexts install
+correctly; 37 other complete inputs are explicit unsupported failures. See docs/mission-world.md
+for original, ownership, reload and memory evidence. This stage is not wired into the continuous
+player-only scene. Input eligibility, visible battle, AI, audible events and mission outcome
+remain open.
 
 Continue with 0065: recover and deliver primary player weapon firing, ammunition/reload and
 visible feedback, then projectile/hit rules, mission objectives/outcome and shared sound events
 in verified bounded steps. Preserve the working continuous driving baseline. Prioritize
 actual mission integration of the delivered combat owners before later all-mission
-coverage. Recover complete reached payload installation and post-initialization RNG, and living
-methods without no-op dispatch; reuse the current-entry iterator and preserve damage-before-impact
-continuation. Recover
-targeting, other-unit class/AI behavior and complete world/object installation as reached; current sprites
+coverage. Consume the saved world through terrain/contact and take-control installation, recover
+living ground methods and command eligibility without no-op dispatch, and install dynamic combat
+payloads. Reuse the current-entry iterator and preserve damage-before-impact continuation and one
+physical roster owner. Recover targeting, other-unit class/AI behavior, the shared tree-change
+producer and live type-26 updates as reached; current sprites
 intentionally retain MAL colors. Scenario path/stamp/player mission semantics still need typed
 decoding. Every stage requires real native/browser behavior and visual evidence before claiming
 a complete playable mission.

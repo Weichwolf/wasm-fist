@@ -6,7 +6,7 @@ and verification tools remain available without participating in the rewrite bui
 
 | Location | Owner and boundary |
 | --- | --- |
-| `src/sim/` | Runtime object allocation, typed vehicle/short-actor state, deterministic random/motion/contact, weapon control, untargeted M1 launch, ordered unit collision, shell/effect lifecycle, all collision-reachable M1 target damage, ground retirement, world tick prefix/current-registry traversal and manual driving stages. |
+| `src/sim/` | Runtime object allocation, typed saved-mission payloads/physical roster/retained initialization RNG, vehicle/short-actor/tree state, deterministic random/motion/contact, weapon control, untargeted M1 launch, ordered unit collision, shell/effect lifecycle, all collision-reachable M1 target damage, ground retirement, world tick prefix/current-registry traversal and manual driving stages. |
 | `src/app/` | Owned scenario/player session, integer input/time controller and common scene drawing. |
 | `src/assets/` | Validated original-format decoders producing typed host data. |
 | `src/render/` | softgl context, camera, terrain/models, HUD and framebuffer ownership. |
@@ -86,5 +86,11 @@ producer consumers remain explicit required boundaries; no complete playable bat
 [Remaining M1 targets](other-damage.md) share source validation and word-width arithmetic with
 ground damage. They own typed 5/6/26/27 snapshot fields, preserve the real wreck no-op and expose
 exact reactions, distinct census, authored effects and retained/released identities. Snapshot
-restoration does not replace class initialization/AI, and subsequent death/debris/type-26 target
-updates remain open before live scheduling can consume those states.
+restoration does not replace class initialization/AI. Death/debris/smoke lifetimes and the common
+world tick/current-entry traversal are delivered in [world stepping](world-step.md).
+[Saved-mission installation](mission-world.md) now owns typed payloads, the physical roster and
+retained file-order initialization RNG, including all TRAIN1 objects and overwritten orphans.
+It reuses the existing allocation and typed state owners; unsupported classes reject the whole
+installation. The app still uses its player-only baseline. Terrain/contact/take-control of the
+installed world, complete living methods/command eligibility, dynamic combat payload publication,
+battle drawing, audible PCM and mission outcomes remain required before a playable battle.
