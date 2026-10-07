@@ -326,6 +326,9 @@ if(BUILD_TESTING AND NOT EMSCRIPTEN)
     add_test(NAME ground_goal_contract COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_SOURCE_DIR}/tests/test_ground_goal.py
         --target native --native-probe $<TARGET_FILE:fist_ground_goal_probe>)
+    add_test(NAME proximity_contract COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_SOURCE_DIR}/tests/test_proximity.py
+        --target native --native-probe $<TARGET_FILE:fist_geometry_probe>)
     add_test(NAME geometry_contract COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_SOURCE_DIR}/tests/test_geometry.py
         --target native --native-probe $<TARGET_FILE:fist_geometry_probe>)

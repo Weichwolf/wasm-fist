@@ -7,6 +7,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 enum {
     HEADER = 4,
@@ -44,10 +45,11 @@ static geometry_case *decode(const uint8_t *data, size_t size, size_t *count) {
 }
 
 int main(int argc, char **argv) {
-    if (argc != 2) {
+    const bool proximity = argc == 3 && strcmp(argv[1], "proximity") == 0;
+    if (argc != 2 && !proximity) {
         return EXIT_FAILURE;
     }
-    FILE *file = fopen(argv[1], "rb");
+    FILE *file = fopen(argv[proximity ? 2 : 1], "rb");
     if (file == NULL) {
         return EXIT_FAILURE;
     }
@@ -67,6 +69,10 @@ int main(int argc, char **argv) {
     }
     for (size_t index = 0; index < count; ++index) {
         const geometry_case input = cases[index];
+        if (proximity) {
+            printf("proximity %u\n", (unsigned)fist_planar_proximity(input.source, input.target));
+            continue;
+        }
         const fist_planar_measurement measured =
             fist_planar_measure(input.source, input.target, input.coarse != 0);
         printf("geometry %u %u\n", (unsigned)measured.heading, (unsigned)measured.distance);

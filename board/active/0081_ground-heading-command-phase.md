@@ -148,3 +148,13 @@ regressions. See docs/terrain-visibility.md. This starts at effective source/tar
 complete DOS aim offsets, runtime target identities/lifetimes and b011 discovery remain to be
 consumed. No partial parent/callback bank is installed. Continue this unchanged Contract and
 Accept with that full caller/world work; first playable battle/PCM and final streak remain open.
+
+Closed 0092 supplies complete a17e/08e8 directional target proximity in the shared geometry
+owner. Actual b011 uses this max-plus-half estimate with one's-complement negative lanes,
+not 0541 navigation distance. A full original near return with real aim wrappers/PM visibility
+selects registry 2 while navigation distance would select registry 1. Both targets pass
+475567 complete scalar outputs and all-47 saved pair inputs, with original/memory/build/style
+gates. Current scene binaries are identical to accepted 0091. See docs/target-proximity.md;
+retain actual candidate-to-actor argument order when consuming full discovery. Runtime target
+identities/lifetimes, priority/secondary/old-target branches, requests and full command/class
+consumption remain in this unchanged Contract/Accept; no partial parent bank is installed.

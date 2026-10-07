@@ -1,5 +1,10 @@
 # Ground command phase: recovered input and pending consumption
 
+Closed WI 0092 supplies complete [target proximity](target-proximity.md), the a17e/08e8 service
+actually called by b011. Its directional max-plus-half estimate differs from navigation's
+0541 distance; a complete original scan with real aim/visibility proves the different winner.
+Use candidate-to-actor argument order. Full runtime identities/discovery and 0081 remain open.
+
 Closed WI 0091 supplies complete shared [terrain visibility](terrain-visibility.md), the
 protected-mode op-58 prerequisite for b011 discovery. It starts at effective aim positions
 and reuses the installed ground plane/sampler. Complete DOS aim offsets, runtime target

@@ -149,3 +149,14 @@ fist_planar_measurement fist_planar_measure(fist_order_waypoint source, fist_ord
     const uint32_t delta_y = (uint32_t)target.y - (uint32_t)source.y;
     return (fist_planar_measurement){heading(delta_x, delta_y, coarse), distance(delta_x, delta_y)};
 }
+
+uint32_t fist_planar_proximity(fist_order_waypoint source, fist_order_waypoint target) {
+    const uint32_t delta_x = (uint32_t)target.x - (uint32_t)source.x;
+    const uint32_t delta_y = (uint32_t)target.y - (uint32_t)source.y;
+    const uint32_t lane_x = delta_x <= INT32_MAX ? delta_x : ~delta_x;
+    const uint32_t lane_y = delta_y <= INT32_MAX ? delta_y : ~delta_y;
+    if (lane_x >= lane_y) {
+        return lane_x + (lane_y >> 1U);
+    }
+    return lane_y + (lane_x >> 1U);
+}
