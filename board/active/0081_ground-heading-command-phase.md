@@ -232,3 +232,16 @@ docs/target-acquisition.md and closed 0097. This parent's Contract/Accept remain
 Continue remaining maneuver/roster/diagnostic callbacks and complete heading/counter/RNG
 parent and class consumption. First playable battle/PCM/outcomes and the independent final
 complete WASM streak remain open; streak zero.
+
+Closed 0098 proves complete original b053/f69:b329 physical roster promotion and genuine
+ab03 entry thirteen in both banks, without a substituted child or diagnostic producer.
+Five required groups pass without skips: 110451 complete returns, 11007 genuine parent
+returns, 81920 flag-domain cases and 11668 null/wreck/alias/member-wrap/leader cases. Twenty
+actual allocated registry-overwritten actors retain live physical roster references. The
+all-47/four-detail corpus reaches 11520 sequential child/parent returns over 188 prepared
+worlds/3840 ground actors, including twelve actual child roster changes. Malformed member
+bytes prove out-of-roster writes and ADD BL wrap; used-domain C admission must be atomic,
+while the unused member-zero branch retains all 256 platoon bytes. See docs/roster-promotion.md.
+Continue open 0099's typed roster/predecessor mutation using the sole canonical roster owner,
+then remaining maneuver/fire/diagnostic callbacks and full heading/counter/RNG/class work.
+This parent's Contract/Accept remain unchanged; battle/PCM and the final streak remain open.

@@ -1,5 +1,10 @@
 # Ground command phase: recovered input and pending consumption
 
+Closed WI 0098 proves complete original [physical roster promotion](roster-promotion.md),
+including genuine parent entry thirteen, actual allocated registry-overwritten actors and
+all-47 prepared sequential world returns. Shared canonical C consumption is open 0099;
+remaining callbacks and full 0081 parent/class consumption remain pending.
+
 Closed WI 0096 proves complete original [target acquisition and later aim feedback](target-acquisition.md),
 including genuine ab03 entry-eight returns, conditional RNG, actual visibility, selected
 message/voice tails, target geometry and consuming throttle. Required full-domain/all-47 and
