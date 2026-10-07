@@ -15,6 +15,7 @@ from test_units import expected, records_from_scenario, scenario_data
 from test_vehicle_start import initialized, state_lines
 from test_vehicle_motion import start, update
 from test_vehicle_history import update as history_update
+from test_vehicle_maintenance import update as maintenance_update
 from test_ground import installed
 from test_heightfield import resize
 from test_weapon_control import update as weapon_update, COUNTS, CONTINUOUS, STOCK_STATION
@@ -63,7 +64,7 @@ def driver_step(record, keys, side, pixels):
     raw = bytearray(raw)
     raw[0x3d] = (raw[0x3d] + 2) % 256
     raw, events = weapon_update(raw, 4, 0)
-    raw = history_update(raw)
+    raw = maintenance_update(history_update(raw))
     return installed(side, pixels, [(identity, generation, bytes(raw))])[0], events
 
 

@@ -139,6 +139,27 @@ class MissionDrivingTests(unittest.TestCase):
                 self.assertTrue('selection 151 65535\n' in output[:2000], 'Canonical player must occupy physical slot 151')
                 self.assertTrue('advance -1\n' in output, 'Invalid keys must be rejected')
 
+    def test_initialized_movement_maintenance_and_paused_cadence(self):
+        intervals = [(0, 1), (250000, 0), (250000, 0), (0, 128), (1000000, 0)]
+        for kind, speed, counter in itertools.product(range(4), (32, 64), (5, 250)):
+            identity, generation, original = self.player(kind)
+            raw = bytearray(original)
+            # A participating roster actor starts with the original constructor's
+            # movement word. Saved speed/counter/phase still reach maintenance;
+            # paused intervals must preserve the complete canonical world.
+            raw[0x3d], raw[0x5f] = 32, counter
+            struct.pack_into('<hh', raw, 0x55, speed, 128 if speed == 32 else 254)
+            struct.pack_into('<H', raw, 0x5d, 1)
+            output = self.run_scene([(identity, generation, bytes(raw))], intervals=intervals)
+            states = [line.split() for line in output.splitlines() if line.startswith('state ')]
+            self.assertEqual(int(states[0][14]), 65535, 'The participating constructor resets the saved movement word')
+            self.assertEqual(int(states[-1][14]), 65531 if speed == 32 else 65529,
+                             'Both admitted maintenance calls must consume movement')
+            self.assertEqual(states[-1], states[-3], 'Paused time must preserve the complete selected actor')
+            self.assertIn('clock 30 ', output, 'Paused time must not consume more maintenance calls')
+            counters = [int(line.split()[1]) for line in output.splitlines() if line.startswith('speed_counter ')]
+            self.assertEqual(counters[-1], counter - 2 if speed == 32 else counter + (2 if counter < 248 else 0))
+
     def test_selected_physical_orphan_survives_overwritten_registry(self):
         records = [self.player(2, 7, 1), self.player(0), self.player(1, 9, 2), record(21, 30)]
         output = self.run_scene(records)

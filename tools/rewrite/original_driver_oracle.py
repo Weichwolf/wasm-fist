@@ -1,4 +1,4 @@
-"""Execute original manual, gun/recoil, reload/history, selection and contact stages.
+"""Execute original manual, gun/recoil, reload/history/maintenance, selection and contact stages.
 
 This verifies the declared driving subset, not a full original class/mission tick.
 Actual class-entry altitude MOVs and phase ADD/index instructions execute at
@@ -9,14 +9,14 @@ import struct
 from original_vehicle_motion_oracle import MOTION, TURRET
 from original_ground_oracle import OriginalGroundOracle
 from original_unit_oracle import DGROUP
-from original_vehicle_history_oracle import OriginalVehicleHistoryOracle
+from original_vehicle_maintenance_oracle import OriginalVehicleMaintenanceOracle
 
 CLASS_ENTRY = (0x7c1d, 0x87df, 0x902c, 0x97d5)
 
 
 class OriginalDriverOracle:
     def __init__(self, side, pixels):
-        self.motion = OriginalVehicleHistoryOracle()
+        self.motion = OriginalVehicleMaintenanceOracle()
         self.machine = self.motion.machine()
         self.ground = OriginalGroundOracle()
         self.field = self.ground.prepare(side, pixels)
@@ -74,6 +74,7 @@ class OriginalDriverOracle:
         self.motion.call(machine, TURRET[kind])
         self.motion.reload_phase(machine, kind, advance=True)
         self.motion.history_phase(machine, kind)
+        self.motion.maintenance_phase(machine, kind)
         current = bytearray(machine.mem_read(DGROUP + 0x7000, 251))
         return self.ground.contact(self.field, [(identity, generation, bytes(current))])[0]
 

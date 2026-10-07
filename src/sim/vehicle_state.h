@@ -11,7 +11,8 @@ enum {
     FIST_VEHICLE_WEAPON_SLOTS = 4,
     FIST_VEHICLE_COMPONENT_BYTES = 62,
     FIST_VEHICLE_ANIMATION_SELECTORS = 3,
-    FIST_VEHICLE_POSITION_SAMPLES = 6
+    FIST_VEHICLE_POSITION_SAMPLES = 6,
+    FIST_VEHICLE_PHASE_MASK = 0x1e
 };
 
 typedef struct {
@@ -23,9 +24,12 @@ typedef struct {
     int16_t velocity_y;
     uint16_t heading;
     uint16_t requested_heading;
+    /* Original +5d: consumed movement word, with zero gating motion. */
     uint16_t movement_gate;
     uint8_t motion_flags;
     uint8_t update_phase;
+    /* Original +5f speed-threshold counter, without inferred physical units. */
+    uint8_t speed_counter;
 } fist_vehicle_drive;
 
 typedef struct {
@@ -119,6 +123,12 @@ int fist_vehicle_initialize(const fist_unit_definition *definition, fist_random 
  * byte counter wraps, and every twelfth call inserts the current position.
  * Invalid ground type/component size preserves the complete vehicle. */
 int fist_vehicle_history_phase(fist_vehicle_state *vehicle);
+
+/* Execute the current class-selected movement maintenance phase: consume the
+ * movement word from absolute speed, update the saved speed counter and refresh
+ * the class components. No phase advancement or other callbacks. Invalid
+ * ground type/component size preserves the complete vehicle. */
+int fist_vehicle_maintenance_phase(fist_vehicle_state *vehicle);
 
 /* Complete original component payload size; 0 for unsupported classes. */
 size_t fist_vehicle_component_size(uint16_t type);

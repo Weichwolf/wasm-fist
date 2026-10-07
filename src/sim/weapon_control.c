@@ -12,7 +12,6 @@ enum {
     STATION_COUNT = FIST_WEAPON_MAX_STATIONS,
     REFRESH_COMPONENTS = 6,
     COMPONENT_REFRESH = 3,
-    RELOAD_PHASE_MASK = 0x1e,
     FIRE_REQUEST_TICKS = 48,
     ELEVATION_SHIFT = 8,
     EMPTY_CUE = 13,
@@ -189,7 +188,8 @@ int fist_weapon_reload_phase(fist_vehicle_state *vehicle, fist_weapon_events *ev
         return -1;
     }
     fist_weapon_events emitted = no_events();
-    if ((vehicle->drive.update_phase & RELOAD_PHASE_MASK) == 0 && vehicle->reload_countdown != 0) {
+    if ((vehicle->drive.update_phase & FIST_VEHICLE_PHASE_MASK) == 0 &&
+        vehicle->reload_countdown != 0) {
         --vehicle->reload_countdown;
         if (vehicle->reload_countdown == 0) {
             emitted.timer_expired = 1;

@@ -22,6 +22,8 @@ enum {
     MARKER = 123
 };
 
+typedef enum { MODE_DRIVE, MODE_HISTORY, MODE_MAINTENANCE } motion_mode;
+
 typedef struct {
     fist_vehicle_state state;
     uint16_t steps;
@@ -47,7 +49,8 @@ static int invalid_cases(fist_vehicle_state *state) {
     if (fist_vehicle_motion_step(NULL, &events) != -1 ||
         fist_vehicle_motion_step(state, NULL) != -1 ||
         fist_vehicle_motion_step(state, &events) != -1 || fist_vehicle_history_phase(NULL) != -1 ||
-        fist_vehicle_history_phase(state) != -1 || !same_bytes(saved, bytes, sizeof(*state))) {
+        fist_vehicle_maintenance_phase(NULL) != -1 || fist_vehicle_history_phase(state) != -1 ||
+        fist_vehicle_maintenance_phase(state) != -1 || !same_bytes(saved, bytes, sizeof(*state))) {
         return -1;
     }
     for (unsigned type = 0; type < FIST_UNIT_GROUND_VEHICLE_COUNT; ++type) {
@@ -62,6 +65,7 @@ static int invalid_cases(fist_vehicle_state *state) {
             }
             if (fist_vehicle_motion_step(state, &events) != -1 ||
                 fist_vehicle_history_phase(state) != -1 ||
+                fist_vehicle_maintenance_phase(state) != -1 ||
                 !same_bytes(saved, bytes, sizeof(*state))) {
                 return -1;
             }
@@ -121,7 +125,7 @@ static int spatial_rotations(const uint8_t *data, size_t count) {
     return 0;
 }
 
-static int prepare(const uint8_t *raw, motion_case *out, int history) {
+static int prepare(const uint8_t *raw, motion_case *out, motion_mode mode) {
     enum {
         MAP_X = 4,
         MAP_Y = 8,
@@ -138,7 +142,7 @@ static int prepare(const uint8_t *raw, motion_case *out, int history) {
                                              .altitude = fist_read_i32le(raw + ALTITUDE),
                                              .snapshot = {raw, FIST_UNIT_EXTENDED_SIZE}};
     fist_random random = {0};
-    if (history != 0) {
+    if (mode != MODE_DRIVE) {
         if (fist_vehicle_restore(&definition, &out->state) != 0) {
             return -1;
         }
@@ -161,20 +165,32 @@ static int prepare(const uint8_t *raw, motion_case *out, int history) {
     return out->steps != 0 ? 0 : -1;
 }
 
-static int history_step(fist_vehicle_state *state) {
+static int phase_step(fist_vehicle_state *state, motion_mode mode) {
     unsigned char saved[sizeof(*state)] = {0};
     const unsigned char *bytes = (const unsigned char *)state;
     for (size_t index = 0; index < sizeof(*state); ++index) {
         saved[index] = bytes[index];
     }
-    if (fist_vehicle_history_phase(state) != 0) {
+    const int result = mode == MODE_HISTORY ? fist_vehicle_history_phase(state)
+                                            : fist_vehicle_maintenance_phase(state);
+    if (result != 0) {
         return -1;
     }
     const size_t history_start = offsetof(fist_vehicle_state, position_history);
     const size_t history_end = history_start + sizeof(state->position_history);
     for (size_t index = 0; index < sizeof(*state); ++index) {
-        const int owned = index == offsetof(fist_vehicle_state, random_phases) ||
-                          (index >= history_start && index < history_end);
+        int owned = index == offsetof(fist_vehicle_state, random_phases) ||
+                    (index >= history_start && index < history_end);
+        if (mode == MODE_MAINTENANCE) {
+            const size_t budget =
+                offsetof(fist_vehicle_state, drive) + offsetof(fist_vehicle_drive, movement_gate);
+            const size_t counter =
+                offsetof(fist_vehicle_state, drive) + offsetof(fist_vehicle_drive, speed_counter);
+            const size_t components = offsetof(fist_vehicle_state, components);
+            owned = (index >= budget && index < budget + sizeof(state->drive.movement_gate)) ||
+                    index == counter ||
+                    (index >= components && index < components + state->component_size);
+        }
         if (owned == 0 && bytes[index] != saved[index]) {
             return -1;
         }
@@ -182,7 +198,7 @@ static int history_step(fist_vehicle_state *state) {
     return 0;
 }
 
-static int drive_cases(int history, uint8_t *data, size_t count) {
+static int drive_cases(motion_mode mode, uint8_t *data, size_t count) {
     motion_case *cases = calloc(count + 1, sizeof(*cases));
     if (cases == NULL) {
         free(data);
@@ -190,7 +206,7 @@ static int drive_cases(int history, uint8_t *data, size_t count) {
     }
     int result = 0;
     for (size_t index = 0; index < count; ++index) {
-        if (prepare(data + HEADER_BYTES + (index * MOTION_BYTES), &cases[index], history) != 0) {
+        if (prepare(data + HEADER_BYTES + (index * MOTION_BYTES), &cases[index], mode) != 0) {
             result = -1;
             break;
         }
@@ -199,8 +215,8 @@ static int drive_cases(int history, uint8_t *data, size_t count) {
     for (size_t index = 0; index < count && result == 0; ++index) {
         fist_vehicle_state *state = &cases[index].state;
         for (unsigned step = 0; step < cases[index].steps; ++step) {
-            if (history != 0) {
-                if (history_step(state) != 0) {
+            if (mode != MODE_DRIVE) {
+                if (phase_step(state, mode) != 0) {
                     result = -1;
                     break;
                 }
@@ -242,6 +258,11 @@ int main(int argc, char **argv) {
     const int spatial = strcmp(argv[1], "spatial") == 0;
     const int motion = strcmp(argv[1], "motion") == 0;
     const int history = strcmp(argv[1], "history") == 0;
+    const int maintenance = strcmp(argv[1], "maintenance") == 0;
+    motion_mode mode = history != 0 ? MODE_HISTORY : MODE_DRIVE;
+    if (maintenance != 0) {
+        mode = MODE_MAINTENANCE;
+    }
     size_t record_bytes = MOTION_BYTES;
     if (rotation != 0) {
         record_bytes = ROTATION_BYTES;
@@ -249,7 +270,7 @@ int main(int argc, char **argv) {
     if (spatial != 0) {
         record_bytes = SPATIAL_BYTES;
     }
-    if ((rotation == 0 && spatial == 0 && motion == 0 && history == 0) ||
+    if ((rotation == 0 && spatial == 0 && motion == 0 && history == 0 && maintenance == 0) ||
         count != (size - HEADER_BYTES) / record_bytes ||
         (size - HEADER_BYTES) % record_bytes != 0) {
         free(data);
@@ -261,7 +282,7 @@ int main(int argc, char **argv) {
                               : rotations(data + HEADER_BYTES, count);
         free(data);
     } else {
-        result = drive_cases(history, data, count);
+        result = drive_cases(mode, data, count);
     }
     return result == 0 && ferror(stdout) == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }

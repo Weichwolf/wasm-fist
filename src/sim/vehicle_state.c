@@ -71,7 +71,8 @@ static void restore_motion(const uint8_t *snapshot, fist_vehicle_state *vehicle)
         VELOCITY_Y = 91,
         TURRET_OFFSET = 137,
         REQUESTED_OFFSET = 139,
-        MOVEMENT_GATE = 93
+        MOVEMENT_GATE = 93,
+        SPEED_COUNTER = 95
     };
     vehicle->drive =
         (fist_vehicle_drive){.speed = fist_read_i16le(snapshot + SPEED),
@@ -84,7 +85,8 @@ static void restore_motion(const uint8_t *snapshot, fist_vehicle_state *vehicle)
                              .requested_heading = fist_read_u16le(snapshot + REQUESTED_HEADING),
                              .movement_gate = fist_read_u16le(snapshot + MOVEMENT_GATE),
                              .motion_flags = snapshot[MOTION_FLAGS],
-                             .update_phase = snapshot[UPDATE_PHASE]};
+                             .update_phase = snapshot[UPDATE_PHASE],
+                             .speed_counter = snapshot[SPEED_COUNTER]};
     vehicle->ground_height = snapshot[GROUND_HEIGHT];
     vehicle->platoon = snapshot[PLATOON];
     vehicle->member = snapshot[MEMBER];
@@ -260,12 +262,12 @@ size_t fist_vehicle_component_size(uint16_t type) {
 }
 
 int fist_vehicle_history_phase(fist_vehicle_state *vehicle) {
-    enum { PHASE_MASK = 0x1e, HISTORY_PHASE = 6, SAMPLE_INTERVAL = 12, COORDINATE_SHIFT = 8 };
+    enum { HISTORY_PHASE = 6, SAMPLE_INTERVAL = 12, COORDINATE_SHIFT = 8 };
     if (vehicle == NULL || vehicle->type >= FIST_UNIT_GROUND_VEHICLE_COUNT ||
         vehicle->component_size != fist_vehicle_component_size(vehicle->type)) {
         return -1;
     }
-    if ((vehicle->drive.update_phase & PHASE_MASK) != HISTORY_PHASE) {
+    if ((vehicle->drive.update_phase & FIST_VEHICLE_PHASE_MASK) != HISTORY_PHASE) {
         return 0;
     }
     /* aa37 -> f69:b038 (raw 1a6c8..1a721): unsigned byte INC/CMP, then
@@ -281,5 +283,52 @@ int fist_vehicle_history_phase(fist_vehicle_state *vehicle) {
     vehicle->position_history[0] = (fist_vehicle_position_sample){
         .x = (uint16_t)((uint32_t)vehicle->map_x >> COORDINATE_SHIFT),
         .y = (uint16_t)((uint32_t)vehicle->map_y >> COORDINATE_SHIFT)};
+    return 0;
+}
+
+int fist_vehicle_maintenance_phase(fist_vehicle_state *vehicle) {
+    enum {
+        SPEED_SHIFT = 4,
+        HIGH_SPEED = 60,
+        COUNTER_LIMIT = 248,
+        COMPONENT_PHASE_MASK = 0xe0,
+        COMPONENT_REFRESH = 3
+    };
+    /* Complete 7cbf/88ce/9160/98fb wrappers around f69:a96c. Component
+     * indices follow each original class's owned template, in write order. */
+    static const struct {
+        uint8_t phase;
+        uint8_t components[2];
+    } profiles[FIST_UNIT_GROUND_VEHICLE_COUNT] = {
+        {10, {13, 14}}, {10, {10, 11}}, {16, {51, 50}}, {20, {60, 59}}};
+    if (vehicle == NULL || vehicle->type >= FIST_UNIT_GROUND_VEHICLE_COUNT ||
+        vehicle->component_size != fist_vehicle_component_size(vehicle->type)) {
+        return -1;
+    }
+    if ((vehicle->drive.update_phase & FIST_VEHICLE_PHASE_MASK) != profiles[vehicle->type].phase) {
+        return 0;
+    }
+    int32_t magnitude = vehicle->drive.speed;
+    if (magnitude < 0) {
+        magnitude = -magnitude;
+    }
+    /* 19ffc..1a02c: NEG keeps the 8000h magnitude, SHR is unsigned,
+     * and SUB carry saturates the movement word to zero. */
+    const uint16_t consumed = (uint16_t)((uint32_t)magnitude >> SPEED_SHIFT);
+    vehicle->drive.movement_gate = consumed > vehicle->drive.movement_gate
+                                       ? 0
+                                       : (uint16_t)(vehicle->drive.movement_gate - consumed);
+    if (vehicle->drive.speed >= HIGH_SPEED) {
+        if (vehicle->drive.speed_counter < COUNTER_LIMIT) {
+            ++vehicle->drive.speed_counter;
+        }
+    } else if (vehicle->drive.speed_counter != 0) {
+        --vehicle->drive.speed_counter;
+    }
+    if ((vehicle->drive.update_phase & COMPONENT_PHASE_MASK) == 0) {
+        for (size_t index = 0; index < sizeof(profiles[vehicle->type].components); ++index) {
+            vehicle->components[profiles[vehicle->type].components[index]] = COMPONENT_REFRESH;
+        }
+    }
     return 0;
 }

@@ -154,10 +154,14 @@ Closed 0079 adds the six owned saved ground position samples and original phase-
 sampling counter to the canonical controlled actor. Both targets pass complete original counter,
 phase and 960-snapshot comparisons, reaching TRAIN1 prefix returns, timed control regressions,
 strict builds/style, memory and actual native/browser scenes. See docs/vehicle-history.md.
-The next reached living-prefix difference is TRAIN1 tick five, phase 42: movement word +5d
-is consumed by the original class maintenance callback. Open 0080 owns its complete per-class
-budget/speed-counter/component stage. Other phase/behavior, contacts, living world scheduling,
-visible battle, audible PCM and outcomes remain required; this does not complete a mission.
+Closed 0080 consumes the complete per-class movement-word, speed-counter and component stage,
+with every signed speed/counter/phase, subtraction edge, all 960 saved ground states and
+canonical timed/paused behavior verified against original returns on both targets. Full
+build/style, sanitizers and actual TRAIN1 devices/frames pass. See docs/vehicle-maintenance.md.
+The actual M1 prefix now agrees through six updates. Open 0081 owns the next tick-seven,
+phase-46 heading-history/command callback and shared RNG difference. Other phase/behavior,
+contacts, living world scheduling, visible battle, audible PCM and outcomes remain required;
+this does not complete a mission.
 
 ## Accept
 

@@ -92,6 +92,11 @@ turret slopes in shared typed state. `test_ground.py --originals --oracle` check
 all height-byte differences and all 960 ground snapshots at each original detail level against
 complete original returns. The [controlled scene](docs/driving-scene.md) supplies class altitude transfer, a shared rational
 controller clock and live input/rendering.
+The [position history](docs/vehicle-history.md) and
+[movement maintenance](docs/vehicle-maintenance.md) share the controlled actor's phase dispatch.
+Maintenance consumes its movement word, updates the saved speed counter and refreshes the
+original class components; complete original phase/counter/speed domains and all 960 saved
+ground snapshots are verified on both targets. Full living dispatch and audible battle remain open.
 The [model format](docs/model-format.md) documents complete directional sprite families and
 their ownership/validation. `python3 tools/rewrite/test_models.py --originals` requires all 170
 model files; optional `--oracle` compares all texels and lookup fields with original instructions.
