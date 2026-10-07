@@ -4,7 +4,8 @@ The original-only observer in tests/original_target_discovery_oracle.py executes
 b011 near return and f69:b378 service at physical 1aa08..1ab7e. It uses actual saved allocation,
 registry order, aim wrappers and unchanged PM op-58 visibility on the installed height plane.
 It does not substitute a visibility matrix, patch instructions or hook individual instructions.
-Native/WASM target discovery and a playable battle remain undelivered under 0093/0081.
+Shared native/WASM discovery is implemented in src/sim/target_discovery.c. The complete parent
+heading/command bank and a playable battle remain undelivered under 0081/0041.
 
 ## Selection and secondary state
 
@@ -58,7 +59,7 @@ rank resets the distance but fails range. Invisible secondary objects can win wi
 zero. These are observed original behavior; silently replacing them with a nearest-visible
 search would change the contract.
 
-## Original lifetime defect and rewrite requirement
+## Original lifetime defect and owned repair
 
 Actual release 1b2ef clears a registry binding, decrements its saved word and marks the payload
 deleted. It does not clear another ground actor's target pointer. A complete b011 with no
@@ -73,14 +74,30 @@ registry index and saved value; saved values repeat after release/allocation. Th
 cannot supply an allocation-lifetime guarantee: all four fields repeat in the proved same-type
 case. Preserve both reaching regressions when implementing the repair.
 
-The rewrite must own runtime target lifetimes separately from opaque saved near words.
-Preparation already clears those saved targets before control. Add one lifetime authority
-to the canonical pool/world, preserve an object's lifetime through in-place retirement and
-binding orphaning, and invalidate it on release/reset. A new allocation must not revive a
-stale target. Do not cast saved words to slots or derive lifetimes from the repeating saved
-registry value. Test actual consuming references, release, retype, orphan and reload paths;
-do not merely add an unused epoch field. The lifetime alias repair requires explicit before/
-after evidence while preserving established allocation/order/RNG contracts.
+The canonical pool now stores one opaque 64-bit lifetime per live physical slot. A single
+process-local issuer in object_pool.c assigns a fresh nonzero identity on allocation/import;
+exhaustion fails rather than wrapping. Release and reset invalidate references. In-place
+retirement and duplicate-binding orphaning preserve the physical lifetime. Copies retain their
+own valid references, while newly initialized/reloaded pools cannot revive references to a
+previous pool, including identical type/slot/registry/value tuples. Discarded transactions can
+leave identity gaps; identities are neither saved gameplay data nor RNG input. Pool mutation
+remains on the simulation's single writer.
+
+Ground command state owns target/candidate runtime references separately from opaque saved
+near words. Preparation clears both forms. Complete discovery clears stale old references
+even in manual control, while retaining the original conditional clearing for live targets.
+It records the primary candidate without installing a new target. The prepared command
+selector consumes live runtime presence and preserves its conditional RNG contract; saved
+word presence remains only at the previously accepted pre-preparation boundary. Reaching C
+tests release/reuse both same-type and different-type successors, consume the repaired target
+in discovery and command selection, and check retype/orphan/reset semantics.
+
+mission_view.c owns borrowed pose/flags/mode projection for both discovery and collision.
+Ground poses use caller storage; projectile and other payload poses retain their actual
+canonical address. Explicit common-field projections support query fixtures for all 28 types
+without pretending their undelivered living methods exist. Production restoration/preparation
+is independently checked against original occupancy, registry values, poses, flags, mode,
+secondary heading/count and RNG before every canonical mission query.
 
 ## Logical notification boundary
 
@@ -93,8 +110,9 @@ not consume a device result. Gate 6da2's broader device meaning is not inferred 
 
 This boundary proves admission, cooldown and logical request emission. It does not execute
 the PCM mixer or prove audible playback, full device initialization or complete engine audio.
-The consuming rewrite must share its eventual device/request owner with existing fire/damage
-requests rather than introduce another independent cooldown or pretend the request is PCM.
+voice.c now owns this reusable logical admission contract and the canonical world's shared
+cooldown history. Discovery publishes an observable request through that owner. Consuming
+fire/damage producers and device playback must use the same history; final PCM remains open.
 
 ## Reproduction
 
@@ -110,5 +128,24 @@ operating domains, range/tie boundaries, priority/secondary paths, old targets/o
 notification gates/wrap and real release/reallocation. The original corpus gate runs actual
 preparation and complete discovery for every current ground actor in all 47 pinned missions
 using all eight original height maps at 512/1024/2048/4096 detail. Missing input, incomplete
-returns or any skipped group fail. This checkpoint changes no owned C, renderer, build flags
-or accepted gameplay expectations; complete C discovery acceptance remains open.
+returns or any skipped group fail.
+
+The consuming C gate adds 1595 independent constructed queries and compares every original
+scan with production C, including 3840 queries through actual all-47 C restoration/preparation.
+It poisons borrowed raw inputs before scanning, checks complete world preservation outside
+the exact owned actor/request destinations, checks the complete height plane and exercises
+malformed/truncated/trailing batches and null API inputs. Runtime lifetime values are opaque;
+complete observable output is normalized to physical slots for cross-target comparison.
+
+    PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache /tmp/wasm-fist-decoder-oracle/bin/python tests/test_target_discovery.py --target native --originals --oracle --review-dir /tmp/wasm-fist-0093-c-native-final
+    PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache /tmp/wasm-fist-decoder-oracle/bin/python tests/test_target_discovery.py --target wasm --originals --oracle --review-dir /tmp/wasm-fist-0093-c-wasm-final
+
+Use --native-probe with the same production flags plus address/undefined-behavior sanitizers
+for the required memory gate. Regular builds deliberately report the optional original gate
+as skipped; acceptance requires the commands above with zero skips. The full parent command
+bank, target acquisition, living battle, device/PCM consumers and complete final WASM streak
+are separate requirements; discovery alone does not complete them.
+
+Use --target all to compare both production targets in one invocation with a single original
+replay. Closed WI 0093 records the accepted separate-target and memory results, complete general
+build/style regressions and actual native/browser scene checks.

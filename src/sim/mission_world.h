@@ -14,6 +14,7 @@
 #include "sim/tree.h"
 #include "sim/vehicle_damage.h"
 #include "sim/vehicle_state.h"
+#include "sim/voice.h"
 
 #include <stdint.h>
 
@@ -75,7 +76,48 @@ typedef struct {
     /* Scheduler handoff after selected fatal damage; not an original record. */
     uint16_t pending_player_impact;
     fist_mission_preparation preparation;
+    fist_voice_history voice;
 } fist_mission_world;
+
+/* Borrowed read-only physical projection shared by collision and target search.
+ * Ground pose uses caller storage; other poses refer to canonical payloads. */
+typedef struct {
+    const fist_object_pose *pose;
+    uint16_t projection_scale;
+    uint8_t flags;
+    uint8_t secondary_flags;
+    uint8_t mode;
+} fist_mission_view;
+
+int fist_mission_world_view(const fist_mission_world *world, uint16_t slot,
+                            fist_object_pose *ground_pose, fist_mission_view *out);
+
+typedef struct {
+    uint16_t slot;
+    uint16_t tick;
+    uint16_t voice_gate;
+    uint8_t link_mode;
+    bool coarse;
+} fist_target_discovery_request;
+
+typedef struct {
+    fist_object_reference primary;
+    fist_object_reference secondary;
+    uint16_t primary_range;
+    uint16_t secondary_operand;
+    uint8_t priority;
+    uint8_t count;
+    fist_voice_request voice;
+} fist_target_discovery_result;
+
+/* Complete b011 using prepared canonical state. Preserve original preference,
+ * range, secondary and old-target rules; invalidate stale runtime targets.
+ * Saved near words are never interpreted. No RNG, parent dispatch or PCM.
+ * Return 0, or -1 for invalid state/input, including a missing/mistagged projection;
+ * all failures preserve world/output, including notification history. */
+int fist_mission_world_discover_targets(fist_mission_world *world, const fist_klc_image *height,
+                                        fist_target_discovery_request request,
+                                        fist_target_discovery_result *out);
 
 void fist_mission_world_reset(fist_mission_world *world);
 

@@ -71,7 +71,7 @@ static int priority_mode(const fist_vehicle_state *actor, uint16_t behavior) {
 }
 
 static int automatic_mode(fist_vehicle_state *actor, const fist_order_descriptor *descriptor,
-                          fist_random *random, uint16_t phase_random) {
+                          fist_random *random, uint16_t phase_random, bool has_target) {
     const uint16_t behavior = descriptor->words[0];
     const int priority = priority_mode(actor, behavior);
     if (priority >= 0) {
@@ -88,7 +88,7 @@ static int automatic_mode(fist_vehicle_state *actor, const fist_order_descriptor
             return 0;
         }
     }
-    if (actor->command.target_reference != 0) {
+    if (has_target) {
         const uint16_t waypoint_mode = descriptor->words[1];
         uint16_t rolled = 0;
         if (waypoint_mode >= COMMAND_CHOICES || fist_random_next(random, &rolled) != 0) {
@@ -125,10 +125,17 @@ int fist_mission_world_select_command(fist_mission_world *world, fist_command_se
     }
     fist_vehicle_state next = *actor;
     fist_random random = world->random;
+    bool has_target = next.command.target_reference != 0;
+    if (world->preparation.prepared != 0) {
+        has_target = fist_object_pool_reference_is_live(&world->pool, next.command.target) != 0;
+        if (!has_target) {
+            next.command.target = (fist_object_reference){0};
+        }
+    }
     if ((next.control_flags & AUTOMATIC) == 0) {
         next.command.mode = next.member == 0 ? MODE_LEADER : MODE_FOLLOWER;
     } else if (automatic_mode(&next, &world->orders.descriptors[next.platoon], &random,
-                              request.phase_random) != 0) {
+                              request.phase_random, has_target) != 0) {
         return -1;
     }
     *actor = next;

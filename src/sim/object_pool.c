@@ -7,6 +7,12 @@
 _Static_assert(FIST_POOL_SHORT_SLOTS + FIST_POOL_EXTENDED_SLOTS == FIST_UNIT_REGISTRY_COUNT,
                "The original object arenas and registry must agree");
 
+/* Identity issuance only, shared by every pool in this process. Transactions
+ * may discard issued IDs; gaps have no gameplay/RNG meaning. Never wrap/reuse.
+ * Keeping issuance outside copied/reset worlds also makes reload invalidate
+ * references without reading an uninitialized destination world. */
+static uint64_t last_lifetime;
+
 static int extended(uint16_t type) {
     return fist_unit_state_size(type) == FIST_UNIT_EXTENDED_SIZE;
 }
@@ -21,7 +27,7 @@ int fist_object_pool_is_valid(const fist_object_pool *pool) {
     uint8_t owners[FIST_UNIT_REGISTRY_COUNT] = {0};
     for (size_t index = 0; index < FIST_UNIT_REGISTRY_COUNT; ++index) {
         const fist_pool_slot *slot = &pool->slots[index];
-        if (slot->used > 1 ||
+        if (slot->used > 1 || (slot->used != 0) != (pool->lifetimes[index] != 0) ||
             (slot->used != 0 && (fist_unit_state_size(slot->type) == 0 ||
                                  extended(slot->type) != (index >= FIST_POOL_SHORT_SLOTS)))) {
             return 0;
@@ -41,6 +47,24 @@ int fist_object_pool_is_valid(const fist_object_pool *pool) {
         }
     }
     return short_count == pool->short_count && extended_count == pool->extended_count;
+}
+
+int fist_object_pool_reference(const fist_object_pool *pool, uint16_t slot,
+                               fist_object_reference *out) {
+    if (!fist_object_pool_is_valid(pool) || out == NULL || slot >= FIST_UNIT_REGISTRY_COUNT) {
+        return -1;
+    }
+    if (pool->slots[slot].used == 0) {
+        return FIST_POOL_UNAVAILABLE;
+    }
+    *out = (fist_object_reference){pool->lifetimes[slot], slot};
+    return FIST_POOL_OK;
+}
+
+int fist_object_pool_reference_is_live(const fist_object_pool *pool,
+                                       fist_object_reference reference) {
+    return fist_object_pool_is_valid(pool) && reference.slot < FIST_UNIT_REGISTRY_COUNT &&
+           reference.lifetime != 0 && pool->lifetimes[reference.slot] == reference.lifetime;
 }
 
 void fist_object_pool_reset(fist_object_pool *pool) {
@@ -101,10 +125,11 @@ static uint16_t free_slot(const fist_object_pool *pool, uint16_t type) {
 
 static int bind_slot(fist_object_pool *pool, fist_pool_import request, fist_pool_allocation *out) {
     const uint16_t slot = free_slot(pool, request.type);
-    if (slot == FIST_POOL_NO_SLOT) {
+    if (slot == FIST_POOL_NO_SLOT || last_lifetime == UINT64_MAX) {
         return FIST_POOL_UNAVAILABLE;
     }
     pool->slots[slot] = (fist_pool_slot){request.type, 1};
+    pool->lifetimes[slot] = ++last_lifetime;
     pool->registry[request.registry_index] = (fist_pool_entry){slot, request.value};
     if (extended(request.type) != 0) {
         ++pool->extended_count;
@@ -162,6 +187,7 @@ int fist_object_pool_release(fist_object_pool *pool, uint16_t registry_index,
         --pool->short_count;
     }
     *slot = (fist_pool_slot){0};
+    pool->lifetimes[entry->slot] = 0;
     entry->slot = FIST_POOL_NO_SLOT;
     entry->value = (uint16_t)(entry->value - 1);
     return FIST_POOL_OK;

@@ -29,6 +29,8 @@ typedef struct {
 typedef struct {
     fist_pool_slot slots[FIST_UNIT_REGISTRY_COUNT];
     fist_pool_entry registry[FIST_UNIT_REGISTRY_COUNT];
+    /* Opaque physical allocation lifetimes, independent of saved registry values. */
+    uint64_t lifetimes[FIST_UNIT_REGISTRY_COUNT];
     uint16_t short_count;
     uint16_t extended_count;
 } fist_object_pool;
@@ -51,6 +53,20 @@ typedef struct {
     uint16_t value;
 } fist_pool_allocation;
 
+typedef struct {
+    uint64_t lifetime;
+    uint16_t slot;
+} fist_object_reference;
+
+/* Capture a live physical object, including an orphan. Empty is {0}.
+ * Release/reset invalidate references; reuse and reload cannot revive them.
+ * In-place retype preserves the reference. IDs are process-local, never saved
+ * gameplay data; simulation/pool mutations have one writer. Failure preserves out. */
+int fist_object_pool_reference(const fist_object_pool *pool, uint16_t slot,
+                               fist_object_reference *out);
+int fist_object_pool_reference_is_live(const fist_object_pool *pool,
+                                       fist_object_reference reference);
+
 /* Metadata/identity owner only; typed object payloads belong to their simulation
  * owners. Reset invalidates every allocation, including orphaned imports. */
 void fist_object_pool_reset(fist_object_pool *pool);
@@ -63,7 +79,8 @@ int fist_object_pool_is_valid(const fist_object_pool *pool);
  * Orphans/unused slots return UNAVAILABLE; failure preserves output. */
 int fist_object_pool_find(const fist_object_pool *pool, uint16_t slot, fist_pool_allocation *out);
 
-/* Validate the exact current allocation identity, without changing it. */
+/* Validate current saved-format binding metadata, without changing it.
+ * This tuple can repeat after release/reuse; use references for retained targets. */
 int fist_object_pool_is_current(const fist_object_pool *pool, fist_pool_allocation allocation);
 
 /* Original in-place type-19 conversion keeps its arena and binding occupied.

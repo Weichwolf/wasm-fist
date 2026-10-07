@@ -13,7 +13,6 @@
 #include "sim/smoke.h"
 #include "sim/tree.h"
 #include "sim/vehicle_damage.h"
-#include "sim/vehicle_state.h"
 #include "sim/world.h"
 
 #include <stddef.h>
@@ -42,58 +41,13 @@ static int collision_views(const fist_mission_world *world, fist_collision_body 
         if (world->pool.slots[slot].used == 0) {
             continue;
         }
-        const uint16_t type = world->pool.slots[slot].type;
-        const fist_mission_object *object = &world->objects[slot];
-        if (type < FIST_UNIT_GROUND_VEHICLE_COUNT || type == RETIRING) {
-            const fist_vehicle_state *actor = &object->vehicle;
-            if (actor->type != type) {
-                return -1;
-            }
-            ground[slot] = (fist_object_pose){actor->map_x, actor->map_y, actor->altitude,
-                                              actor->turret.heading};
-            bodies[slot] = (fist_collision_body){&ground[slot], actor->projection_scale,
-                                                 actor->object_flags, actor->drive.motion_flags};
-            continue;
+        fist_mission_view view = {0};
+        const int status = fist_mission_world_view(world, (uint16_t)slot, &ground[slot], &view);
+        if (status != 0) {
+            return status;
         }
-        switch (type) {
-        case FIRST_AIRCRAFT:
-        case SECOND_AIRCRAFT:
-        case TARGET:
-        case ARTILLERY:
-            bodies[slot] =
-                (fist_collision_body){&object->other.pose, object->other.projection_scale,
-                                      object->other.flags, object->other.mode};
-            break;
-        case EXPLOSION:
-            bodies[slot] =
-                (fist_collision_body){&object->explosion.pose, object->explosion.projection_scale,
-                                      object->explosion.flags, object->explosion.frame};
-            break;
-        case SHELL:
-            bodies[slot] = (fist_collision_body){&object->projectile.pose, 0,
-                                                 object->projectile.flags, object->projectile.mode};
-            break;
-        case SMOKE:
-            bodies[slot] =
-                (fist_collision_body){&object->smoke.pose, object->smoke.projection_scale,
-                                      object->smoke.flags, object->smoke.animation_frame};
-            break;
-        case MUZZLE:
-            bodies[slot] =
-                (fist_collision_body){&object->muzzle.pose, object->muzzle.projection_scale,
-                                      object->muzzle.flags, object->muzzle.animation_frame};
-            break;
-        case TREE:
-            bodies[slot] = (fist_collision_body){&object->tree.pose, object->tree.projection_scale,
-                                                 object->tree.flags, object->tree.variant};
-            break;
-        case WRECK:
-            bodies[slot] = (fist_collision_body){
-                &object->wreck.pose, object->wreck.projection_scale, object->wreck.flags, 0};
-            break;
-        default:
-            return FIST_MISSION_UNSUPPORTED;
-        }
+        bodies[slot] =
+            (fist_collision_body){view.pose, view.projection_scale, view.flags, view.mode};
     }
     return 0;
 }

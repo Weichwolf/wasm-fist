@@ -35,7 +35,11 @@ Release detaches the current registry binding, frees its physical slot and decre
 saved word modulo 65536. A remaining nonzero word keeps that vacant registry entry reserved;
 the next dynamic allocation skips it. Zero therefore wraps to 65535 on release. The historical
 immutable-definition field named `generation` retains this saved value; it is not a monotonic
-generation ID and cannot alone prove that a reused reference remains valid.
+generation ID and cannot alone prove that a reused reference remains valid. Runtime references
+therefore use a physical slot plus an opaque process-issued lifetime. Allocation/import gets
+a fresh lifetime; release/reset invalidates it; in-place retype and binding orphaning retain
+it. The immediate allocation tuple still identifies current saved-format metadata, not an
+allocation lifetime. See docs/target-discovery.md for the reaching alias proof and consumers.
 
 Low-priority allocation uses the original `b1d6` admission gate: a short-object count of 120
 or greater rejects the request before dispatch to either type class. Normal allocation can

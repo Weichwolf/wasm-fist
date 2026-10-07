@@ -51,7 +51,7 @@ frozen reconstruction, not rewrite completion.
 | 0090 | Complete all-47 saved restoration and shared mission preparation before player control delivered; full original/reset/RNG/corpus/build/style/memory and three real native/browser scene gates pass. Full command/battle/PCM remain open. |
 | 0091 | Complete shared terrain visibility using the existing installed-height owner delivered; both-target original/corpus/full-build/style/memory and current SDL/browser gates pass. Runtime aiming/target discovery and full 0081 remain open. |
 | 0092 | Complete shared directional target proximity delivered; actual original aim/visibility/scan proves its different nearest target. Both-target original/corpus/build/style/memory gates pass; runtime identities/full discovery and 0081 remain open. |
-| 0093 | Active complete target discovery and runtime lifetime ownership. Original aim/selection/secondary/old-target/request and all-47 prepared-world evidence recovered; consuming C and the proved release/reuse repair remain open. |
+| 0093 | Complete shared target discovery, physical reference lifetimes and logical voice admission delivered. Both-target original/all-47 prepared-world/release-reuse/build/style/memory and real scene gates pass; full 0081, target acquisition and living battle/PCM remain open. |
 | 0042 | Menus, settings, campaign/profile progression and persistent save/load. |
 | 0043 | All missions/maps/vehicles, AI, combat, objectives and resolved outcomes. |
 | 0044 | Keyboard/mouse/joystick, devices, audio timing and link behavior on both platforms. |

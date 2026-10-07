@@ -11,6 +11,7 @@ from original_mission_ready_oracle import OriginalMissionReadyOracle
 from original_object_pool_oracle import REGISTRY
 from original_unit_oracle import DGROUP, SERVICE_CS
 from original_visibility_oracle import OriginalVisibilityOracle
+from target_discovery_contract import TABLES
 
 
 def signed(value):
@@ -21,14 +22,11 @@ class OriginalTargetDiscoveryOracle(OriginalMissionReadyOracle):
     def __init__(self):
         super().__init__()
         self.visibility = OriginalVisibilityOracle()
-        self.preferences = (
-            (0, 0, 0, 0, 99, 1, 1, *([99] * 19), 2, 2),
-            (1, 1, 1, 1, 99, 0, 0, *([99] * 19), 2, 2))
-        self.target_heights = (1792, 2048, 1792, 1536, 0, 256, 256, *([0] * 20), 2048)
-        self.source_heights = (2048, 2560, 2048, 1920, *([0] * 22), 1536, 0)
-        self.variant_heights = (3840, 4352, 2560, 3072)
-        self.ranges = ((1000, 1000, 1000, 1000), (150, 150, 150, 150),
-                       (625, 625, 450, 450))
+        self.preferences = TABLES.preferences
+        self.target_heights = TABLES.target_heights
+        self.source_heights = TABLES.source_heights
+        self.variant_heights = TABLES.variant_heights
+        self.ranges = TABLES.ranges
         if (struct.unpack_from('<4H', self.image, DGROUP + 0x989c) !=
                 (0x98a4, 0x98c0, 0x98a4, 0x98c0)):
             raise AssertionError('Original ground preference selection differs')

@@ -23,12 +23,9 @@ distance resets retaining pointers also require the complete original branch con
 
 ## Next
 
-Implement consuming runtime reference lifetime ownership and full discovery, retaining original
-saved-state tests and the current physical pool/import/retype/release semantics. Cover same-type
-reuse, orphan targets, reset/reload and stale references. Share read-only object projections and
-notification/device ownership rather than duplicate payload dispatch or cooldown state.
-Regress complete native/WASM worlds, current timed control and scenes; keep PCM playback an
-explicit undelivered consumer until it actually exists. Return to the full 0081 callback bank.
+Return to the full 0081 callback bank from the prepared canonical world. Keep target
+acquisition, living dispatch and PCM playback explicit
+undelivered consumers until they actually exist; do not wire this child as a partial bank.
 
 ## Accept
 
@@ -73,6 +70,56 @@ preview binaries are byte-identical to accepted 0092/0091; existing scene eviden
 applicable without a new rendering claim. Compact proof/reproduction/source/artifact hashes
 are retained under /tmp/wasm-fist-0093-review; obsolete raw logs are removed after acceptance.
 
-This is verified original research and a complete reusable observer, not C acceptance of this
+This earlier checkpoint is verified original research and a reusable observer, not C acceptance of this
 WI. The consuming lifetime owner, full shared discovery, parent bank, PCM and playable battle
 remain open. No partial callback is installed; final complete independent WASM streak is zero.
+
+## Consuming C implementation
+
+target_discovery.c implements the complete scan using existing installed-height/proximity/
+bearing owners. mission_view.c shares borrowed payload projection with ordered collision and
+preserves actual projectile pose identity. All 28 class/variant query projections are explicit;
+existing undelivered live methods are not represented by stubs. Actual canonical restoration
+and preparation are compared against original occupancy, registry, pose/flags/mode, command
+heading/count and RNG before each all-47 query.
+
+object_pool.c owns process-issued 64-bit physical lifetimes separately from saved binding
+metadata. Release/reset invalidate references; retype/orphaning preserve them; reuse/reload
+cannot revive an old target. Identity gaps from discarded transactions have no saved/RNG
+meaning. Reaching tests consume same-type/different-type release/reuse through discovery and
+prepared command selection, checking exact conditional RNG and the saved-word separation.
+
+Ground state owns runtime target/candidate and original secondary heading/count. Discovery
+clears stale old references, retains the original live-reference clearing rule and publishes
+the candidate without silently installing a target. voice.c supplies one reusable logical
+notification admission/cooldown owner in the canonical world. Its request is observable;
+fire/damage/device/PCM consumption is separate remaining work.
+
+## Verified consuming discovery gates
+
+Required production native and WASM comparisons pass five top-level groups and seven nested
+original groups, zero skips, in 451.662 and 484.810 seconds. Each target emits 11825 complete
+C scan results in 608 batches, including 3840 scans through actual all-47 C loaders/preparers
+on four details. Both normalize to SHA-256 a9a83b333632346161b828d85ab9489d3043078f6fa027f8f5e233cd13be8a10.
+The original observer still executes 10230 complete scans, 78461 real PM transfers and 20
+admitted requests; complete original memory/return/RNG preservation remains checked.
+
+The same complete native gate passes with address/undefined-behavior sanitizers, leak detection
+and halt-on-error, in 467.564 seconds, zero skips and the same complete output hash. All 86
+owned C translation units pass strict LLVM 19.1.7 format/tidy without weakened checks. A later
+header-only return-status comment correction also passes strict formatting; no behavior changes.
+
+Actual isolated TRAIN1 SDL and Chromium scenes pass complete frame publication, held movement/
+steering/turret input, pause, weapon selection/reload, focus loss and shutdown. Browser startup
+failure also releases its worker pool. Both after images were viewed: textured terrain,
+vehicle and paused weapon HUD are present. An earlier browser deadline and SIGTERM-terminated
+WASM comparison are excluded; unchanged complete retries pass. Compact proof and reviewed
+images are retained under /tmp/wasm-fist-0093-c-review; obsolete logs, completed sanitizer
+builds, isolated assets/browser copies and intermediate captures are removed.
+
+The complete general regression gate also passes: 39 native CTests, all 37 WASM Python suites
+and both WASM pixel probes. Regular suites retain their explicit optional-original skips;
+the required complete discovery/original/memory gates above have zero skips. All 419 original
+files, frozen ghidra/tag and pinned softgl remain unchanged. This closes the bounded child.
+First playable mission, target acquisition/full parent bank, living battle/device/
+PCM/outcomes and the independent complete WASM streak remain open; the streak is zero.

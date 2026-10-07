@@ -1,9 +1,19 @@
 """Semantic discovery expectation, checked against complete original returns."""
 import struct
+import types
 
 from test_geometry import measure
 from test_proximity import proximity
 from test_visibility import visible
+
+
+TABLES = types.SimpleNamespace(
+    preferences=((0, 0, 0, 0, 99, 1, 1, *([99] * 19), 2, 2),
+                 (1, 1, 1, 1, 99, 0, 0, *([99] * 19), 2, 2)),
+    target_heights=(1792, 2048, 1792, 1536, 0, 256, 256, *([0] * 20), 2048),
+    source_heights=(2048, 2560, 2048, 1920, *([0] * 22), 1536, 0),
+    variant_heights=(3840, 4352, 2560, 3072),
+    ranges=((1000, 1000, 1000, 1000), (150, 150, 150, 150), (625, 625, 450, 450)))
 
 
 def discovery(owner, actor_pointer, actor, registry, raw_objects, link, side, pixels,

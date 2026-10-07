@@ -1,20 +1,21 @@
 # Ground command phase: recovered input and pending consumption
 
-Active WI 0093 records complete [target discovery and lifetime evidence](target-discovery.md).
+Closed WI 0093 supplies complete shared [target discovery and reference lifetimes](target-discovery.md).
 Actual full b011 returns preserve branch-specific secondary operands and old-target rules.
 Real release/reallocation repeats even the complete type/slot/registry/value tuple, silently
-retargeting a stale physical pointer. Canonical C discovery must consume an actual lifetime
-owner rather than the repeating saved registry word. Full 0081 and playable battle remain open.
+retargeting a stale physical pointer. Canonical C now consumes process-issued physical
+lifetimes, repairs release/reuse aliases and publishes candidates and admitted logical voice
+requests. Full 0081, target acquisition and playable battle remain open.
 
 Closed WI 0092 supplies complete [target proximity](target-proximity.md), the a17e/08e8 service
 actually called by b011. Its directional max-plus-half estimate differs from navigation's
 0541 distance; a complete original scan with real aim/visibility proves the different winner.
-Use candidate-to-actor argument order. Full runtime identities/discovery and 0081 remain open.
+Use candidate-to-actor argument order, as consumed by 0093. Full 0081 remains open.
 
 Closed WI 0091 supplies complete shared [terrain visibility](terrain-visibility.md), the
 protected-mode op-58 prerequisite for b011 discovery. It starts at effective aim positions
 and reuses the installed ground plane/sampler. Complete DOS aim offsets, runtime target
-identities/lifetimes and registry discovery remain to be consumed under 0081; no partial
+identities/lifetimes and registry discovery are consumed by 0093; no partial
 parent bank or living-battle acceptance follows from this numerical service.
 
 WI 0081 remains open. The native/WASM controller currently consumes motion, reload, position
@@ -26,8 +27,8 @@ the complete route/formation goal return. These milestones do not replace full 0
 Closed WI 0088 proves the later [original mission-ready reset](mission-ready-boundary.md):
 saved target clearing, class reset, temporary registry release and tree RNG. TRAIN1 adds 98
 RNG calls. WI 0090 supplies the separate shared C preparation and canonical player-start
-consumer. The standalone saved-loader/prefix remains an earlier declared boundary; target
-discovery and the complete command/class caller still require actual runtime identities.
+consumer. The standalone saved-loader/prefix remains an earlier declared boundary. Complete
+command/class callers must consume 0093's runtime references rather than saved near words.
 
 ## Original phase and callback banks
 

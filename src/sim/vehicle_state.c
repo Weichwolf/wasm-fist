@@ -1,4 +1,5 @@
 #include "sim/vehicle_state.h"
+#include "sim/object_pool.h"
 
 #include "assets/bytes.h"
 #include "assets/units.h"
@@ -125,6 +126,8 @@ int fist_vehicle_restore(const fist_unit_definition *definition, fist_vehicle_st
         MANEUVER = 69,
         TARGET_REFERENCE = 151,
         CANDIDATE_REFERENCE = 157,
+        SECONDARY_HEADING = 142,
+        DISCOVERY_COUNT = 148,
         RESET_STATE = 54,
         GOAL = 73,
         RANGE = 83,
@@ -173,6 +176,8 @@ int fist_vehicle_restore(const fist_unit_definition *definition, fist_vehicle_st
                     .maneuver = raw[MANEUVER],
                     .target_reference = fist_read_u16le(raw + TARGET_REFERENCE),
                     .candidate_reference = fist_read_u16le(raw + CANDIDATE_REFERENCE),
+                    .secondary_heading = fist_read_u16le(raw + SECONDARY_HEADING),
+                    .discovery_count = raw[DISCOVERY_COUNT],
                     .goal = {fist_read_i32le(raw + GOAL), fist_read_i32le(raw + GOAL + 4)},
                     .range = fist_read_u16le(raw + RANGE),
                     .heading_average = fist_read_u16le(raw + HEADING_AVERAGE)},
@@ -295,6 +300,8 @@ int fist_vehicle_prepare(fist_vehicle_state *vehicle, uint8_t link_mode) {
     vehicle->camera_height = parameters->camera_height;
     vehicle->command.target_reference = 0;
     vehicle->command.candidate_reference = 0;
+    vehicle->command.target = (fist_object_reference){0};
+    vehicle->command.candidate = (fist_object_reference){0};
     vehicle->control_flags |= AUTOMATIC_FLAG;
     vehicle->reset_state = 0;
     for (size_t index = 0; index < parameters->component_size; ++index) {

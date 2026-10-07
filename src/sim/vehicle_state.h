@@ -3,6 +3,7 @@
 
 #include "assets/orders.h"
 #include "assets/units.h"
+#include "sim/object_pool.h"
 #include "sim/random.h"
 
 #include <stddef.h>
@@ -76,6 +77,11 @@ typedef struct {
     /* Original +9d candidate reference, cleared by mission preparation.
      * Retained saved words are not runtime allocation identities. */
     uint16_t candidate_reference;
+    /* Runtime identities after readiness; saved near words above stay opaque. */
+    fist_object_reference target;
+    fist_object_reference candidate;
+    uint16_t secondary_heading;
+    uint8_t discovery_count;
     /* Original +49/+4d navigation goal. Validity remains control bit 2. */
     fist_order_waypoint goal;
     /* Original +53 unsigned navigation range; the bearing callback produces it

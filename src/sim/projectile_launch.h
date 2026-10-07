@@ -52,6 +52,7 @@ typedef struct {
     uint16_t animation_counter;
     uint8_t animation_frame;
     uint8_t flags;
+    uint8_t secondary_flags;
 } fist_muzzle_smoke;
 
 /* Restore every owned type-18 field from a complete saved short record.

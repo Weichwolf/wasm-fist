@@ -159,9 +159,15 @@ retain actual candidate-to-actor argument order when consuming full discovery. R
 identities/lifetimes, priority/secondary/old-target branches, requests and full command/class
 consumption remain in this unchanged Contract/Accept; no partial parent bank is installed.
 
-Active 0093 now owns the consuming target-discovery/lifetime work. Its original-only observer
+Closed 0093 now supplies consuming shared target discovery and physical runtime lifetimes. Its observer
 executes complete b011, actual class/variant aim wrappers, real PM visibility, secondary bearing
 and logical request admission. Reaching release/reallocation repeats type/slot/registry/value
 while an old target silently addresses a successor. See docs/target-discovery.md. The complete
-original checkpoint is input for the necessary runtime lifetime repair and shared C discovery;
-it does not advance the C living prefix or satisfy this parent's unchanged Contract/Accept.
+original checkpoint backs the actual runtime repair and shared C discovery. Both targets pass
+11825 complete C scans, including 3840 through actual all-47 C restoration/preparation on four
+details, with complete original returns, exact actor/request state, runtime reuse/retype/orphan/
+reset consumption, full builds/style/memory and current SDL/browser scene gates. The prepared
+mode selector now consumes live references and retains conditional RNG. This prerequisite
+does not install a partial heading bank, perform target acquisition, advance the living prefix
+or satisfy this parent's unchanged Contract/Accept. Continue the complete parent callback from
+the canonical prepared world; battle/device/PCM and the final independent streak remain open.

@@ -50,7 +50,7 @@ static fist_projectile initialize_projectile(const fist_vehicle_state *vehicle,
 
 int fist_muzzle_smoke_restore(const fist_unit_definition *definition,
                               fist_pool_allocation allocation, fist_muzzle_smoke *out) {
-    enum { SCALE = 20, FLAGS = 22, FRAME = 25, COUNTER = 26 };
+    enum { SCALE = 20, FLAGS = 22, SECONDARY = 23, FRAME = 25, COUNTER = 26 };
     if (definition == NULL || out == NULL || definition->type != MUZZLE_TYPE ||
         allocation.type != MUZZLE_TYPE || allocation.slot >= FIST_POOL_SHORT_SLOTS ||
         allocation.registry_index != definition->registry_index ||
@@ -67,7 +67,8 @@ int fist_muzzle_smoke_restore(const fist_unit_definition *definition,
         .projection_scale = fist_read_u16le(raw + SCALE),
         .animation_counter = fist_read_u16le(raw + COUNTER),
         .animation_frame = raw[FRAME],
-        .flags = raw[FLAGS]};
+        .flags = raw[FLAGS],
+        .secondary_flags = raw[SECONDARY]};
     return 0;
 }
 

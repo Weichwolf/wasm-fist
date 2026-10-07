@@ -54,6 +54,9 @@ class TargetDiscoveryTests(unittest.TestCase):
         actor = objects[150][2]
         return machine, actor, objects
 
+    def begin_corpus_mission(self, name, side):
+        """Override to attach a consuming C loader to the same original boundary."""
+
     def check(self, machine, actor, *, kernel=None, side=512, pixels=None, **inputs):
         actor_raw = self.owner.raw(machine, actor)
         registry = struct.unpack('<364H', machine.mem_read(DGROUP + REGISTRY, 728))[::2]
@@ -275,6 +278,7 @@ class TargetDiscoveryTests(unittest.TestCase):
                 self.assertEqual(installed, side)
                 kernel = self.owner.visibility.prepare(side, pixels)
                 for name, data in missions:
+                    self.begin_corpus_mission(name, side)
                     records = records_from_scenario(data)
                     machine, objects = self.owner.prepare_saved(
                         records, SEEDS, 3, 0, scenario_order_blocks(data))

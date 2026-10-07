@@ -48,6 +48,7 @@ typedef struct {
     uint8_t period;
     uint8_t countdown;
     uint8_t flags;
+    uint8_t secondary_flags;
 } fist_explosion;
 
 typedef struct {
