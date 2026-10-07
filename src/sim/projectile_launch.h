@@ -26,6 +26,8 @@ enum {
 typedef struct {
     fist_pool_allocation allocation;
     fist_object_pose pose;
+    /* Original +14, zero in the delivered M1 constructor. */
+    uint16_t projection_scale;
     fist_spatial_velocity velocity;
     int16_t speed;
     uint16_t collision_grace;

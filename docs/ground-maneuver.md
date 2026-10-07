@@ -1,8 +1,8 @@
 # Ground obstacle maneuvers and idle turret
 
 Closed WI 0100 proves complete original ae66, af1c/f69:b2a0, b059 and b017. Required full
-original/domain/corpus/parent, retention and every-search-exit gates pass. Shared C consumption
-is open 0101; full 0081 remains open. Frozen image SHA256:
+original/domain/corpus/parent, retention and every-search-exit gates pass. Closed WI 0101 supplies
+complete shared C consumption; full 0081 remains open. Frozen image SHA256:
 `d46f480dd2214b2693b4192a42aa79fb7bffb8d692fd67ddc3d746dfdea9c5e5`.
 
 ## Maneuver state
@@ -10,7 +10,7 @@ is open 0101; full 0081 remains open. Frozen image SHA256:
 ae66 masks saved +45 with 6 and calls four genuine entries: ae7b, aea8, af0b and aea2.
 The original table at ae73 is data, despite the decompiler's spurious executable interpretation.
 Separate saved bytes +46 (remaining maneuver count) and +51 (blocked count) are required;
-both initialization and readiness retain them. C ownership under 0101 remains required.
+both initialization and readiness retain them. Closed 0101 supplies their C ownership.
 
 For state zero, a cleared control bit 8 resets +51 only. Otherwise +51 increments with byte
 wrapping; values below three select state two with count three. Other values decrement +46
@@ -61,6 +61,27 @@ unconditional phase draw before global admission and retains the separate phase 
 Full heading sampling, firing callbacks, selected b152 diagnostics, class/battle and PCM
 remain required before full parent acceptance.
 
+## Shared C ownership
+
+Closed 0101 implements these complete callbacks in `src/sim/ground_maneuver.c` through
+`fist_mission_world_maneuver`, `fist_mission_world_observe_obstacle` and
+`fist_mission_world_idle_turret`. Their required complete gates pass. The command
+owner retains `maneuver_count` (+46) and `blocked_count` (+51); existing selector, turn,
+control word and requested turret offset remain their sole owners.
+
+Prediction borrows current `fist_mission_world_view` bodies and uses shared rotation and
+`fist_planar_distance`, whose quantization/root implementation is the existing geometry
+owner. Type-8 +14 is now retained by its projectile payload; the delivered M1 constructor
+initializes it to zero. Candidate generation, side, target lifetime and logical roster do
+not become extra obstacle filters. All coordinates and byte/word boundaries wrap explicitly.
+
+Maneuvers calculate a local command transaction before publication; invalid used physical
+bodies preserve the complete world. Idle work draws into a local copy of canonical RNG and
+publishes only its state and requested offset after success. Its target-presence gate never
+resolves a physical successor. The tests poison source records and verify every unrelated
+world byte, actual canonical sequences, retention, release/reuse and branch-specific early
+returns. Remaining firing/diagnostics and the complete parent/class scheduler remain open.
+
 ## Verification
 
 The first all-blocked pilot exposed an incorrect bare-0731 interpretation of b112. The model
@@ -102,5 +123,23 @@ this research adds no native/WASM/style/scene/PCM acceptance. Final full-game st
 
 Compact results, source/program/original/reference hashes, commands and exclusions are retained
 in `/tmp/wasm-fist-0100-review/receipt.json`; obsolete owned logs/helpers/runner metadata are
-removed. Open 0101 consumes this complete contract in shared C; full parent/class/battle/PCM
+removed. Closed 0101 consumes this complete contract in shared C; full parent/class/battle/PCM
 and independent complete-game acceptance remain required.
+
+## Shared verification
+
+Closed 0101 passes six required groups plus eight nested original groups without skips on
+both production targets and ASan/UBSan: 954287 complete cases and 19200 sequential actual
+prepared-world callbacks per target. All 47 missions/eight height maps/four details, every
+search exit, full byte/word/RNG domains, retained counters, actual released/reused targets,
+ordered early-hit/type-21 bypasses and atomic used-input failures are covered. Complete
+source records are poisoned; every unrelated world byte is checked. Shared output SHA256:
+`9961628d3ac7d4a14f0364b36b7d26f8003ab782aea9ee5ffb53aeb3203ebeae`.
+
+Strict LLVM 19.1 style, the complete 44-native-CTest/42-WASM-suite/two-Node build, actual
+SDL/Chromium scenes and sanitized SDL all pass. Two after images were visually reviewed.
+An externally terminated partial build is excluded and superseded by the terminal complete
+replay. Compact evidence, exact commands, source/program/corpus/original/reference hashes
+and exclusions live in `/tmp/wasm-fist-0101-review/receipt.json`; obsolete owned artifacts are
+cleaned. Continue af97 under open 0102, then remaining callbacks and full parent/class/battle/
+PCM/outcomes. No complete-game acceptance follows; final WASM streak zero.

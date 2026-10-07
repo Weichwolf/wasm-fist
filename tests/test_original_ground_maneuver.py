@@ -279,6 +279,9 @@ class ManeuverTests(unittest.TestCase):
                     self.owner.reset(machine, pixels, side=side)
                     prepared = bytes(machine.mem_read(DGROUP, 65536))
                     actors = [pointer for _, _, pointer, _ in objects.values() if word(prepared, pointer) < 4]
+                    observer = getattr(self, 'begin_prepared_mission', None)
+                    if observer is not None:
+                        observer(name, side, pixels, machine, objects)
                     local = collections.Counter()
                     for actor in actors:
                         self.check(machine, actor)

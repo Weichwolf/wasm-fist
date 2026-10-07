@@ -161,6 +161,11 @@ fist_spatial_measurement fist_spatial_measure(fist_object_pose source, fist_obje
                                       planar.distance};
 }
 
+uint32_t fist_planar_distance(fist_order_waypoint source, fist_order_waypoint target) {
+    return distance((uint32_t)target.x - (uint32_t)source.x,
+                    (uint32_t)target.y - (uint32_t)source.y);
+}
+
 uint32_t fist_planar_proximity(fist_order_waypoint source, fist_order_waypoint target) {
     const uint32_t delta_x = (uint32_t)target.x - (uint32_t)source.x;
     const uint32_t delta_y = (uint32_t)target.y - (uint32_t)source.y;

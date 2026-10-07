@@ -58,8 +58,9 @@ int fist_mission_world_view(const fist_mission_world *world, uint16_t slot,
         break;
     case SHELL:
         allocation = &object->projectile.allocation;
-        view = (fist_mission_view){&object->projectile.pose, 0, object->projectile.flags,
-                                   object->projectile.secondary_flags, object->projectile.mode};
+        view = (fist_mission_view){&object->projectile.pose, object->projectile.projection_scale,
+                                   object->projectile.flags, object->projectile.secondary_flags,
+                                   object->projectile.mode};
         break;
     case SMOKE:
         allocation = &object->smoke.allocation;

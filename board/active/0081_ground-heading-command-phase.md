@@ -30,8 +30,9 @@ their support. Original observation rejects reserved address-zero/one device sca
 
 Closed 0100 proves complete obstacle maneuver, predictive collision and idle turret returns,
 including the reaching motion producer and genuine parent entries seven, eleven and fifteen.
-Consume its complete contract under open 0101 before remaining firing/diagnostic callbacks and
-full parent/class consumption. This Contract and Accept remain unchanged.
+Closed 0101 supplies its complete shared C consumption. Continue af97 under open 0102,
+then remaining callbacks/selected diagnostics and full parent/class consumption. This
+Contract and Accept remain unchanged.
 
 Reproduce the complete first difference and recover the nested callback plus caller/global
 contract. Add the required saved heading/counter state and connect the shared RNG transaction
@@ -277,3 +278,15 @@ owners are proved. See docs/ground-maneuver.md and closed 0100. Production C/pro
 unchanged from accepted 0099; shared C consumption is open 0101. This parent's Contract/Accept
 remain unchanged. Complete remaining firing/diagnostic callbacks and full heading/counter/RNG
 parent and living class/battle/PCM/outcomes; independent full-game WASM streak zero.
+
+Closed 0101 supplies complete shared obstacle maneuvers, predictive collision and idle turret
+transactions, with retained +46/+51 and canonical actor/view/registry/geometry/rotation/RNG
+ownership. Required native/WASM and ASan/UBSan gates pass without skips: 954287 cases and
+19200 actual prepared-world callbacks per target across all 47 missions/four details; every
+search exit, presence-only release/reuse, initialization/readiness retention, atomic failures
+and unchanged unrelated world bytes are proved. Strict style, complete build and current
+SDL/Chromium/sanitized scenes pass. No partial parent bank is installed. Continue complete
+af97 and genuine entries five/fourteen under open 0102, then ae5c/afa2/b0be, selected b152 and
+full heading/counter/RNG parent/class consumption. This Contract/Accept remain unchanged.
+First playable battle/PCM/outcomes and independent complete-game WASM acceptance remain open;
+final streak zero.

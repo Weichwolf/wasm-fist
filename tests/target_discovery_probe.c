@@ -35,6 +35,9 @@ enum {
     THROTTLE = 8,
     DISCOVER = 16,
     PROMOTION = 32,
+    MANEUVER = 64,
+    IDLE_TURRET = 65,
+    MOTION_OBSTACLE = 66,
     ACQUISITION_OPERATIONS = 31,
     ROSTER_BYTES = FIST_UNIT_ROSTER_COUNT * 2,
     MAX_PROMOTIONS = 4,
@@ -143,7 +146,8 @@ static int decode_case(uint8_t *data, size_t size, size_t *cursor, query_case *v
         value->behavior = fist_read_u16le(data + position + 1);
         value->candidate = fist_read_u16le(data + position + 3);
         value->requested_candidate = fist_read_u16le(data + position + REQUESTED_CANDIDATE_OFFSET);
-        if (value->operation > ACQUISITION_OPERATIONS && value->operation != PROMOTION) {
+        if (value->operation > ACQUISITION_OPERATIONS && value->operation != PROMOTION &&
+            (value->operation < MANEUVER || value->operation > MOTION_OBSTACLE)) {
             return -1;
         }
         position += ACQUISITION_HEADER;
@@ -276,6 +280,7 @@ static int restore_view(fist_mission_world *world, uint16_t slot, const uint8_t 
         break;
     case SHELL:
         object->projectile = (fist_projectile){.allocation = allocation,
+                                               .projection_scale = scale,
                                                .pose = pose,
                                                .flags = raw[FLAGS],
                                                .secondary_flags = raw[SECONDARY],
@@ -987,6 +992,327 @@ static int promotion_rejects(fist_mission_world *world, fist_mission_world *befo
                : -1;
 }
 
+static int checked_maneuver(fist_mission_world *world, fist_mission_world *before,
+                            uint8_t operation, fist_obstacle_observation request, int *observed) {
+    const uint16_t slot = request.slot;
+    fist_probe_capture(world, sizeof(*world), before);
+    int status = -1;
+    if (operation == MANEUVER) {
+        status = fist_mission_world_maneuver(world, slot, request.coarse);
+    } else if (operation == IDLE_TURRET) {
+        status = fist_mission_world_idle_turret(world, slot);
+    } else if (operation == MOTION_OBSTACLE) {
+        status = fist_mission_world_observe_obstacle(world, request);
+    }
+    if (status == 0) {
+        const fist_vehicle_state *actor = &world->objects[slot].vehicle;
+        fist_vehicle_state *allowed = &before->objects[slot].vehicle;
+        if (operation == MANEUVER) {
+            allowed->command.maneuver = actor->command.maneuver;
+            allowed->command.maneuver_count = actor->command.maneuver_count;
+            allowed->command.blocked_count = actor->command.blocked_count;
+            allowed->command.maneuver_heading = actor->command.maneuver_heading;
+        } else if (operation == IDLE_TURRET) {
+            allowed->turret.requested_offset = actor->turret.requested_offset;
+            before->random = world->random;
+        } else {
+            allowed->control_flags = actor->control_flags;
+        }
+    }
+    *observed = status;
+    return (status == 0 || status == -1) && fist_probe_unchanged(world, sizeof(*world), before)
+               ? 0
+               : -1;
+}
+
+static int maneuver_query(fist_mission_world *world, fist_mission_world *before, query_case *value,
+                          bool canonical) {
+    if ((!canonical && install(world, value) != 0) ||
+        (canonical && canonical_boundary(world, value) != 0)) {
+        return -1;
+    }
+    const uint16_t slot = fist_read_u16le(value->header + ACTOR);
+    fist_vehicle_state *actor = &world->objects[slot].vehicle;
+    const uint8_t *raw = value->raw[slot];
+    enum {
+        SAVED_MANEUVER = 69,
+        REMAINING = 70,
+        BLOCKED = 81,
+        MANEUVER_HEADING = 71,
+        REQUESTED_OFFSET = 139,
+        SAVED_TARGET = 151
+    };
+    if (canonical && value->behavior == 1) {
+        if (raw[SAVED_MANEUVER] != 2 || raw[REMAINING] != 1) {
+            return -1;
+        }
+        /* Explicit research stimulus, not an unobserved mission transition. */
+        actor->command.maneuver = 2;
+        actor->command.maneuver_count = 1;
+    }
+    if (canonical && (actor->command.maneuver != raw[SAVED_MANEUVER] ||
+                      actor->command.maneuver_count != raw[REMAINING] ||
+                      actor->command.blocked_count != raw[BLOCKED] ||
+                      actor->command.maneuver_heading != fist_read_u16le(raw + MANEUVER_HEADING) ||
+                      actor->control_flags != fist_read_u16le(raw + CONTROL_FLAGS) ||
+                      actor->turret.requested_offset != fist_read_u16le(raw + REQUESTED_OFFSET))) {
+        return -1;
+    }
+    if (!canonical) {
+        actor->command.target_reference = fist_read_u16le(raw + SAVED_TARGET);
+    }
+    for (size_t index = 0; index < FIST_UNIT_REGISTRY_COUNT; ++index) {
+        if (value->raw[index] != NULL) {
+            poison(value->raw[index], fist_unit_state_size(world->pool.slots[index].type));
+        }
+    }
+    int status = 0;
+    if (checked_maneuver(
+            world, before, value->operation,
+            (fist_obstacle_observation){slot, value->candidate, value->header[COARSE] != 0},
+            &status) != 0) {
+        return -1;
+    }
+    printf("maneuver %d %u %u %u %u %u %u %u", status, actor->command.maneuver,
+           actor->command.maneuver_count, actor->command.blocked_count,
+           actor->command.maneuver_heading, actor->control_flags, actor->turret.requested_offset,
+           world->random.next_stream);
+    for (size_t index = 0; index < FIST_RANDOM_STREAMS; ++index) {
+        printf(" %u", world->random.words[index]);
+    }
+    return putchar('\n') == EOF ? -1 : 0;
+}
+
+typedef struct {
+    uint16_t kind;
+    uint16_t replacement;
+    uint16_t flags;
+    uint8_t cursor;
+    uint8_t link;
+    uint8_t value;
+} maneuver_fixture;
+
+static int maneuver_retention(maneuver_fixture fixture) {
+    const uint16_t kind = fixture.kind;
+    const uint8_t link = fixture.link;
+    const uint8_t value = fixture.value;
+    enum {
+        REMAINING = 70,
+        BLOCKED = 81,
+        HEADING = 71,
+        SELECTOR = 69,
+        BYTE_PATTERN = 17,
+        WORD_PATTERN = 257,
+        HIGH_SEED = 32768
+    };
+    uint8_t raw[FIST_UNIT_EXTENDED_SIZE] = {0};
+    raw[0] = (uint8_t)kind;
+    raw[SELECTOR] = value;
+    raw[REMAINING] = (uint8_t)(value ^ UINT8_MAX);
+    raw[BLOCKED] = (uint8_t)(value * BYTE_PATTERN);
+    raw[HEADING] = value;
+    raw[HEADING + 1] = value;
+    const fist_unit_definition definition = {.type = kind, .snapshot = {raw, sizeof(raw)}};
+    fist_random random = {.words = {1, 2, HIGH_SEED, UINT16_MAX},
+                          .next_stream = value % FIST_RANDOM_STREAMS};
+    fist_vehicle_state actor = {0};
+    if (fist_vehicle_initialize(&definition, &random, link, &actor) != 0) {
+        return -1;
+    }
+    fist_random retained;
+    fist_probe_capture(&random, sizeof(random), &retained);
+    poison(raw, sizeof(raw));
+    for (unsigned stage = 0; stage < 2; ++stage) {
+        if (actor.command.maneuver != value ||
+            actor.command.maneuver_count != (uint8_t)(value ^ UINT8_MAX) ||
+            actor.command.blocked_count != (uint8_t)(value * BYTE_PATTERN) ||
+            actor.command.maneuver_heading != (uint16_t)(value * WORD_PATTERN) ||
+            (stage == 0 && fist_vehicle_prepare(&actor, link) != 0) ||
+            !fist_probe_unchanged(&random, sizeof(random), &retained)) {
+            return -1;
+        }
+    }
+    return 0;
+}
+
+static int maneuver_presence(fist_mission_world *world, fist_mission_world *before,
+                             maneuver_fixture fixture) {
+    enum { IDLE_SECOND_DRAW_SEED = 132, IDLE_SECOND_OFFSET = 57344 };
+    const uint16_t kind = fixture.kind;
+    const uint16_t replacement = fixture.replacement;
+    const uint16_t flags = fixture.flags;
+    const uint8_t cursor = fixture.cursor;
+    fist_mission_world_reset(world);
+    fist_pool_allocation binding = {0};
+    fist_pool_allocation target = {0};
+    if (fist_object_pool_allocate(&world->pool, (fist_pool_request){kind, 0}, &binding) != 0 ||
+        fist_object_pool_allocate(&world->pool, (fist_pool_request){replacement, 0}, &target) !=
+            0) {
+        return -1;
+    }
+    fist_vehicle_state *actor = &world->objects[binding.slot].vehicle;
+    *actor = (fist_vehicle_state){.type = kind,
+                                  .component_size = fist_vehicle_component_size(kind),
+                                  .control_flags = flags,
+                                  .turret = {.requested_offset = UINT16_MAX}};
+    if (fist_object_pool_reference(&world->pool, target.slot, &actor->command.target) != 0) {
+        return -1;
+    }
+    const fist_object_reference retained = actor->command.target;
+    world->random.next_stream = UINT8_MAX;
+    for (unsigned stage = 0; stage < 3; ++stage) {
+        fist_pool_allocation result = {0};
+        if ((stage == 1 &&
+             fist_object_pool_release(&world->pool, target.registry_index, &result) != 0) ||
+            (stage == 2 && (fist_object_pool_allocate(
+                                &world->pool, (fist_pool_request){replacement, 0}, &result) != 0 ||
+                            result.slot != target.slot ||
+                            fist_object_pool_reference_is_live(&world->pool, retained)))) {
+            return -1;
+        }
+        fist_probe_capture(world, sizeof(*world), before);
+        if (fist_mission_world_idle_turret(world, binding.slot) != 0 ||
+            !fist_probe_unchanged(world, sizeof(*world), before)) {
+            return -1;
+        }
+    }
+    actor->command.target = (fist_object_reference){0};
+    int status = 0;
+    if (checked_maneuver(world, before, IDLE_TURRET,
+                         (fist_obstacle_observation){binding.slot, FIST_POOL_NO_SLOT, false},
+                         &status) != 0 ||
+        status != ((flags & 4U) != 0 ? 0 : -1)) {
+        return -1;
+    }
+    actor->command.target_reference = UINT16_MAX;
+    fist_probe_capture(world, sizeof(*world), before);
+    if (fist_mission_world_idle_turret(world, binding.slot) != 0 ||
+        !fist_probe_unchanged(world, sizeof(*world), before)) {
+        return -1;
+    }
+    actor->command.target_reference = 0;
+    world->random.next_stream = cursor;
+    world->random.words[cursor] =
+        IDLE_SECOND_DRAW_SEED; /* Next output 65 enters the second-draw branch. */
+    world->random.words[(cursor + 1U) % FIST_RANDOM_STREAMS] = 2;
+    if (checked_maneuver(world, before, IDLE_TURRET,
+                         (fist_obstacle_observation){binding.slot, FIST_POOL_NO_SLOT, false},
+                         &status) != 0 ||
+        status != 0 ||
+        actor->turret.requested_offset != ((flags & 4U) != 0 ? UINT16_MAX : IDLE_SECOND_OFFSET)) {
+        return -1;
+    }
+    actor->command.maneuver = 2;
+    actor->command.maneuver_count = 1;
+    world->objects[target.slot].vehicle.type = FIST_UNIT_TYPE_COUNT;
+    if (checked_maneuver(world, before, MANEUVER,
+                         (fist_obstacle_observation){binding.slot, target.slot, false},
+                         &status) != 0 ||
+        status != -1 ||
+        checked_maneuver(world, before, MOTION_OBSTACLE,
+                         (fist_obstacle_observation){binding.slot, target.slot, false},
+                         &status) != 0 ||
+        status != -1) {
+        return -1;
+    }
+    actor->command.maneuver_count = 2;
+    if (checked_maneuver(world, before, MANEUVER,
+                         (fist_obstacle_observation){binding.slot, target.slot, false},
+                         &status) != 0 ||
+        status != 0) {
+        return -1;
+    }
+    return 0;
+}
+
+static int maneuver_order_contract(fist_mission_world *world, fist_mission_world *before) {
+    enum { BODY_DISTANCE = 3000, BODY_SCALE = 1024, COLLIDABLE = 64, EXHAUSTED_TURN = 54616 };
+    fist_mission_world_reset(world);
+    fist_pool_allocation actor_binding = {0};
+    fist_pool_allocation first = {0};
+    fist_pool_allocation later = {0};
+    if (fist_object_pool_allocate(&world->pool, (fist_pool_request){0, 0}, &actor_binding) != 0 ||
+        fist_object_pool_allocate(&world->pool, (fist_pool_request){TARGET, 0}, &first) != 0 ||
+        fist_object_pool_allocate(&world->pool, (fist_pool_request){ARTILLERY, 0}, &later) != 0) {
+        return -1;
+    }
+    fist_vehicle_state *actor = &world->objects[actor_binding.slot].vehicle;
+    *actor = (fist_vehicle_state){.type = 0,
+                                  .component_size = fist_vehicle_component_size(0),
+                                  .projection_scale = BODY_SCALE,
+                                  .command = {.maneuver = 2, .maneuver_count = 1}};
+    world->objects[first.slot].other = (fist_other_actor){.allocation = first,
+                                                          .pose = {.y = BODY_DISTANCE},
+                                                          .projection_scale = BODY_SCALE,
+                                                          .flags = COLLIDABLE};
+    world->objects[later.slot].other.allocation.type = FIST_UNIT_TYPE_COUNT;
+    const fist_obstacle_observation request = {actor_binding.slot, FIST_POOL_NO_SLOT, false};
+    int status = 0;
+    if (checked_maneuver(world, before, MANEUVER, request, &status) != 0 || status != 0 ||
+        actor->command.maneuver_heading != EXHAUSTED_TURN) {
+        return -1;
+    }
+    /* An earlier hit does not inspect the invalid later body's payload. */
+    const fist_pool_entry saved = world->pool.registry[first.registry_index];
+    world->pool.registry[first.registry_index] = world->pool.registry[later.registry_index];
+    world->pool.registry[later.registry_index] = saved;
+    actor->command.maneuver = 2;
+    actor->command.maneuver_count = 1;
+    if (checked_maneuver(world, before, MANEUVER, request, &status) != 0 || status != -1) {
+        return -1;
+    }
+    /* The actual type-21 filter precedes all payload reads. */
+    fist_pool_allocation current = {0};
+    if (fist_object_pool_find(&world->pool, later.slot, &current) != 0 ||
+        fist_object_pool_retype(&world->pool, current, TREE, &current) != 0 ||
+        checked_maneuver(world, before, MANEUVER, request, &status) != 0 || status != 0 ||
+        actor->command.maneuver_heading != EXHAUSTED_TURN) {
+        return -1;
+    }
+    actor->component_size = 0;
+    for (unsigned operation = MANEUVER; operation <= MOTION_OBSTACLE; ++operation) {
+        if (checked_maneuver(world, before, (uint8_t)operation, request, &status) != 0 ||
+            status != -1) {
+            return -1;
+        }
+    }
+    return 0;
+}
+
+static int maneuver_contracts(fist_mission_world *world, fist_mission_world *before) {
+    if (fist_mission_world_maneuver(NULL, 0, false) != -1 ||
+        fist_mission_world_idle_turret(NULL, 0) != -1 ||
+        fist_mission_world_observe_obstacle(NULL, (fist_obstacle_observation){0}) != -1) {
+        return -1;
+    }
+    enum { LINKS = 3, BYTE_VALUES = 256, CONTROL_CASES = 2 };
+    for (unsigned context = 0; context < FIST_UNIT_GROUND_VEHICLE_COUNT * LINKS * BYTE_VALUES;
+         ++context) {
+        const maneuver_fixture fixture = {.kind = (uint16_t)(context / (LINKS * BYTE_VALUES)),
+                                          .link = (uint8_t)((context / BYTE_VALUES) % LINKS),
+                                          .value = (uint8_t)context};
+        if (maneuver_retention(fixture) != 0) {
+            return -1;
+        }
+    }
+    for (unsigned context = 0;
+         context < FIST_UNIT_GROUND_VEHICLE_COUNT * FIST_UNIT_GROUND_VEHICLE_COUNT * CONTROL_CASES *
+                       FIST_RANDOM_STREAMS;
+         ++context) {
+        const maneuver_fixture fixture = {
+            .kind = (uint16_t)(context / (FIST_UNIT_GROUND_VEHICLE_COUNT * CONTROL_CASES *
+                                          FIST_RANDOM_STREAMS)),
+            .replacement = (uint16_t)((context / (CONTROL_CASES * FIST_RANDOM_STREAMS)) %
+                                      FIST_UNIT_GROUND_VEHICLE_COUNT),
+            .flags = (uint16_t)(((context / FIST_RANDOM_STREAMS) % CONTROL_CASES) * 4U),
+            .cursor = (uint8_t)(context % FIST_RANDOM_STREAMS)};
+        if (maneuver_presence(world, before, fixture) != 0) {
+            return -1;
+        }
+    }
+    return maneuver_order_contract(world, before);
+}
+
 static int promotion_identity_case(fist_mission_world *world, fist_mission_world *before,
                                    uint16_t kind) {
     fist_mission_world_reset(world);
@@ -1326,6 +1652,9 @@ static uint8_t *prepare_probe(fist_mission_world *world, fist_mission_world *bef
 static int run_query(fist_mission_world *world, fist_mission_world *before,
                      const fist_klc_image *height, query_case *value, bool canonical,
                      bool acquisition, bool promotion) {
+    if (value->operation >= MANEUVER && value->operation <= MOTION_OBSTACLE) {
+        return maneuver_query(world, before, value, canonical);
+    }
     if (promotion) {
         return promotion_query(world, before, value, canonical);
     }
@@ -1333,10 +1662,24 @@ static int run_query(fist_mission_world *world, fist_mission_world *before,
                        : query(world, before, height, value, canonical);
 }
 
+static unsigned probe_mode(int argc, char **argv) {
+    if (argc <= 1) {
+        return 0;
+    }
+    if (strcmp(argv[1], "--acquisition") == 0) {
+        return ACQUIRE;
+    }
+    if (strcmp(argv[1], "--promotion") == 0) {
+        return PROMOTION;
+    }
+    return strcmp(argv[1], "--maneuver") == 0 ? MANEUVER : 0;
+}
+
 int main(int argc, char **argv) {
-    const bool acquisition = argc > 1 && strcmp(argv[1], "--acquisition") == 0;
-    const bool promotion = argc > 1 && strcmp(argv[1], "--promotion") == 0;
-    if (acquisition || promotion) {
+    const unsigned mode = probe_mode(argc, argv);
+    const bool acquisition = mode == ACQUIRE;
+    const bool promotion = mode == PROMOTION;
+    if (mode != 0) {
         --argc;
         ++argv;
     }
@@ -1353,14 +1696,16 @@ int main(int argc, char **argv) {
     fist_klc_image height = {0};
     query_case *cases = NULL;
     uint32_t count = 0;
-    int status = data == NULL || closed != 0
-                     ? -1
-                     : decode(data, size, &height, &cases, &count, acquisition || promotion);
+    int status =
+        data == NULL || closed != 0 ? -1 : decode(data, size, &height, &cases, &count, mode != 0);
     fist_mission_world *world = calloc(1, sizeof(*world));
     fist_mission_world *before = malloc(sizeof(*before));
     uint8_t *pixels = NULL;
     if (world == NULL || before == NULL) {
         status = -1;
+    }
+    if (status == 0 && mode == MANEUVER) {
+        status = maneuver_contracts(world, before);
     }
     if (status == 0) {
         pixels = prepare_probe(world, before, &height, acquisition, promotion);

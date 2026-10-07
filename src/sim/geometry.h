@@ -18,6 +18,10 @@ typedef struct {
 fist_planar_measurement fist_planar_measure(fist_order_waypoint source, fist_order_waypoint target,
                                             bool coarse);
 
+/* Original a19a/0927 distance alone, sharing the measurement's precision and
+ * wrapped coordinates. No angle interpolation or world state is needed. */
+uint32_t fist_planar_distance(fist_order_waypoint source, fist_order_waypoint target);
+
 typedef struct {
     uint16_t heading;
     uint16_t elevation;

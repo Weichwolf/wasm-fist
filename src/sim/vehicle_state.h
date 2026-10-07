@@ -72,6 +72,9 @@ typedef struct {
     /* Original +43/+45 selectors, retained across class initialization. */
     uint8_t mode;
     uint8_t maneuver;
+    /* Original +46/+51, retained by class start and readiness. */
+    uint8_t maneuver_count;
+    uint8_t blocked_count;
     /* Original +44 retreat continuation count and +47 maneuver heading.
      * Class initialization and readiness retain both independently. */
     uint8_t retreat_count;

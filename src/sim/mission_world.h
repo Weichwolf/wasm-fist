@@ -267,4 +267,30 @@ int fist_mission_world_advance_command_route(fist_mission_world *world, uint16_t
  * Invalid used member/index/identity/payload fails before any world mutation. */
 int fist_mission_world_promote_member(fist_mission_world *world, uint16_t slot);
 
+/* Complete ae66/af1c obstacle state/countdown and ordered fifteen-direction
+ * search. Use current physical registry bodies and shared 24-sample prediction;
+ * retain original wrapped counts and the distinct selected turn. No parent
+ * dispatch, orders, RNG, target resolution or motion integration. Used invalid
+ * actor/body metadata fails with the entire world unchanged. */
+int fist_mission_world_maneuver(fist_mission_world *world, uint16_t slot, bool coarse);
+
+/* Complete reaching b059/f69:b2a0: a physically identified candidate supplies
+ * the angular gate and 24-step prediction. Any nonzero maneuver selector uses
+ * hull rotation; zero uses retained velocity. A hit ORs control bit 8. No target
+ * lookup/filter, registry scan or other state mutation; failures are atomic. */
+typedef struct {
+    uint16_t slot;
+    uint16_t candidate;
+    bool coarse;
+} fist_obstacle_observation;
+
+int fist_mission_world_observe_obstacle(fist_mission_world *world,
+                                        fist_obstacle_observation request);
+
+/* Complete b017: control bit 4 or retained target presence returns without
+ * touching target payloads/lifetimes/RNG. Otherwise consume one canonical draw
+ * and only the proved conditional second draw to update requested turret
+ * offset. Existing owners clear targets. Used invalid state fails atomically. */
+int fist_mission_world_idle_turret(fist_mission_world *world, uint16_t slot);
+
 #endif
