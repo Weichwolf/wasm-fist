@@ -1,5 +1,12 @@
 # Ground command phase: recovered input and pending consumption
 
+Active WI 0094 recovers complete [command bearing/range and retreat-cycle state](ground-command-bearing.md).
+Its actual bank puts retreat in mode 4 and approach in mode 6. Both use packed unsigned range,
+and target branches can read unrelated DS bytes at null or steer toward a released/reused
+payload. Retain those reaching repair requirements before implementing the full C callback.
+The original prepared-parent observer executes genuine selection -> goal -> bearing calls;
+shared C callback and complete 0081 acceptance remain pending.
+
 Closed WI 0093 supplies complete shared [target discovery and reference lifetimes](target-discovery.md).
 Actual full b011 returns preserve branch-specific secondary operands and old-target rules.
 Real release/reallocation repeats even the complete type/slot/registry/value tuple, silently

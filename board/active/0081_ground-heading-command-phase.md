@@ -171,3 +171,12 @@ mode selector now consumes live references and retains conditional RNG. This pre
 does not install a partial heading bank, perform target acquisition, advance the living prefix
 or satisfy this parent's unchanged Contract/Accept. Continue the complete parent callback from
 the canonical prepared world; battle/device/PCM and the final independent streak remain open.
+
+Active 0094 supplies the complete original ab88 eight-entry contract, including mode 4 retreat,
+mode 6 approach, saved +44/+47 and actual packed word range. Required research checks 742481
+complete returns and 11520 genuine prepared all-47 ab03 selection/goal/bearing parent returns
+over four details. Real null targets read unrelated DS words; release/reuse silently changes
+the steered-to physical occupant, while binding orphans remain valid. See
+docs/ground-command-bearing.md. C callback/target-loss continuation repair are still pending;
+this verified original prerequisite does not advance the current C living prefix or install
+a partial parent bank. Continue the unchanged Contract/Accept through the complete caller.
