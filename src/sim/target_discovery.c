@@ -45,11 +45,6 @@ static const uint16_t target_heights[FIST_UNIT_TYPE_COUNT] = {
     0,    0,    0,    0,    0, 0,   0,   0, 0, 0, 0, 0, 0, 2048};
 static const uint16_t variant_heights[VARIANT_MASK + 1] = {3840, 4352, 2560, 3072};
 
-static int reference_valid(fist_object_reference reference) {
-    return reference.slot < FIST_UNIT_REGISTRY_COUNT &&
-           (reference.lifetime != 0 || reference.slot == 0);
-}
-
 static uint16_t range_limit(const fist_vehicle_state *actor, uint8_t link) {
     size_t bank = 0;
     if (link >= LINK_THRESHOLD) {
@@ -143,7 +138,8 @@ int fist_mission_world_discover_targets(fist_mission_world *world, const fist_kl
     const fist_vehicle_state *actor = &world->objects[request.slot].vehicle;
     if (actor->type != world->pool.slots[request.slot].type ||
         actor->component_size != fist_vehicle_component_size(actor->type) ||
-        !reference_valid(actor->command.target) || !reference_valid(actor->command.candidate)) {
+        !fist_object_reference_is_valid(actor->command.target) ||
+        !fist_object_reference_is_valid(actor->command.candidate)) {
         return -1;
     }
     /* Validate the borrowed installed plane even for an empty/ineligible scan. */

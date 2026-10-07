@@ -330,6 +330,9 @@ if(BUILD_TESTING AND NOT EMSCRIPTEN)
     add_test(NAME ground_command_contract COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_SOURCE_DIR}/tests/test_ground_command.py
         --target native --native-probe $<TARGET_FILE:fist_ground_command_probe>)
+    add_test(NAME ground_bearing_contract COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_SOURCE_DIR}/tests/test_ground_bearing.py
+        --target native --native-probe $<TARGET_FILE:fist_ground_goal_probe>)
     add_test(NAME ground_goal_contract COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_SOURCE_DIR}/tests/test_ground_goal.py
         --target native --native-probe $<TARGET_FILE:fist_ground_goal_probe>)

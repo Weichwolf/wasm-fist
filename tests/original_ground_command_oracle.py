@@ -56,6 +56,9 @@ class OriginalGroundCommandOracle(OriginalVehicleStartOracle):
     def formation_cycles(self):
         return self._choice_cycles(((4, 0x62cf, 0x62e2, 6),))
 
+    def throttle_cycles(self):
+        return self._choice_cycles(((6, 0x632f, 0x6342, 4),))
+
     def _choice_cycles(self, choices):
         from unicorn.x86_const import UC_X86_REG_BX
         machine = self.machine((0, 0, 0, 0), 0)

@@ -1,11 +1,14 @@
 # Ground command phase: recovered input and pending consumption
 
-Active WI 0094 recovers complete [command bearing/range and retreat-cycle state](ground-command-bearing.md).
-Its actual bank puts retreat in mode 4 and approach in mode 6. Both use packed unsigned range,
-and target branches can read unrelated DS bytes at null or steer toward a released/reused
-payload. Retain those reaching repair requirements before implementing the full C callback.
-The original prepared-parent observer executes genuine selection -> goal -> bearing calls;
-shared C callback and complete 0081 acceptance remain pending.
+Closed WI 0094 supplies complete shared [command bearing/range and retreat-cycle state](ground-command-bearing.md).
+Its actual bank puts retreat in mode 4 and approach in mode 6. Both use packed unsigned range;
+C consumes physical lifetimes and deliberately resumes fresh route/formation navigation on
+loss, preserving live orphans and in-place retypes. Complete original navigation proves the
+repair's subsequent throttle consumption, including stopping without a valid new goal.
+Both-target original/domain/all-47 canonical, strict build/style, memory and actual scene
+gates pass. The original prepared-parent observer also executes genuine selection -> goal ->
+bearing calls. Full C throttle/gear, the sixteen-entry parent and complete 0081 acceptance
+remain pending; no partial parent bank is installed.
 
 Closed WI 0093 supplies complete shared [target discovery and reference lifetimes](target-discovery.md).
 Actual full b011 returns preserve branch-specific secondary operands and old-target rules.
@@ -157,9 +160,9 @@ complete command consumption must use the canonical order owner rather than priv
 The complete ab82 mode selector and its conditional additional RNG call are documented in
 [ground command selection](ground-command-selection.md) (WI 0083). Saved mode/maneuver/target
 presence now survive owned restoration and initialization. The existing +42 counter remains
-the sole owner; no parent-phase heading update or partial callback bank is installed. Remaining
-bearing/range, navigation, target-discovery, roster and presentation calls still require
-complete consumption before accepting 0081.
+the sole owner; no parent-phase heading update or partial callback bank is installed. Bearing/range and target discovery now have their complete shared child owners in 0094 and
+0093. Remaining navigation/throttle, acquisition, roster, presentation and full parent
+consumption are still required before accepting 0081.
 
 The complete ac75 route/formation goal helper is documented in
 [ground command goals](ground-command-goals.md) (WI 0084). It shares canonical orders and the

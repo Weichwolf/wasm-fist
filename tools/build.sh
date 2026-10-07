@@ -19,6 +19,7 @@ if [[ $target == wasm || $target == all ]]; then
     timeout 30s node "$root/tests/check_wasm.cjs" "$output/wasm/fist_renderer_probe.js"
     python3 "$root/tests/test_scenario.py" --target wasm --build-root "$output"
     python3 "$root/tests/test_ground_command.py" --target wasm --build-root "$output"
+    python3 "$root/tests/test_ground_bearing.py" --target wasm --build-root "$output"
     python3 "$root/tests/test_ground_goal.py" --target wasm --build-root "$output"
     python3 "$root/tests/test_ground_route.py" --target wasm --build-root "$output"
     python3 "$root/tests/test_geometry.py" --target wasm --build-root "$output"

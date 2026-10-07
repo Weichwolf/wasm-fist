@@ -1,8 +1,9 @@
 # Ground command bearing and target-loss evidence
 
-Active WI 0094 recovers the complete original ab88 near return and its eight-entry DS:9810
-bank. The shared C callback remains pending. This is input for the complete 0081 phase,
-not a heading-only implementation or a playable-battle claim.
+Closed WI 0094 owns the recovered complete original ab88 near return and its eight-entry
+DS:9810 bank. The shared C callback is `fist_mission_world_bear_command`, using canonical orders,
+physical target lifetimes and the existing planar geometry owner. It is not yet installed
+in the complete 0081 parent bank; living battle and playable-mission acceptance remain open.
 
 ## Complete callback bank
 
@@ -33,7 +34,7 @@ behavior word indexes these bytes directly; original UI cycles prove choices 0..
 zero-duration choice still starts a retreat and ends on the next admitted continuation.
 These are callback counts, not inferred seconds or simulation ticks.
 
-Complete class-start observations preserve +44 and +47. They need explicit retained C fields;
+Complete class-start observations preserve +44 and +47. C retains explicit independent fields;
 neither is the existing +42 parent/heading counter, +45 maneuver selector or +8e secondary
 bearing. Unused duration/target/heading fields must not cause blanket validation failures.
 
@@ -59,6 +60,51 @@ navigation/throttle continuation before accepting a fallback; do not read foreig
 manufacture a successor target, suppress a reaching failure or call a missing-target guard
 a completed battle repair. An ongoing retreat continuation genuinely needs no live target.
 
+## Deliberate target-loss repair
+
+Only an admitted new targeted measurement checks reference representation/lifetime. A live
+physical orphan or in-place type-19 retirement remains a valid target; release, same/different
+class reuse and an empty reference do not. Malformed used references or live payloads fail
+atomically. Manual modes, genuine return entries and ongoing retreat continuation do not
+validate unused targets. Saved near words remain opaque, even when nonzero.
+
+On loss, clear the runtime target, exit retreat control bit 64 and select the ordinary member
+navigation mode (leader 0, follower 2). Invalidate the previous goal before invoking the existing
+route/formation goal owner, then run ordinary navigation bearing. Empty routes and absent/wreck
+leaders therefore leave goal validity clear. Heading/range and unrelated saved fields stay
+retained when no new goal is supplied. No additional random draw or invented target position
+is used. Subsequent ordinary navigation throttle sees this mode and goal validity; full C
+throttle/gear and parent-bank consumption remain later work.
+
+The independent observer in tests/original_ground_navigation_oracle.py executes complete
+unchanged ad2f returns for both navigation entries, including its actual ad3b gear callback.
+Declared manual gear +90=2 is an explicit boundary that preserves gear, not a replaced callback.
+Leader mode without a valid goal sets throttle to zero; valid ranges <=8 use 80, larger ranges
+select DS:992c words 96/160/208/224. All 64 actual PINF +6 increment/decrement UI tails prove
+four choices. Follower mode stops without a goal, at ranges <=3 or 65535; subsequent boundaries
+8/32/48/80 select 16/32/128/240, and larger ranges use 272. These are retained original throttle
+words, not newly inferred physical units.
+
+The complete original continuation sweep covers all unsigned range and control words in both
+modes, 262528 ad2f returns including 384 explicit repaired goal -> bearing -> throttle sequences.
+Of those repaired sequences, 176 stop without a valid navigation goal. All DGROUP bytes outside
+throttle and the existing bounded stack remain unchanged, including RNG and other objects.
+This proves ordinary navigation consumption of the declared repair; it does not accept the
+original unsafe null/released/reused target reads.
+
+The C batch probe releases/allocates/imports/retypes actual canonical pool objects before the
+complete callback. It checks full-world preservation outside exact owned destinations and
+transactional rejection. Restored sources are poisoned/freed; initialization and readiness
+retain +44/+47. The canonical probe loads and prepares all 47 missions on all eight original
+height maps and four detail sizes, then runs fine and coarse callbacks in current registry
+order. This is complete child-callback consumption, not a partial replacement parent bank.
+
+The next full throttle/profile recovery must distinguish operand widths and destinations:
+ad3b admits byte +90 <=1, compares signed word +34 with 0x0e00 and calls the actual a19e
+far setter on a transition. Word +34 is retained as drive.terrain_pitch; original speed is
+word +55. The four DS:965e setters write +90 and class component bytes +d6/+c8/+ca/+d2,
+then call actual f69:7a5b. None of these consuming setter effects is replaced by a return.
+
 ## Prepared original parent consumption
 
 The corpus observer actually loads/restores all 47 pinned missions, including real PATH/PINF,
@@ -76,6 +122,7 @@ outside this unselected-parent boundary; no diagnostic callback is replaced by a
 
 ## Reproduction
 
+    PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache /tmp/wasm-fist-decoder-oracle/bin/python tests/test_ground_bearing.py --target all --originals --oracle
     PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache /tmp/wasm-fist-decoder-oracle/bin/python tests/test_original_ground_bearing.py --originals --review-dir /tmp/wasm-fist-0094-review
     PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache /tmp/wasm-fist-decoder-oracle/bin/python tests/test_original_command_boundary.py --originals
     PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache /tmp/wasm-fist-decoder-oracle/bin/python tests/test_geometry.py --target all --originals --oracle
@@ -84,6 +131,12 @@ The required research gate has six groups, with no optional skips. It covers eve
 word in every command mode, all packed range words for approach and retreat, complete counter/
 maneuver/heading domains, all-class admission, signed/wrapped/coarse geometry, target-prefix/
 self/orphan/null/release/reuse paths, actual class starts/UI and all prepared parent contexts.
-Original files and frozen code remain unchanged. Production C, its artifacts and accepted
-scene evidence are unchanged; C discovery is already delivered but this callback, full parent
-bank, living battle/device/PCM/outcomes and final independent WASM streak remain open.
+Original files and frozen code remain unchanged. The separate required C gate passes eight
+groups with zero skips on both production targets: 771911 scalar cases, 7413 atomic rejections,
+764498 complete scalar original bearing returns, 188 prepared worlds and 7680 fine/coarse
+canonical callbacks per target. The full ASan/UBSan required gate has the same output digest;
+full production builds/style and actual SDL/browser/sanitized scenes also pass. Compact evidence
+and the two visually reviewed production frames remain under /tmp/wasm-fist-0094-c-review;
+see board/closed/0094_ground-command-bearing.md for exact acceptance and exclusions. The full
+C throttle/gear and parent bank, living battle/device/PCM/outcomes and final independent WASM
+streak remain open; the streak is zero.

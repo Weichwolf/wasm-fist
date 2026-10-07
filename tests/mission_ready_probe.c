@@ -13,6 +13,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 enum {
     HEADER = 16,
@@ -182,8 +183,62 @@ static int validate_request(const uint8_t *request, size_t size, fist_klc_image 
     return 0;
 }
 
-static int run(fist_units *units, const fist_mission_orders *orders, const uint8_t *request,
-               size_t size) {
+static int bear_world(fist_mission_world *world, fist_mission_world *before) {
+    for (unsigned coarse = 0; coarse <= 1; ++coarse) {
+        printf("bearings %u\n", coarse);
+        for (size_t index = 0; index < FIST_UNIT_REGISTRY_COUNT; ++index) {
+            const uint16_t slot = world->pool.registry[index].slot;
+            if (slot == FIST_POOL_NO_SLOT ||
+                world->pool.slots[slot].type >= FIST_UNIT_GROUND_VEHICLE_COUNT) {
+                continue;
+            }
+            fist_probe_capture(world, sizeof(*world), before);
+            const int status = fist_mission_world_bear_command(world, slot, coarse != 0);
+            if (status == 0) {
+                fist_vehicle_state *expected = &before->objects[slot].vehicle;
+                const fist_vehicle_state *actual = &world->objects[slot].vehicle;
+                expected->drive.requested_heading = actual->drive.requested_heading;
+                expected->command.range = actual->command.range;
+                expected->command.retreat_count = actual->command.retreat_count;
+                expected->command.mode = actual->command.mode;
+                expected->command.target = actual->command.target;
+                expected->command.goal = actual->command.goal;
+                expected->control_flags = actual->control_flags;
+            }
+            if (!fist_probe_unchanged(world, sizeof(*world), before)) {
+                return -1;
+            }
+            const fist_vehicle_state *actor = &world->objects[slot].vehicle;
+            printf("bearing %u %d %u %u %d\n", (unsigned)slot, status,
+                   (unsigned)actor->command.retreat_count,
+                   (unsigned)actor->command.maneuver_heading,
+                   fist_object_pool_reference_is_live(&world->pool, actor->command.target));
+        }
+        if (fist_probe_write_mission_world(world) != 0) {
+            return -1;
+        }
+    }
+    return 0;
+}
+
+static int prepare_once(fist_mission_world *world, const fist_klc_image *height, int bearings,
+                        fist_mission_world *before, uint8_t link) {
+    fist_probe_capture(world, sizeof(*world), before);
+    const int prepared = fist_mission_world_prepare(world, height, link);
+    if ((prepared != 0 && !fist_probe_unchanged(world, sizeof(*world), before)) ||
+        (prepared == 0 && preserve_released_and_orphans(world, before) != 0)) {
+        return -1;
+    }
+    printf("prepare %d\n", prepared);
+    const int result = fist_probe_write_mission_world(world);
+    if (result == 0 && prepared == 0 && bearings != 0) {
+        return bear_world(world, before);
+    }
+    return result;
+}
+
+static int run(fist_units *units, const fist_mission_orders *orders, int bearings,
+               const uint8_t *request, size_t size) {
     fist_klc_image height = {0};
     const uint8_t *commands = NULL;
     uint16_t count = 0;
@@ -227,15 +282,7 @@ static int run(fist_units *units, const fist_mission_orders *orders, const uint8
                 result = inject(world, command);
                 continue;
             }
-            fist_probe_capture(world, sizeof(*world), before);
-            const int prepared = fist_mission_world_prepare(world, &height, request[LINK]);
-            if ((prepared != 0 && !fist_probe_unchanged(world, sizeof(*world), before)) ||
-                (prepared == 0 && preserve_released_and_orphans(world, before) != 0)) {
-                result = -1;
-            } else {
-                printf("prepare %d\n", prepared);
-                result = fist_probe_write_mission_world(world);
-            }
+            result = prepare_once(world, &height, bearings, before, request[LINK]);
         }
     }
     free(before);
@@ -244,7 +291,7 @@ static int run(fist_units *units, const fist_mission_orders *orders, const uint8
 }
 
 int main(int argc, char **argv) {
-    if (argc != 3) {
+    if (argc != 3 && (argc != 4 || strcmp(argv[3], "--bearings") != 0)) {
         return EXIT_FAILURE;
     }
     size_t size = 0;
@@ -262,7 +309,7 @@ int main(int argc, char **argv) {
     free(data);
     if (status == 0) {
         data = read_file(argv[2], &size);
-        status = data == NULL ? -1 : run(&units, &orders, data, size);
+        status = data == NULL ? -1 : run(&units, &orders, argc == 4, data, size);
         free(data);
     }
     fist_units_destroy(&units);

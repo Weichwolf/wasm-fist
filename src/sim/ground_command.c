@@ -2,6 +2,7 @@
 
 #include "assets/orders.h"
 #include "assets/units.h"
+#include "sim/geometry.h"
 #include "sim/object_pool.h"
 #include "sim/random.h"
 #include "sim/rotation.h"
@@ -15,12 +16,12 @@ enum {
     AUTOMATIC = 1,
     CONTROL_10 = 16,
     DAMAGE_COMMAND = 32,
-    FORCED_DAMAGE_COMMAND = 64,
+    RETREAT_ACTIVE = 64,
     MOTION_MODE_FLAGS = 6,
     COMMAND_CHOICES = 4,
     MODE_LEADER = 0,
     MODE_FOLLOWER = 2,
-    MODE_DAMAGE = 4,
+    MODE_RETREAT = 4,
     MODE_TARGET = 6,
     MODE_MANEUVER = 8,
     MODE_CONTROL_10 = 10,
@@ -50,6 +51,12 @@ static const formation_offset formations[FORMATIONS][FIST_UNIT_MEMBERS_PER_PLATO
  * Original UI 61f0/6253 cycles each word through exactly four choices. */
 static const uint8_t damage_chance[COMMAND_CHOICES] = {100, 10, 200, 0};
 static const uint8_t target_chance[COMMAND_CHOICES] = {0, 50, 255, 0};
+/* Original byte table DS:994e, indexed without doubling the behavior word. */
+static const uint8_t retreat_duration[COMMAND_CHOICES] = {8, 4, 12, 0};
+
+static uint8_t navigation_mode(const fist_vehicle_state *actor) {
+    return actor->member == 0 ? MODE_LEADER : MODE_FOLLOWER;
+}
 
 static int priority_mode(const fist_vehicle_state *actor, uint16_t behavior) {
     if (behavior == 3) {
@@ -64,8 +71,8 @@ static int priority_mode(const fist_vehicle_state *actor, uint16_t behavior) {
     if (actor->command.maneuver != 0) {
         return MODE_MANEUVER;
     }
-    if ((actor->control_flags & FORCED_DAMAGE_COMMAND) != 0) {
-        return MODE_DAMAGE;
+    if ((actor->control_flags & RETREAT_ACTIVE) != 0) {
+        return MODE_RETREAT;
     }
     return -1;
 }
@@ -84,7 +91,7 @@ static int automatic_mode(fist_vehicle_state *actor, const fist_order_descriptor
         }
         actor->control_flags &= (uint16_t)~DAMAGE_COMMAND;
         if ((uint8_t)phase_random <= damage_chance[behavior]) {
-            actor->command.mode = MODE_DAMAGE;
+            actor->command.mode = MODE_RETREAT;
             return 0;
         }
     }
@@ -99,7 +106,7 @@ static int automatic_mode(fist_vehicle_state *actor, const fist_order_descriptor
             return 0;
         }
     }
-    actor->command.mode = actor->member == 0 ? MODE_LEADER : MODE_FOLLOWER;
+    actor->command.mode = navigation_mode(actor);
     return 0;
 }
 
@@ -133,7 +140,7 @@ int fist_mission_world_select_command(fist_mission_world *world, fist_command_se
         }
     }
     if ((next.control_flags & AUTOMATIC) == 0) {
-        next.command.mode = next.member == 0 ? MODE_LEADER : MODE_FOLLOWER;
+        next.command.mode = navigation_mode(&next);
     } else if (automatic_mode(&next, &world->orders.descriptors[next.platoon], &random,
                               request.phase_random, has_target) != 0) {
         return -1;
@@ -180,6 +187,22 @@ static int formation_goal(const fist_mission_world *world, fist_vehicle_state *a
     return 0;
 }
 
+static int assign_goal(const fist_mission_world *world, fist_vehicle_state *actor) {
+    if (actor->command.mode == MODE_LEADER) {
+        const fist_order_route *route = &world->orders.routes[actor->platoon];
+        if (route->count > FIST_ORDER_WAYPOINTS) {
+            return -1;
+        }
+        if (route->count != 0) {
+            actor->command.goal = route->points[0];
+            actor->control_flags |= GOAL_VALID;
+        }
+    } else if (actor->command.mode == MODE_FOLLOWER && formation_goal(world, actor) != 0) {
+        return -1;
+    }
+    return 0;
+}
+
 int fist_mission_world_assign_command_goal(fist_mission_world *world, uint16_t slot) {
     fist_vehicle_state *actor = command_actor(world, slot);
     if (actor == NULL || actor->command.mode > MODE_BEHAVIOR_THREE ||
@@ -187,17 +210,93 @@ int fist_mission_world_assign_command_goal(fist_mission_world *world, uint16_t s
         return -1;
     }
     fist_vehicle_state next = *actor;
-    if (next.command.mode == MODE_LEADER) {
-        const fist_order_route *route = &world->orders.routes[next.platoon];
-        if (route->count > FIST_ORDER_WAYPOINTS) {
+    if (assign_goal(world, &next) != 0) {
+        return -1;
+    }
+    *actor = next;
+    return 0;
+}
+
+static void measure_goal(fist_vehicle_state *actor, fist_order_waypoint goal, bool coarse,
+                         bool targeted, bool retreat) {
+    enum { PACK_SHIFT = 8, TARGET_OFFSET = 30, HALF_TURN = 32768 };
+    const fist_planar_measurement measured =
+        fist_planar_measure((fist_order_waypoint){actor->map_x, actor->map_y}, goal, coarse);
+    uint16_t range = (uint16_t)(measured.distance >> PACK_SHIFT);
+    if (targeted) {
+        range = range < TARGET_OFFSET ? 0 : (uint16_t)(range - TARGET_OFFSET);
+    }
+    actor->command.range = range;
+    if ((actor->control_flags & AUTOMATIC) != 0) {
+        actor->drive.requested_heading = (uint16_t)(measured.heading + (retreat ? HALF_TURN : 0));
+    }
+}
+
+static void navigation_bearing(fist_vehicle_state *actor, bool coarse) {
+    if ((actor->control_flags & GOAL_VALID) != 0 &&
+        (actor->command.mode == MODE_LEADER || (actor->control_flags & AUTOMATIC) != 0)) {
+        measure_goal(actor, actor->command.goal, coarse, false, false);
+    }
+}
+
+static int target_bearing(const fist_mission_world *world, fist_vehicle_state *actor, bool coarse) {
+    if (!fist_object_reference_is_valid(actor->command.target)) {
+        return -1;
+    }
+    if (!fist_object_pool_reference_is_live(&world->pool, actor->command.target)) {
+        /* Deliberate repair of the proved original null/release/reuse read.
+         * Resume ordinary route/formation navigation without another RNG draw.
+         * Invalidate the old goal first: absent routes/leaders then stop via
+         * the ordinary navigation throttle guard, not stale target coordinates. */
+        actor->command.target = (fist_object_reference){0};
+        actor->command.mode = navigation_mode(actor);
+        actor->control_flags &= (uint16_t)~(GOAL_VALID | RETREAT_ACTIVE);
+        if (assign_goal(world, actor) != 0) {
             return -1;
         }
-        if (route->count != 0) {
-            next.command.goal = route->points[0];
-            next.control_flags |= GOAL_VALID;
-        }
-    } else if (next.command.mode == MODE_FOLLOWER && formation_goal(world, &next) != 0) {
+        navigation_bearing(actor, coarse);
+        return 0;
+    }
+    fist_object_pose storage = {0};
+    fist_mission_view view = {0};
+    if (fist_mission_world_view(world, actor->command.target.slot, &storage, &view) != 0) {
         return -1;
+    }
+    const bool retreat = actor->command.mode == MODE_RETREAT;
+    if (retreat) {
+        actor->control_flags |= RETREAT_ACTIVE;
+        actor->command.retreat_count = 0;
+    }
+    measure_goal(actor, (fist_order_waypoint){view.pose->x, view.pose->y}, coarse, true, retreat);
+    return 0;
+}
+
+int fist_mission_world_bear_command(fist_mission_world *world, uint16_t slot, bool coarse) {
+    fist_vehicle_state *actor = command_actor(world, slot);
+    if (actor == NULL || actor->command.mode > MODE_BEHAVIOR_THREE ||
+        actor->command.mode % 2 != 0) {
+        return -1;
+    }
+    fist_vehicle_state next = *actor;
+    if (next.command.mode == MODE_LEADER || next.command.mode == MODE_FOLLOWER) {
+        navigation_bearing(&next, coarse);
+    } else if ((next.control_flags & AUTOMATIC) != 0) {
+        if (next.command.mode == MODE_RETREAT && (next.control_flags & RETREAT_ACTIVE) != 0) {
+            const uint16_t behavior = world->orders.descriptors[next.platoon].words[0];
+            if (behavior >= COMMAND_CHOICES) {
+                return -1;
+            }
+            next.command.retreat_count = (uint8_t)(next.command.retreat_count + 1U);
+            if (next.command.retreat_count >= retreat_duration[behavior]) {
+                next.control_flags &= (uint16_t)~RETREAT_ACTIVE;
+            }
+        } else if (next.command.mode == MODE_RETREAT || next.command.mode == MODE_TARGET) {
+            if (target_bearing(world, &next, coarse) != 0) {
+                return -1;
+            }
+        } else if (next.command.mode == MODE_MANEUVER && next.command.maneuver == 4) {
+            next.drive.requested_heading = next.command.maneuver_heading;
+        }
     }
     *actor = next;
     return 0;

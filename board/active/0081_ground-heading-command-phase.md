@@ -172,11 +172,19 @@ does not install a partial heading bank, perform target acquisition, advance the
 or satisfy this parent's unchanged Contract/Accept. Continue the complete parent callback from
 the canonical prepared world; battle/device/PCM and the final independent streak remain open.
 
-Active 0094 supplies the complete original ab88 eight-entry contract, including mode 4 retreat,
-mode 6 approach, saved +44/+47 and actual packed word range. Required research checks 742481
-complete returns and 11520 genuine prepared all-47 ab03 selection/goal/bearing parent returns
-over four details. Real null targets read unrelated DS words; release/reuse silently changes
-the steered-to physical occupant, while binding orphans remain valid. See
-docs/ground-command-bearing.md. C callback/target-loss continuation repair are still pending;
-this verified original prerequisite does not advance the current C living prefix or install
-a partial parent bank. Continue the unchanged Contract/Accept through the complete caller.
+Closed 0094 supplies the complete shared ab88 eight-entry child callback, including mode 4
+retreat, mode 6 approach, retained +44/+47 and original packed word range. Required original
+research checks 742481 returns and 11520 genuine prepared all-47 ab03 selection/goal/bearing
+parent returns over four details. C consumes physical lifetimes: live orphans/retypes remain
+valid, while lost/released/reused targets deliberately resume fresh route/formation navigation.
+Complete unchanged original ad2f navigation proves all range/control words and 384 repaired
+continuations, including 176 stops without a valid goal. See docs/ground-command-bearing.md.
+Final native/WASM and ASan/UBSan gates each pass eight groups without skips, 771911 cases,
+7413 atomic rejections, 764498 scalar original returns and 7680 canonical callbacks through
+all 47 worlds/four details. Full strict builds/style and actual native/browser/sanitized scene
+gates pass. This prerequisite does not wire a partial parent bank or advance the living prefix;
+this parent's Contract/Accept remain unchanged. Continue the complete ad2f throttle bank and
+actual ad3b/a19e/f69:7a5b profile/gear setters before remaining parent callbacks. ad3b compares
+signed word +34 (terrain pitch), not original speed word +55; retain exact operand widths and
+component destinations rather than substituting an empty transition. Battle/device/PCM and
+the independent complete WASM streak remain open; streak zero.

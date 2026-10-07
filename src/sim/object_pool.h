@@ -58,6 +58,10 @@ typedef struct {
     uint16_t slot;
 } fist_object_reference;
 
+/* Check reference representation only. Empty is exactly {0}; a nonempty
+ * reference can be well formed while its allocation has already disappeared. */
+int fist_object_reference_is_valid(fist_object_reference reference);
+
 /* Capture a live physical object, including an orphan. Empty is {0}.
  * Release/reset invalidate references; reuse and reload cannot revive them.
  * In-place retype preserves the reference. IDs are process-local, never saved

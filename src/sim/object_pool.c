@@ -61,6 +61,11 @@ int fist_object_pool_reference(const fist_object_pool *pool, uint16_t slot,
     return FIST_POOL_OK;
 }
 
+int fist_object_reference_is_valid(fist_object_reference reference) {
+    return reference.slot < FIST_UNIT_REGISTRY_COUNT &&
+           (reference.lifetime != 0 || reference.slot == 0);
+}
+
 int fist_object_pool_reference_is_live(const fist_object_pool *pool,
                                        fist_object_reference reference) {
     return fist_object_pool_is_valid(pool) && reference.slot < FIST_UNIT_REGISTRY_COUNT &&

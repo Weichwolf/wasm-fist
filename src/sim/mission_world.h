@@ -179,6 +179,14 @@ int fist_mission_world_select_command(fist_mission_world *world, fist_command_se
  * changing any world state. */
 int fist_mission_world_assign_command_goal(fist_mission_world *world, uint16_t slot);
 
+/* Complete ab88 eight-entry direction/range/retreat callback, using canonical
+ * goals and physical target lifetimes. coarse selects shared numeric precision.
+ * Lost targets deliberately resume fresh route/formation navigation; missing
+ * goals stay invalid for the navigation throttle stop. Ongoing retreat needs
+ * no target. No RNG, route advancement, throttle/gear or parent-bank dispatch.
+ * Invalid used fields/payloads fail atomically, preserving the complete world. */
+int fist_mission_world_bear_command(fist_mission_world *world, uint16_t slot, bool coarse);
+
 /* Complete ad08 route progress. Mode zero consumes the platoon's first waypoint
  * when its goal is valid and the retained unsigned range is <=48; other seven
  * entries are original returns. PINF waypoint mode 3 cycles; 0/1/2 and the
