@@ -242,6 +242,20 @@ all-47/four-detail corpus reaches 11520 sequential child/parent returns over 188
 worlds/3840 ground actors, including twelve actual child roster changes. Malformed member
 bytes prove out-of-roster writes and ADD BL wrap; used-domain C admission must be atomic,
 while the unused member-zero branch retains all 256 platoon bytes. See docs/roster-promotion.md.
-Continue open 0099's typed roster/predecessor mutation using the sole canonical roster owner,
-then remaining maneuver/fire/diagnostic callbacks and full heading/counter/RNG/class work.
+Closed 0099 now supplies the typed roster/predecessor mutation below; continue remaining
+maneuver/fire/diagnostic callbacks and full heading/counter/RNG/class work.
 This parent's Contract/Accept remain unchanged; battle/PCM and the final streak remain open.
+
+Closed 0099 supplies complete shared physical roster promotion through the sole canonical
+roster and existing ground/retiring/wreck member owners. Required native/WASM and ASan/UBSan
+replay each pass five groups without skips: 295405 cases, 11096 atomic rejections and 3840
+canonical callbacks through all 47 missions/four details. The unchanged original checkpoint
+retains 110451 complete returns, including 11007 genuine parent returns. Actual allocator
+orphan/retype/release/reset and used-domain failures are verified before each probe batch;
+source records are poisoned and complete world/roster/member/control output is compared.
+Full build (43 native CTests, 41 WASM suites and two Node probes), strict LLVM 19.1 style/tidy
+(89 units/headers), actual SDL/Chromium and sanitized SDL scenes pass. See
+`docs/roster-promotion.md` and closed 0099. This parent's Contract/Accept remain unchanged;
+no partial bank is installed. Continue remaining maneuver/fire/diagnostic callbacks and full
+heading/counter/RNG parent and living class consumption. First playable battle/PCM/outcomes
+and independent complete-game WASM acceptance remain open; final streak zero.

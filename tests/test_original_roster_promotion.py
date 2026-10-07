@@ -75,6 +75,9 @@ class PromotionTests(unittest.TestCase):
                               struct.pack('<HH', previous_pointer, ACTOR))
         return actor, previous
 
+    def begin_prepared_mission(self, name, side, pixels, machine, objects):
+        """Attach a consuming C world to the unchanged prepared child boundary."""
+
     def test_complete_both_flag_byte_domains_all_ground_predecessors_and_authored_slots(self):
         machine = self.owner.machine(SEEDS, 3)
         masks = (0, 2, 4, 6, 16, 18, 20, 22)
@@ -223,6 +226,7 @@ class PromotionTests(unittest.TestCase):
                     machine, objects = self.owner.prepare_saved(records_from_scenario(data), SEEDS, 3, 0,
                                                                 scenario_order_blocks(data))
                     self.owner.reset(machine, pixels, side=side)
+                    self.begin_prepared_mission(name, side, pixels, machine, objects)
                     actors = [p for _, _, p, _ in objects.values() if word(self.owner.raw(machine, p), 0) < 4]
                     prepared = bytes(machine.mem_read(DGROUP, 65536))
                     changed = 0

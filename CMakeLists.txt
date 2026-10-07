@@ -30,7 +30,7 @@ add_library(fist_assets STATIC src/assets/scenario.c src/assets/orders.c src/ass
 target_include_directories(fist_assets PUBLIC src)
 target_link_libraries(fist_assets PRIVATE fist_build_options)
 target_compile_options(fist_assets PRIVATE -Werror)
-add_library(fist_sim STATIC src/sim/random.c src/sim/ground.c src/sim/rotation.c src/sim/geometry.c src/sim/vehicle_state.c src/sim/vehicle_motion.c src/sim/driver.c src/sim/weapon_control.c src/sim/object_pool.c src/sim/projectile_launch.c src/sim/collision.c src/sim/projectile_flight.c src/sim/vehicle_damage.c src/sim/damage_common.c src/sim/other_damage.c src/sim/smoke_animation.c src/sim/smoke.c src/sim/destruction_updates.c src/sim/aircraft_death.c src/sim/world_step.c src/sim/tree.c src/sim/mission_world.c src/sim/mission_ready.c src/sim/ground_command.c src/sim/mission_view.c src/sim/target_discovery.c src/sim/target_acquisition.c src/sim/voice.c src/sim/primary_fire.c src/sim/mission_update.c)
+add_library(fist_sim STATIC src/sim/random.c src/sim/ground.c src/sim/rotation.c src/sim/geometry.c src/sim/vehicle_state.c src/sim/vehicle_motion.c src/sim/driver.c src/sim/weapon_control.c src/sim/object_pool.c src/sim/projectile_launch.c src/sim/collision.c src/sim/projectile_flight.c src/sim/vehicle_damage.c src/sim/damage_common.c src/sim/other_damage.c src/sim/smoke_animation.c src/sim/smoke.c src/sim/destruction_updates.c src/sim/aircraft_death.c src/sim/world_step.c src/sim/tree.c src/sim/mission_world.c src/sim/mission_ready.c src/sim/ground_command.c src/sim/roster_promotion.c src/sim/mission_view.c src/sim/target_discovery.c src/sim/target_acquisition.c src/sim/voice.c src/sim/primary_fire.c src/sim/mission_update.c)
 target_include_directories(fist_sim PUBLIC src)
 target_link_libraries(fist_sim PUBLIC fist_assets PRIVATE fist_build_options)
 target_compile_options(fist_sim PRIVATE -Werror)
@@ -354,6 +354,9 @@ if(BUILD_TESTING AND NOT EMSCRIPTEN)
         --target native --native-probe $<TARGET_FILE:fist_target_discovery_probe>)
     add_test(NAME target_acquisition_contract COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_SOURCE_DIR}/tests/test_target_acquisition.py
+        --target native --native-probe $<TARGET_FILE:fist_target_discovery_probe>)
+    add_test(NAME roster_promotion_contract COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_SOURCE_DIR}/tests/test_roster_promotion.py
         --target native --native-probe $<TARGET_FILE:fist_target_discovery_probe>)
     add_test(NAME geometry_contract COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_SOURCE_DIR}/tests/test_geometry.py

@@ -2,7 +2,8 @@
 
 Closed WI 0098 proves complete original [physical roster promotion](roster-promotion.md),
 including genuine parent entry thirteen, actual allocated registry-overwritten actors and
-all-47 prepared sequential world returns. Shared canonical C consumption is open 0099;
+all-47 prepared sequential world returns. Closed 0099 supplies shared canonical C consumption
+with required both-target/corpus, full-build/style/memory and actual scene gates;
 remaining callbacks and full 0081 parent/class consumption remain pending.
 
 Closed WI 0096 proves complete original [target acquisition and later aim feedback](target-acquisition.md),

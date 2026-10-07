@@ -259,4 +259,12 @@ int fist_mission_world_update_command_profile(fist_mission_world *world, uint16_
  * counts/actor/world metadata fail with the complete world unchanged. */
 int fist_mission_world_advance_command_route(fist_mission_world *world, uint16_t slot);
 
+/* Complete b053/f69:b329 physical roster promotion. A member-zero actor uses
+ * no platoon/roster input. Null/wreck predecessors bypass actor motion flags;
+ * other ground/retiring predecessors use actual +19 bits. Mutate the sole
+ * canonical roster and existing typed member bytes, clearing goal validity.
+ * No orders, RNG, target lookup, census, player selection or parent dispatch.
+ * Invalid used member/index/identity/payload fails before any world mutation. */
+int fist_mission_world_promote_member(fist_mission_world *world, uint16_t slot);
+
 #endif

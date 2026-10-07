@@ -34,7 +34,17 @@ enum {
     AIM = 4,
     THROTTLE = 8,
     DISCOVER = 16,
+    PROMOTION = 32,
     ACQUISITION_OPERATIONS = 31,
+    ROSTER_BYTES = FIST_UNIT_ROSTER_COUNT * 2,
+    MAX_PROMOTIONS = 4,
+    PLATOON = 27,
+    MEMBER = 28,
+    WRECK_PLATOON = 35,
+    WRECK_MEMBER = 36,
+    CONTROL_FLAGS = 64,
+    PROMOTION_BLOCKED_FLAG = 16,
+    PROMOTION_GOAL_VALID = 2,
     ACTOR = 0,
     SELECTED = 2,
     TICK = 4,
@@ -73,6 +83,7 @@ enum {
 typedef struct {
     const uint8_t *header;
     const uint8_t *registry;
+    const uint8_t *roster;
     uint8_t operation;
     uint16_t behavior;
     uint16_t candidate;
@@ -132,10 +143,18 @@ static int decode_case(uint8_t *data, size_t size, size_t *cursor, query_case *v
         value->behavior = fist_read_u16le(data + position + 1);
         value->candidate = fist_read_u16le(data + position + 3);
         value->requested_candidate = fist_read_u16le(data + position + REQUESTED_CANDIDATE_OFFSET);
-        if (value->operation > ACQUISITION_OPERATIONS) {
+        if (value->operation > ACQUISITION_OPERATIONS && value->operation != PROMOTION) {
             return -1;
         }
         position += ACQUISITION_HEADER;
+        if (value->operation == PROMOTION) {
+            if (size - position < ROSTER_BYTES + REGISTRY_BYTES || value->behavior == 0 ||
+                value->behavior > MAX_PROMOTIONS) {
+                return -1;
+            }
+            value->roster = data + position;
+            position += ROSTER_BYTES;
+        }
     }
     value->registry = data + position;
     position += REGISTRY_BYTES;
@@ -222,15 +241,19 @@ static int restore_view(fist_mission_world *world, uint16_t slot, const uint8_t 
     }
     switch (type) {
     case RETIRING:
-        object->vehicle = (fist_vehicle_state){.type = type,
-                                               .map_x = pose.x,
-                                               .map_y = pose.y,
-                                               .altitude = pose.altitude,
-                                               .turret = {.heading = pose.heading},
-                                               .drive = {.motion_flags = raw[MODE]},
-                                               .object_flags = raw[FLAGS],
-                                               .secondary_flags = raw[SECONDARY],
-                                               .projection_scale = scale};
+        object->vehicle =
+            (fist_vehicle_state){.type = type,
+                                 .platoon = raw[PLATOON],
+                                 .member = raw[MEMBER],
+                                 .control_flags = fist_read_u16le(raw + CONTROL_FLAGS),
+                                 .map_x = pose.x,
+                                 .map_y = pose.y,
+                                 .altitude = pose.altitude,
+                                 .turret = {.heading = pose.heading},
+                                 .drive = {.motion_flags = raw[MODE]},
+                                 .object_flags = raw[FLAGS],
+                                 .secondary_flags = raw[SECONDARY],
+                                 .projection_scale = scale};
         break;
     case EXPLOSION:
         object->explosion = (fist_explosion){.allocation = allocation,
@@ -284,6 +307,8 @@ static int restore_view(fist_mission_world *world, uint16_t slot, const uint8_t 
         break;
     case WRECK:
         object->wreck = (fist_vehicle_wreck){.allocation = allocation,
+                                             .platoon = raw[WRECK_PLATOON],
+                                             .member = raw[WRECK_MEMBER],
                                              .pose = pose,
                                              .projection_scale = scale,
                                              .flags = raw[FLAGS],
@@ -835,6 +860,226 @@ static int acquisition_query(fist_mission_world *world, fist_mission_world *befo
     return 0;
 }
 
+static int promotion_boundary(const fist_mission_world *world, const query_case *value) {
+    if (canonical_boundary(world, value) != 0) {
+        return -1;
+    }
+    for (size_t index = 0; index < FIST_UNIT_ROSTER_COUNT; ++index) {
+        if (world->combat.roster[index] != fist_read_u16le(value->roster + (index * 2))) {
+            return -1;
+        }
+    }
+    for (size_t slot = 0; slot < FIST_UNIT_REGISTRY_COUNT; ++slot) {
+        const uint8_t *raw = value->raw[slot];
+        if (raw == NULL) {
+            continue;
+        }
+        const uint16_t type = world->pool.slots[slot].type;
+        if (type < FIST_UNIT_GROUND_VEHICLE_COUNT || type == RETIRING) {
+            const fist_vehicle_state *actor = &world->objects[slot].vehicle;
+            if (actor->platoon != raw[PLATOON] || actor->member != raw[MEMBER] ||
+                actor->control_flags != fist_read_u16le(raw + CONTROL_FLAGS)) {
+                return -1;
+            }
+        } else if (type == WRECK && (world->objects[slot].wreck.platoon != raw[WRECK_PLATOON] ||
+                                     world->objects[slot].wreck.member != raw[WRECK_MEMBER])) {
+            return -1;
+        }
+    }
+    return 0;
+}
+
+static int write_promotion(const fist_mission_world *world, uint16_t slot, int status) {
+    printf("promotion %d %u", status, (unsigned)slot);
+    for (size_t index = 0; index < FIST_UNIT_ROSTER_COUNT; ++index) {
+        printf(" %u", (unsigned)world->combat.roster[index]);
+    }
+    for (size_t index = 0; index < FIST_UNIT_REGISTRY_COUNT; ++index) {
+        if (world->pool.slots[index].used == 0) {
+            continue;
+        }
+        const uint16_t type = world->pool.slots[index].type;
+        if (type < FIST_UNIT_GROUND_VEHICLE_COUNT || type == RETIRING) {
+            const fist_vehicle_state *actor = &world->objects[index].vehicle;
+            printf(" %u %u %u %u", (unsigned)index, (unsigned)type, (unsigned)actor->member,
+                   (unsigned)actor->control_flags);
+        } else if (type == WRECK) {
+            printf(" %u %u %u 0", (unsigned)index, (unsigned)type,
+                   (unsigned)world->objects[index].wreck.member);
+        }
+    }
+    return putchar('\n') == EOF ? -1 : 0;
+}
+
+static int checked_promotion(fist_mission_world *world, fist_mission_world *before, uint16_t slot,
+                             int *status) {
+    fist_probe_capture(world, sizeof(*world), before);
+    const fist_vehicle_state *old = &before->objects[slot].vehicle;
+    const bool indexed = old->member != 0 && old->member < FIST_UNIT_MEMBERS_PER_PLATOON &&
+                         old->platoon < FIST_UNIT_PLATOON_COUNT;
+    const size_t index =
+        indexed ? ((size_t)old->platoon * FIST_UNIT_MEMBERS_PER_PLATOON) + old->member : 0;
+    const uint16_t predecessor = indexed ? before->combat.roster[index - 1] : FIST_POOL_NO_SLOT;
+    *status = fist_mission_world_promote_member(world, slot);
+    if (*status == 0) {
+        before->objects[slot].vehicle.member = world->objects[slot].vehicle.member;
+        before->objects[slot].vehicle.control_flags = world->objects[slot].vehicle.control_flags;
+        if (indexed) {
+            before->combat.roster[index - 1] = world->combat.roster[index - 1];
+            before->combat.roster[index] = world->combat.roster[index];
+        }
+        if (predecessor < FIST_UNIT_REGISTRY_COUNT) {
+            if (before->pool.slots[predecessor].type == WRECK) {
+                before->objects[predecessor].wreck.member =
+                    world->objects[predecessor].wreck.member;
+            } else {
+                before->objects[predecessor].vehicle.member =
+                    world->objects[predecessor].vehicle.member;
+            }
+        }
+    }
+    return (*status == 0 || *status == -1) && fist_probe_unchanged(world, sizeof(*world), before)
+               ? 0
+               : -1;
+}
+
+static int promotion_query(fist_mission_world *world, fist_mission_world *before, query_case *value,
+                           bool canonical) {
+    if (value->operation != PROMOTION || (!canonical && install(world, value) != 0)) {
+        return -1;
+    }
+    if (!canonical) {
+        for (size_t index = 0; index < FIST_UNIT_ROSTER_COUNT; ++index) {
+            world->combat.roster[index] = fist_read_u16le(value->roster + (index * 2));
+        }
+    } else if (promotion_boundary(world, value) != 0) {
+        return -1;
+    }
+    for (size_t slot = 0; slot < FIST_UNIT_REGISTRY_COUNT; ++slot) {
+        if (value->raw[slot] != NULL) {
+            poison(value->raw[slot], fist_unit_state_size(world->pool.slots[slot].type));
+        }
+    }
+    const uint16_t slot = fist_read_u16le(value->header + ACTOR);
+    if (fist_mission_world_promote_member(NULL, slot) != -1) {
+        return -1;
+    }
+    for (size_t repeat = 0; repeat < value->behavior; ++repeat) {
+        int status = 0;
+        if (checked_promotion(world, before, slot, &status) != 0) {
+            return -1;
+        }
+        if (write_promotion(world, slot, status) != 0) {
+            return -1;
+        }
+        if (status != 0) {
+            break;
+        }
+    }
+    return 0;
+}
+
+static int promotion_rejects(fist_mission_world *world, fist_mission_world *before, uint16_t slot) {
+    fist_probe_capture(world, sizeof(*world), before);
+    return fist_mission_world_promote_member(world, slot) == -1 &&
+                   fist_probe_unchanged(world, sizeof(*world), before)
+               ? 0
+               : -1;
+}
+
+static int promotion_identity_case(fist_mission_world *world, fist_mission_world *before,
+                                   uint16_t kind) {
+    fist_mission_world_reset(world);
+    fist_pool_allocation actor_binding = {0};
+    fist_pool_allocation predecessor_binding = {0};
+    fist_pool_allocation found = {0};
+    if (fist_object_pool_import(&world->pool, (fist_pool_import){kind, 0, 1}, &actor_binding) !=
+            0 ||
+        fist_object_pool_import(&world->pool, (fist_pool_import){0, 0, 2}, &predecessor_binding) !=
+            0 ||
+        fist_object_pool_find(&world->pool, actor_binding.slot, &found) != FIST_POOL_UNAVAILABLE) {
+        return -1;
+    }
+    fist_vehicle_state *actor = &world->objects[actor_binding.slot].vehicle;
+    fist_vehicle_state *predecessor = &world->objects[predecessor_binding.slot].vehicle;
+    *actor = (fist_vehicle_state){.type = kind,
+                                  .component_size = fist_vehicle_component_size(kind),
+                                  .member = 1,
+                                  .control_flags = UINT16_MAX};
+    *predecessor =
+        (fist_vehicle_state){.type = 0, .drive = {.motion_flags = PROMOTION_BLOCKED_FLAG}};
+    world->combat.roster[0] = predecessor_binding.slot;
+    world->combat.roster[1] = actor_binding.slot;
+    int status = 0;
+    if (checked_promotion(world, before, actor_binding.slot, &status) != 0 || status != 0 ||
+        actor->member != 0 || predecessor->member != 1 ||
+        world->combat.roster[0] != actor_binding.slot ||
+        world->combat.roster[1] != predecessor_binding.slot ||
+        actor->control_flags != (uint16_t)(UINT16_MAX & ~(unsigned)PROMOTION_GOAL_VALID)) {
+        return -1;
+    }
+    /* A leader must ignore unused platoon/roster/orders/RNG inputs. */
+    actor->platoon = UINT8_MAX;
+    world->combat.roster[0] = FIST_POOL_NO_SLOT;
+    world->random.next_stream = UINT8_MAX;
+    fist_probe_capture(world, sizeof(*world), before);
+    if (fist_mission_world_promote_member(world, actor_binding.slot) != 0 ||
+        !fist_probe_unchanged(world, sizeof(*world), before)) {
+        return -1;
+    }
+    actor->platoon = 0;
+    actor->member = 1;
+    predecessor->member = 0;
+    world->combat.roster[0] = predecessor_binding.slot;
+    world->combat.roster[1] = actor_binding.slot;
+    predecessor->type = WRECK; /* Used mistagged payload must fail atomically. */
+    if (promotion_rejects(world, before, actor_binding.slot) != 0) {
+        return -1;
+    }
+    actor->drive.motion_flags = PROMOTION_BLOCKED_FLAG;
+    fist_probe_capture(world, sizeof(*world), before);
+    if (fist_mission_world_promote_member(world, actor_binding.slot) != 0 ||
+        !fist_probe_unchanged(world, sizeof(*world), before)) {
+        return -1;
+    }
+    actor->drive.motion_flags = 0;
+    predecessor->type = RETIRING;
+    if (fist_object_pool_retype(&world->pool, predecessor_binding, RETIRING,
+                                &predecessor_binding) != 0 ||
+        checked_promotion(world, before, actor_binding.slot, &status) != 0 || status != 0 ||
+        predecessor->member != 1 || actor->member != 0) {
+        return -1;
+    }
+    actor->member = 1;
+    world->combat.roster[0] = predecessor_binding.slot;
+    if (fist_object_pool_release(&world->pool, predecessor_binding.registry_index, &found) != 0 ||
+        promotion_rejects(world, before, actor_binding.slot) != 0) {
+        return -1;
+    }
+    world->combat.roster[0] = FIST_POOL_NO_SLOT;
+    actor->drive.motion_flags = UINT8_MAX;
+    if (checked_promotion(world, before, actor_binding.slot, &status) != 0 || status != 0 ||
+        actor->member != 0) {
+        return -1;
+    }
+    actor->component_size = 0;
+    if (promotion_rejects(world, before, actor_binding.slot) != 0 ||
+        promotion_rejects(world, before, FIST_POOL_NO_SLOT) != 0) {
+        return -1;
+    }
+    fist_mission_world_reset(world);
+    return promotion_rejects(world, before, actor_binding.slot);
+}
+
+static int promotion_contracts(fist_mission_world *world, fist_mission_world *before) {
+    for (unsigned kind = 0; kind < FIST_UNIT_GROUND_VEHICLE_COUNT; ++kind) {
+        if (promotion_identity_case(world, before, (uint16_t)kind) != 0) {
+            return -1;
+        }
+    }
+    return 0;
+}
+
 static int invalid_acquisition_state(fist_mission_world *world, fist_mission_world *before,
                                      const fist_klc_image *height,
                                      fist_target_acquisition_request request) {
@@ -1062,9 +1307,10 @@ static int load_mission(const char *path, const fist_klc_image *height, fist_mis
 }
 
 static uint8_t *prepare_probe(fist_mission_world *world, fist_mission_world *before,
-                              const fist_klc_image *height, bool acquisition) {
+                              const fist_klc_image *height, bool acquisition, bool promotion) {
     if (lifetime_contracts(world, before) != 0 ||
-        (acquisition && acquisition_lifetimes(world, before) != 0)) {
+        (acquisition && acquisition_lifetimes(world, before) != 0) ||
+        (promotion && promotion_contracts(world, before) != 0)) {
         return NULL;
     }
     const size_t bytes = (size_t)height->width * height->height;
@@ -1077,9 +1323,20 @@ static uint8_t *prepare_probe(fist_mission_world *world, fist_mission_world *bef
     return pixels;
 }
 
+static int run_query(fist_mission_world *world, fist_mission_world *before,
+                     const fist_klc_image *height, query_case *value, bool canonical,
+                     bool acquisition, bool promotion) {
+    if (promotion) {
+        return promotion_query(world, before, value, canonical);
+    }
+    return acquisition ? acquisition_query(world, before, height, value, canonical)
+                       : query(world, before, height, value, canonical);
+}
+
 int main(int argc, char **argv) {
     const bool acquisition = argc > 1 && strcmp(argv[1], "--acquisition") == 0;
-    if (acquisition) {
+    const bool promotion = argc > 1 && strcmp(argv[1], "--promotion") == 0;
+    if (acquisition || promotion) {
         --argc;
         ++argv;
     }
@@ -1096,8 +1353,9 @@ int main(int argc, char **argv) {
     fist_klc_image height = {0};
     query_case *cases = NULL;
     uint32_t count = 0;
-    int status =
-        data == NULL || closed != 0 ? -1 : decode(data, size, &height, &cases, &count, acquisition);
+    int status = data == NULL || closed != 0
+                     ? -1
+                     : decode(data, size, &height, &cases, &count, acquisition || promotion);
     fist_mission_world *world = calloc(1, sizeof(*world));
     fist_mission_world *before = malloc(sizeof(*before));
     uint8_t *pixels = NULL;
@@ -1105,7 +1363,7 @@ int main(int argc, char **argv) {
         status = -1;
     }
     if (status == 0) {
-        pixels = prepare_probe(world, before, &height, acquisition);
+        pixels = prepare_probe(world, before, &height, acquisition, promotion);
         if (pixels == NULL) {
             status = -1;
         }
@@ -1114,8 +1372,8 @@ int main(int argc, char **argv) {
         status = load_mission(argv[1], &height, world, acquisition);
     }
     for (size_t index = 0; status == 0 && index < count; ++index) {
-        status = acquisition ? acquisition_query(world, before, &height, &cases[index], argc == 3)
-                             : query(world, before, &height, &cases[index], argc == 3);
+        status =
+            run_query(world, before, &height, &cases[index], argc == 3, acquisition, promotion);
         if (memcmp(pixels, height.pixels, (size_t)height.width * height.height) != 0) {
             status = -1;
         }
