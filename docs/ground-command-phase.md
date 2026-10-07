@@ -140,3 +140,8 @@ The complete semantic 0541 planar bearing/distance prerequisite is documented in
 [planar geometry](planar-geometry.md) (WI 0086). It owns original numeric rules and local scratch;
 it does not implement ab88 target resolution or its full dispatch. Use that shared owner when
 recovering remaining command handlers. Parent/callback/battle/PCM acceptance remains open.
+
+The complete ad08 route progress and proved count-32 storage repair are documented in
+[ground route progress](ground-route-progress.md). This callback shares canonical route and
+retained unsigned range ownership. It does not consume target references, produce bearing/range
+or supply a partial parent callback bank. Full 0081 acceptance remains unchanged.

@@ -195,3 +195,42 @@ int fist_mission_world_assign_command_goal(fist_mission_world *world, uint16_t s
     *actor = next;
     return 0;
 }
+
+int fist_mission_world_advance_command_route(fist_mission_world *world, uint16_t slot) {
+    enum { REACHED_RANGE = 48, CYCLIC = 3 };
+    fist_vehicle_state *actor = command_actor(world, slot);
+    if (actor == NULL || actor->command.mode > MODE_BEHAVIOR_THREE ||
+        actor->command.mode % 2 != 0) {
+        return -1;
+    }
+    if (actor->command.mode != MODE_LEADER || (actor->control_flags & GOAL_VALID) == 0 ||
+        actor->command.range > REACHED_RANGE) {
+        return 0;
+    }
+    fist_order_route *route = &world->orders.routes[actor->platoon];
+    const size_t count = route->count;
+    if (count > FIST_ORDER_WAYPOINTS) {
+        return -1;
+    }
+    if (count != 0) {
+        const uint16_t mode = world->orders.descriptors[actor->platoon].words[1];
+        if (mode == CYCLIC) {
+            const fist_order_waypoint first = route->points[0];
+            for (size_t point = 1; point < count; ++point) {
+                route->points[point - 1] = route->points[point];
+            }
+            route->points[count - 1] = first;
+        } else {
+            /* Original 0/1/2 and >=4 fallback copy old-count points, including
+             * one inactive in-record value. At capacity only that final copy
+             * escapes the record; preserve the newly unused last value instead.
+             * This repairs the proved neighbor dependency without losing a goal. */
+            for (size_t point = 1; point <= count && point < FIST_ORDER_WAYPOINTS; ++point) {
+                route->points[point - 1] = route->points[point];
+            }
+            --route->count;
+        }
+    }
+    actor->control_flags &= (uint16_t)~GOAL_VALID;
+    return 0;
+}

@@ -312,6 +312,9 @@ if(BUILD_TESTING AND NOT EMSCRIPTEN)
     add_test(NAME geometry_contract COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_SOURCE_DIR}/tools/rewrite/test_geometry.py
         --target native --native-probe $<TARGET_FILE:fist_geometry_probe>)
+    add_test(NAME ground_route_contract COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_SOURCE_DIR}/tools/rewrite/test_ground_route.py
+        --target native --native-probe $<TARGET_FILE:fist_ground_goal_probe>)
     add_test(NAME world_step_contract COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_SOURCE_DIR}/tools/rewrite/test_world_step.py
         --target native --native-probe $<TARGET_FILE:fist_world_step_probe>)

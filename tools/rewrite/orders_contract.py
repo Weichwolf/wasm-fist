@@ -34,13 +34,19 @@ def orders_lines(blocks=None):
         route = paths[platoon * PATH_RECORD:(platoon + 1) * PATH_RECORD]
         if route[0] > WAYPOINTS:
             raise ValueError('Route count exceeds original editor capacity')
-        coordinates = struct.unpack_from('<64i', route, PATH_HEADER)
-        lines.append(f'route {platoon} {route[0]} ' + route[1:PATH_HEADER].hex(' ') +
-                     ' ' + ' '.join(map(str, coordinates)))
+        lines.append(route_line(platoon, route).rstrip('\n'))
     for platoon in range(PLATOONS):
         words = struct.unpack_from('<11H', descriptors, platoon * DESCRIPTOR_RECORD)
         lines.append(f'descriptor {platoon} ' + ' '.join(map(str, words)))
     return '\n'.join(lines) + '\n'
+
+
+def route_line(platoon, route):
+    if len(route) != PATH_RECORD:
+        raise ValueError('Incomplete owned route observation')
+    coordinates = struct.unpack_from('<64i', route, PATH_HEADER)
+    return (f'route {platoon} {route[0]} ' + route[1:PATH_HEADER].hex(' ') +
+            ' ' + ' '.join(map(str, coordinates)) + '\n')
 
 
 def constructed_blocks(count=32, salt=0):

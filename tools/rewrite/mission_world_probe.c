@@ -29,7 +29,11 @@ enum {
     ARTILLERY = 27,
     SMOKE = 17,
     WRECK = 23,
-    MARKER = 123
+    MARKER = 123,
+    SELECT_COMMAND = 0,
+    GOAL_COMMAND = 1,
+    ROUTE_COMMAND = 2,
+    NAVIGATION_COMMAND = 3
 };
 
 static uint8_t *read_file(const char *path, size_t *size) {
@@ -129,19 +133,34 @@ static int reset_checked(fist_mission_world *world) {
 }
 
 static int command_updates(fist_mission_world *world, const uint8_t *input, size_t count,
-                           fist_mission_world *before, int goals) {
+                           fist_mission_world *before, int operation) {
     for (size_t index = 0; index < count; ++index) {
         const uint16_t slot = fist_read_u16le(input + (index * COMMAND));
         const uint16_t random = fist_read_u16le(input + (index * COMMAND) + 2);
         fist_probe_capture(world, sizeof(*world), before);
-        const int status =
-            goals != 0
-                ? fist_mission_world_assign_command_goal(world, slot)
-                : fist_mission_world_select_command(world, (fist_command_selection){slot, random});
+        int status = -1;
+        const char *name = "select";
+        int action = operation;
+        if (operation == NAVIGATION_COMMAND) {
+            action = random == 0 ? GOAL_COMMAND : ROUTE_COMMAND;
+        }
+        if (action == GOAL_COMMAND) {
+            name = "goal";
+            status = fist_mission_world_assign_command_goal(world, slot);
+        } else if (action == ROUTE_COMMAND) {
+            name = "route";
+            status = fist_mission_world_advance_command_route(world, slot);
+        } else {
+            status =
+                fist_mission_world_select_command(world, (fist_command_selection){slot, random});
+        }
         if (status == 0) {
-            if (goals != 0) {
+            if (action == GOAL_COMMAND) {
                 before->objects[slot].vehicle.command.goal =
                     world->objects[slot].vehicle.command.goal;
+            } else if (action == ROUTE_COMMAND) {
+                const size_t platoon = world->objects[slot].vehicle.platoon;
+                before->orders.routes[platoon] = world->orders.routes[platoon];
             } else {
                 before->objects[slot].vehicle.command.mode =
                     world->objects[slot].vehicle.command.mode;
@@ -153,7 +172,7 @@ static int command_updates(fist_mission_world *world, const uint8_t *input, size
         if (!fist_probe_unchanged(world, sizeof(*world), before)) {
             return -1;
         }
-        printf("%s %u %d\n", goals != 0 ? "goal" : "select", (unsigned)slot, status);
+        printf("%s %u %d\n", name, (unsigned)slot, status);
         if (fist_probe_write_mission_world(world) != 0) {
             return -1;
         }
@@ -169,11 +188,26 @@ static void install_orders(fist_mission_world *world, const fist_mission_orders 
     }
 }
 
-static int run(fist_units *units, const uint8_t *request, size_t request_size,
-               const fist_mission_orders *orders, int goals) {
+static int validate_request(int operation, const uint8_t *request, size_t request_size) {
     if (request_size < HEADER || request[STREAM] >= FIST_RANDOM_STREAMS || request[RELOAD] > 1 ||
         fist_read_u32le(request + COUNT) != (request_size - HEADER) / COMMAND ||
         (request_size - HEADER) % COMMAND != 0) {
+        return -1;
+    }
+    const size_t count = fist_read_u32le(request + COUNT);
+    if (operation == NAVIGATION_COMMAND) {
+        for (size_t index = 0; index < count; ++index) {
+            if (fist_read_u16le(request + HEADER + (index * COMMAND) + 2) > 1) {
+                return -1;
+            }
+        }
+    }
+    return 0;
+}
+
+static int run(fist_units *units, const uint8_t *request, size_t request_size,
+               const fist_mission_orders *orders, int operation) {
+    if (validate_request(operation, request, request_size) != 0) {
         return -1;
     }
     const size_t count = fist_read_u32le(request + COUNT);
@@ -231,8 +265,9 @@ static int run(fist_units *units, const uint8_t *request, size_t request_size,
     }
     result = status == 0 ? fist_probe_write_mission_world(world) : 0;
     if (result == 0 && status == 0) {
-        result = orders == NULL ? tree_commands(world, request + HEADER, count, before)
-                                : command_updates(world, request + HEADER, count, before, goals);
+        result = orders == NULL
+                     ? tree_commands(world, request + HEADER, count, before)
+                     : command_updates(world, request + HEADER, count, before, operation);
     }
     if (reset_checked(world) != 0) {
         result = -1;
@@ -244,7 +279,8 @@ static int run(fist_units *units, const uint8_t *request, size_t request_size,
 
 int main(int argc, char **argv) {
     if (argc != 3 &&
-        (argc != 4 || (strcmp(argv[3], "--commands") != 0 && strcmp(argv[3], "--goals") != 0))) {
+        (argc != 4 || (strcmp(argv[3], "--commands") != 0 && strcmp(argv[3], "--goals") != 0 &&
+                       strcmp(argv[3], "--routes") != 0 && strcmp(argv[3], "--navigation") != 0))) {
         return EXIT_FAILURE;
     }
     size_t size = 0;
@@ -266,9 +302,17 @@ int main(int argc, char **argv) {
     }
     size_t request_size = 0;
     uint8_t *request = read_file(argv[1], &request_size);
-    status = request == NULL ? -1
-                             : run(&units, request, request_size, argc == 4 ? &orders : NULL,
-                                   argc == 4 && strcmp(argv[3], "--goals") == 0);
+    int operation = SELECT_COMMAND;
+    if (argc == 4 && strcmp(argv[3], "--goals") == 0) {
+        operation = GOAL_COMMAND;
+    } else if (argc == 4 && strcmp(argv[3], "--routes") == 0) {
+        operation = ROUTE_COMMAND;
+    } else if (argc == 4 && strcmp(argv[3], "--navigation") == 0) {
+        operation = NAVIGATION_COMMAND;
+    }
+    status = request == NULL
+                 ? -1
+                 : run(&units, request, request_size, argc == 4 ? &orders : NULL, operation);
     free(request);
     fist_units_destroy(&units);
     return status == 0 && ferror(stdout) == 0 ? EXIT_SUCCESS : EXIT_FAILURE;

@@ -41,21 +41,24 @@ uint8_t *fist_probe_read_file(FILE *file, size_t *size) {
     }
 }
 
+void fist_probe_write_route(size_t platoon, const fist_order_route *route) {
+    printf("route %zu %u", platoon, (unsigned)route->count);
+    for (size_t index = 0; index < FIST_ORDER_HEADER_BYTES; ++index) {
+        printf(" %02x", (unsigned)route->header[index]);
+    }
+    for (size_t index = 0; index < FIST_ORDER_WAYPOINTS; ++index) {
+        printf(" %" PRId32 " %" PRId32, route->points[index].x, route->points[index].y);
+    }
+    printf("\n");
+}
+
 void fist_probe_write_orders(const fist_mission_orders *orders) {
     printf("orders %u\n", (unsigned)(orders != NULL));
     if (orders == NULL) {
         return;
     }
     for (size_t platoon = 0; platoon < FIST_UNIT_PLATOON_COUNT; ++platoon) {
-        const fist_order_route *route = &orders->routes[platoon];
-        printf("route %zu %u", platoon, (unsigned)route->count);
-        for (size_t index = 0; index < FIST_ORDER_HEADER_BYTES; ++index) {
-            printf(" %02x", (unsigned)route->header[index]);
-        }
-        for (size_t index = 0; index < FIST_ORDER_WAYPOINTS; ++index) {
-            printf(" %" PRId32 " %" PRId32, route->points[index].x, route->points[index].y);
-        }
-        printf("\n");
+        fist_probe_write_route(platoon, &orders->routes[platoon]);
     }
     for (size_t platoon = 0; platoon < FIST_UNIT_PLATOON_COUNT; ++platoon) {
         printf("descriptor %zu", platoon);

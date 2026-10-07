@@ -60,7 +60,7 @@ void fist_probe_write_vehicle_state(const fist_vehicle_state *state) {
     for (size_t index = 0; index < FIST_VEHICLE_HEADING_SAMPLES; ++index) {
         printf(" %u", (unsigned)state->command.heading_history[index]);
     }
-    printf(" %u\n", (unsigned)state->command.heading_average);
+    printf(" %u %u\n", (unsigned)state->command.heading_average, (unsigned)state->command.range);
     printf("position_history");
     for (size_t index = 0; index < FIST_VEHICLE_POSITION_SAMPLES; ++index) {
         printf(" %u %u", (unsigned)state->position_history[index].x,

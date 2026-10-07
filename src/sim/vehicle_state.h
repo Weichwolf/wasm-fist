@@ -75,6 +75,9 @@ typedef struct {
     uint16_t target_reference;
     /* Original +49/+4d navigation goal. Validity remains control bit 2. */
     fist_order_waypoint goal;
+    /* Original +53 unsigned navigation range; the bearing callback produces it
+     * and route/throttle callbacks consume it. No inferred physical unit. */
+    uint16_t range;
     /* Original +28/+2a/+2c newest-first samples and +2e average. The parent
      * heading phase owns future sampling; restoration retains all words. */
     uint16_t heading_history[FIST_VEHICLE_HEADING_SAMPLES];

@@ -13,6 +13,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 enum {
     HEADER = 4,
@@ -144,20 +145,31 @@ static int install(fist_mission_world *world, const goal_case *input, uint16_t *
     return 0;
 }
 
-static int run_case(fist_mission_world *world, fist_mission_world *before, const goal_case *input) {
+static int apply_command(fist_mission_world *world, uint16_t slot, int routes) {
+    return routes != 0 ? fist_mission_world_advance_command_route(world, slot)
+                       : fist_mission_world_assign_command_goal(world, slot);
+}
+
+static int run_case(fist_mission_world *world, fist_mission_world *before, const goal_case *input,
+                    int routes) {
     uint16_t slot = 0;
     if (install(world, input, &slot) != 0) {
         return -1;
     }
     fist_probe_capture(world, sizeof(*world), before);
-    if (fist_mission_world_assign_command_goal(NULL, slot) != -1 ||
-        fist_mission_world_assign_command_goal(world, FIST_POOL_NO_SLOT) != -1 ||
+    if (apply_command(NULL, slot, routes) != -1 ||
+        apply_command(world, FIST_POOL_NO_SLOT, routes) != -1 ||
         !fist_probe_unchanged(world, sizeof(*world), before)) {
         return -1;
     }
-    const int status = fist_mission_world_assign_command_goal(world, slot);
+    const int status = apply_command(world, slot, routes);
     if (status == 0) {
-        before->objects[slot].vehicle.command.goal = world->objects[slot].vehicle.command.goal;
+        if (routes != 0) {
+            const size_t platoon = world->objects[slot].vehicle.platoon;
+            before->orders.routes[platoon] = world->orders.routes[platoon];
+        } else {
+            before->objects[slot].vehicle.command.goal = world->objects[slot].vehicle.command.goal;
+        }
         before->objects[slot].vehicle.control_flags = world->objects[slot].vehicle.control_flags;
     }
     if (!fist_probe_unchanged(world, sizeof(*world), before)) {
@@ -165,6 +177,14 @@ static int run_case(fist_mission_world *world, fist_mission_world *before, const
     }
     printf("status %d\n", status);
     fist_probe_write_vehicle_state(&world->objects[slot].vehicle);
+    if (routes != 0) {
+        const size_t platoon = world->objects[slot].vehicle.platoon;
+        if (platoon < FIST_UNIT_PLATOON_COUNT) {
+            fist_probe_write_route(platoon, &world->orders.routes[platoon]);
+        } else {
+            puts("route unavailable");
+        }
+    }
     /* Full orders and leader payload preservation is also checked above. */
     printf("random %u", (unsigned)world->random.next_stream);
     for (size_t index = 0; index < FIST_RANDOM_STREAMS; ++index) {
@@ -174,9 +194,10 @@ static int run_case(fist_mission_world *world, fist_mission_world *before, const
     return 0;
 }
 
-static int rejected(fist_mission_world *world, fist_mission_world *before, uint16_t slot) {
+static int rejected(fist_mission_world *world, fist_mission_world *before, uint16_t slot,
+                    int routes) {
     fist_probe_capture(world, sizeof(*world), before);
-    return fist_mission_world_assign_command_goal(world, slot) == -1 &&
+    return apply_command(world, slot, routes) == -1 &&
                    fist_probe_unchanged(world, sizeof(*world), before)
                ? 0
                : -1;
@@ -184,11 +205,11 @@ static int rejected(fist_mission_world *world, fist_mission_world *before, uint1
 
 static int invalid_roster(fist_mission_world *world, fist_mission_world *before, uint16_t slot) {
     world->combat.roster[0] = FIST_UNIT_REGISTRY_COUNT;
-    if (rejected(world, before, slot) != 0) {
+    if (rejected(world, before, slot, 0) != 0) {
         return -1;
     }
     world->combat.roster[0] = 0;
-    if (rejected(world, before, slot) != 0) {
+    if (rejected(world, before, slot, 0) != 0) {
         return -1;
     }
     fist_pool_allocation leader = {0};
@@ -196,19 +217,19 @@ static int invalid_roster(fist_mission_world *world, fist_mission_world *before,
         return -1;
     }
     world->combat.roster[0] = leader.slot;
-    if (rejected(world, before, slot) != 0 ||
+    if (rejected(world, before, slot, 0) != 0 ||
         fist_object_pool_import(&world->pool, (fist_pool_import){1, 2, 0}, &leader) != 0) {
         return -1;
     }
     world->combat.roster[0] = leader.slot;
-    if (rejected(world, before, slot) != 0) {
+    if (rejected(world, before, slot, 0) != 0) {
         return -1;
     }
     world->objects[leader.slot].vehicle.component_size = fist_vehicle_component_size(0);
-    return rejected(world, before, slot);
+    return rejected(world, before, slot, 0);
 }
 
-static int invalid_worlds(fist_mission_world *world, fist_mission_world *before) {
+static int invalid_worlds(fist_mission_world *world, fist_mission_world *before, int routes) {
     fist_mission_world_reset(world);
     fist_pool_allocation allocation = {0};
     if (fist_object_pool_import(&world->pool, (fist_pool_import){0, 0, 0}, &allocation) != 0) {
@@ -225,7 +246,7 @@ static int invalid_worlds(fist_mission_world *world, fist_mission_world *before)
             continue;
         }
         world->orders_loaded = (uint8_t)loaded;
-        if (rejected(world, before, slot) != 0) {
+        if (rejected(world, before, slot, routes) != 0) {
             return -1;
         }
     }
@@ -235,27 +256,31 @@ static int invalid_worlds(fist_mission_world *world, fist_mission_world *before)
             continue;
         }
         actor->component_size = size;
-        if (rejected(world, before, slot) != 0) {
+        if (rejected(world, before, slot, routes) != 0) {
             return -1;
         }
     }
     actor->type = 1;
     actor->component_size = fist_vehicle_component_size(1);
-    if (rejected(world, before, slot) != 0) {
+    if (rejected(world, before, slot, routes) != 0) {
         return -1;
     }
     actor->type = 0;
     actor->component_size = fist_vehicle_component_size(0);
     world->pool.registry[0].slot = FIST_UNIT_REGISTRY_COUNT;
-    if (rejected(world, before, slot) != 0) {
+    if (rejected(world, before, slot, routes) != 0) {
         return -1;
     }
     world->pool.registry[0].slot = slot;
-    return invalid_roster(world, before, slot);
+    if (routes == 0) {
+        return invalid_roster(world, before, slot);
+    }
+    world->pool.slots[slot].used = 0;
+    return rejected(world, before, slot, routes);
 }
 
 int main(int argc, char **argv) {
-    if (argc != 2) {
+    if (argc != 2 && (argc != 3 || strcmp(argv[2], "--routes") != 0)) {
         return EXIT_FAILURE;
     }
     FILE *file = fopen(argv[1], "rb");
@@ -277,10 +302,10 @@ int main(int argc, char **argv) {
     fist_mission_world *before = malloc(sizeof(*before));
     int status = cases == NULL || world == NULL || before == NULL ? -1 : 0;
     if (status == 0) {
-        status = invalid_worlds(world, before);
+        status = invalid_worlds(world, before, argc == 3);
     }
     for (size_t index = 0; status == 0 && index < count; ++index) {
-        status = run_case(world, before, &cases[index]);
+        status = run_case(world, before, &cases[index], argc == 3);
     }
     free(before);
     free(world);

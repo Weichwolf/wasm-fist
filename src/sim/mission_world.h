@@ -97,4 +97,15 @@ int fist_mission_world_select_command(fist_mission_world *world, fist_command_se
  * changing any world state. */
 int fist_mission_world_assign_command_goal(fist_mission_world *world, uint16_t slot);
 
+/* Complete ad08 route progress. Mode zero consumes the platoon's first waypoint
+ * when its goal is valid and the retained unsigned range is <=48; other seven
+ * entries are original returns. PINF waypoint mode 3 cycles; 0/1/2 and the
+ * original >=4 fallback remove the first point. All headers/unused in-record
+ * values survive the original safe-domain copy. At full capacity the newly
+ * unused final slot retains its last value, repairing the original neighbor
+ * read; cyclic progress never reads past its last active point. No RNG, bearing
+ * production, parent dispatch or unrelated world mutation. Invalid used route
+ * counts/actor/world metadata fail with the complete world unchanged. */
+int fist_mission_world_advance_command_route(fist_mission_world *world, uint16_t slot);
+
 #endif

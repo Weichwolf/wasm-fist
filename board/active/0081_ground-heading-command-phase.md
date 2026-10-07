@@ -112,3 +112,14 @@ returns and all 960 saved actor/goal pairs without skips. This prerequisite adds
 target-reference interpretation, callback bank or parent scheduling; existing scene binaries
 are unchanged. Continue the complete remaining command and caller contract using this numeric
 owner, keeping this WI's Contract and Accept intact.
+
+WI 0087 supplies complete ad08 route progress and the nested four-way service, using canonical
+routes/descriptors and retained unsigned +53 range. See docs/ground-route-progress.md. Its original
+capacity proof recovers two out-of-record reads at the valid 32-point boundary; the rewrite
+preserves active goals and repairs only the newly unused tail storage, retaining complete original
+safe-domain results. Required native/WASM and memory gates cover 281524 fixtures, all 960 saved
+ground records and 944 complete consuming world boundaries. Current controls/visuals, full strict
+builds and existing original selector/goal/start/timed canonical regressions pass. This milestone
+does not produce bearing/range, translate saved targets, wire a partial parent bank or advance the
+living tick-seven prefix. Continue the complete remaining callbacks and caller contract; this
+WI's Contract and Accept remain unchanged.
