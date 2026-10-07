@@ -48,6 +48,7 @@ if [[ $target == wasm || $target == all ]]; then
     python3 "$root/tests/test_model_bitmap.py" --target wasm --build-root "$output"
     python3 "$root/tests/test_models.py" --target wasm --build-root "$output"
     python3 "$root/tests/test_ground.py" --target wasm --build-root "$output"
+    python3 "$root/tests/test_visibility.py" --target wasm --build-root "$output"
     python3 "$root/tests/test_heightfield.py" --target wasm --build-root "$output"
     python3 "$root/tests/test_terrain_assets.py" --target wasm --build-root "$output"
     timeout 30s node "$root/tests/check_wasm.cjs" "$output/wasm/fist_vehicle_scene_probe.js"

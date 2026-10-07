@@ -49,6 +49,7 @@ frozen reconstruction, not rewrite completion.
 | 0088 | Complete original mission-ready registry/class reset, all-47 target clearing/releases/tree RNG and reaching TRAIN1 command boundary verified. Canonical C readiness and full 0081 remain open. |
 | 0089 | Rewrite-only master layout delivered: concise README, no workflows, root tests/tools, only softgl in deps and pinned /tmp reference images; full build/style/original/presentation gates pass and ghidra remains immutable. |
 | 0090 | Complete all-47 saved restoration and shared mission preparation before player control delivered; full original/reset/RNG/corpus/build/style/memory and three real native/browser scene gates pass. Full command/battle/PCM remain open. |
+| 0091 | Complete shared terrain visibility using the existing installed-height owner delivered; both-target original/corpus/full-build/style/memory and current SDL/browser gates pass. Runtime aiming/target discovery and full 0081 remain open. |
 | 0042 | Menus, settings, campaign/profile progression and persistent save/load. |
 | 0043 | All missions/maps/vehicles, AI, combat, objectives and resolved outcomes. |
 | 0044 | Keyboard/mouse/joystick, devices, audio timing and link behavior on both platforms. |

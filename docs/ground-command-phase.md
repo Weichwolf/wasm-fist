@@ -1,5 +1,11 @@
 # Ground command phase: recovered input and pending consumption
 
+Closed WI 0091 supplies complete shared [terrain visibility](terrain-visibility.md), the
+protected-mode op-58 prerequisite for b011 discovery. It starts at effective aim positions
+and reuses the installed ground plane/sampler. Complete DOS aim offsets, runtime target
+identities/lifetimes and registry discovery remain to be consumed under 0081; no partial
+parent bank or living-battle acceptance follows from this numerical service.
+
 WI 0081 remains open. The native/WASM controller currently consumes motion, reload, position
 history and maintenance, but not the complete heading/command callback. This document records
 the verified original input and dispatch contracts needed for that implementation. Closed

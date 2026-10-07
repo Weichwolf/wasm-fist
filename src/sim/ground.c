@@ -14,7 +14,10 @@ enum {
     QUARTER_TURN_SAMPLES = TURN_SAMPLES / 4,
     HEADING_BIN = FIST_TURN_SIZE / TURN_SAMPLES,
     SLOPE_SCALE = 128,
-    BYTE_RANGE = 256
+    BYTE_RANGE = 256,
+    VISIBILITY_STEP_LIMIT = 0x03000000,
+    VISIBILITY_ALTITUDE_SHIFT = 16,
+    TERRAIN_ALTITUDE_SHIFT = 24
 };
 
 /* Original 9450 Q31 sine data after the sampler's arithmetic shift by 6.
@@ -138,6 +141,58 @@ int fist_ground_height_sample(const fist_klc_image *height, int32_t map_x, int32
         return -1;
     }
     *out = sample(height, position_point(map_x, map_y), bits);
+    return 0;
+}
+
+static int32_t signed_bits(uint32_t value) {
+    return value <= INT32_MAX ? (int32_t)value : -1 - (int32_t)(UINT32_MAX - value);
+}
+
+static uint32_t signed_half(uint32_t value) {
+    return (value >> 1U) | (value & (UINT32_C(1) << (FIST_MAP_FIXED_BITS - 1)));
+}
+
+static bool visibility_step_large(uint32_t step) {
+    const int32_t delta = signed_bits(step);
+    return delta >= VISIBILITY_STEP_LIMIT || delta <= -VISIBILITY_STEP_LIMIT;
+}
+
+int fist_ground_visible(const fist_klc_image *height, const fist_object_pose *source,
+                        const fist_object_pose *target, bool *out) {
+    unsigned bits = 0;
+    if (source == NULL || target == NULL || out == NULL || index_bits(height, &bits) != 0) {
+        return -1;
+    }
+    const int32_t delta_x = signed_bits((uint32_t)target->x - (uint32_t)source->x);
+    const int32_t delta_y = signed_bits((uint32_t)target->y - (uint32_t)source->y);
+    const int32_t half_map = FIST_MAP_PERIOD / 2;
+    if (delta_x >= half_map || delta_y >= half_map || delta_x < -half_map || delta_y < -half_map) {
+        *out = false;
+        return 0;
+    }
+    sample_point step = position_point(delta_x, delta_y);
+    uint32_t step_altitude = ((uint32_t)target->altitude - (uint32_t)source->altitude)
+                             << VISIBILITY_ALTITUDE_SHIFT;
+    unsigned divisions = 1;
+    do {
+        divisions *= 2;
+        step.x = signed_half(step.x);
+        step.y = signed_half(step.y);
+        step_altitude = signed_half(step_altitude);
+    } while (visibility_step_large(step.x) || visibility_step_large(step.y));
+    sample_point point = position_point(source->x, source->y);
+    uint32_t altitude = (uint32_t)source->altitude << VISIBILITY_ALTITUDE_SHIFT;
+    for (unsigned index = 1; index < divisions; ++index) {
+        point.x += step.x;
+        point.y += step.y;
+        altitude += step_altitude;
+        const uint32_t terrain = (uint32_t)sample(height, point, bits) << TERRAIN_ALTITUDE_SHIFT;
+        if (terrain >= altitude) {
+            *out = false;
+            return 0;
+        }
+    }
+    *out = true;
     return 0;
 }
 

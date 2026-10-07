@@ -140,3 +140,11 @@ fixtures no longer clear saved targets themselves. TRAIN1 begins control with th
 98 RNG draws. This prerequisite does not supply runtime target discovery/lifetimes, the full
 heading/command bank, device initialization or living battle. Continue this unchanged Contract
 and Accept from the prepared canonical world; complete-game/final WASM streak remains zero.
+
+Closed 0091 supplies complete shared PM op-58 terrain visibility using the existing installed
+height/sampler owner. Both targets pass 173917 complete returns, all eight original maps/four
+details and all 47 saved-pose corpora, plus full builds/style/memory and current SDL/browser
+regressions. See docs/terrain-visibility.md. This starts at effective source/target positions;
+complete DOS aim offsets, runtime target identities/lifetimes and b011 discovery remain to be
+consumed. No partial parent/callback bank is installed. Continue this unchanged Contract and
+Accept with that full caller/world work; first playable battle/PCM and final streak remain open.

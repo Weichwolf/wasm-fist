@@ -164,6 +164,13 @@ if(EMSCRIPTEN)
     set_target_properties(fist_vehicle_start_probe PROPERTIES SUFFIX ".js")
     target_link_options(fist_vehicle_start_probe PRIVATE -sNODERAWFS=1 -sEXIT_RUNTIME=1)
 endif()
+add_executable(fist_visibility_probe tests/visibility_probe.c)
+target_link_libraries(fist_visibility_probe PRIVATE fist_sim fist_probe_io fist_build_options)
+target_compile_options(fist_visibility_probe PRIVATE -Werror)
+if(EMSCRIPTEN)
+    set_target_properties(fist_visibility_probe PROPERTIES SUFFIX ".js")
+    target_link_options(fist_visibility_probe PRIVATE -sNODERAWFS=1 -sEXIT_RUNTIME=1 -sALLOW_MEMORY_GROWTH=1)
+endif()
 add_executable(fist_ground_probe tests/ground_probe.c)
 target_link_libraries(fist_ground_probe PRIVATE fist_sim fist_assets fist_probe_io fist_build_options)
 target_compile_options(fist_ground_probe PRIVATE -Werror)
@@ -358,6 +365,9 @@ if(BUILD_TESTING AND NOT EMSCRIPTEN)
     add_test(NAME driving_contract COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_SOURCE_DIR}/tests/test_driving.py
         --target native --native-probe $<TARGET_FILE:fist_driving_probe>)
+    add_test(NAME visibility_contract COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_SOURCE_DIR}/tests/test_visibility.py
+        --target native --native-probe $<TARGET_FILE:fist_visibility_probe>)
     add_test(NAME ground_contract COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_SOURCE_DIR}/tests/test_ground.py
         --target native --native-probe $<TARGET_FILE:fist_ground_probe>)

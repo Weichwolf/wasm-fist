@@ -3,7 +3,9 @@
 
 #include "assets/klc.h"
 #include "sim/vehicle_state.h"
+#include "sim/world.h"
 
+#include <stdbool.h>
 #include <stdint.h>
 
 typedef struct {
@@ -22,6 +24,15 @@ typedef struct {
  * index contract as contact; no slope/actor publication. Failure preserves out. */
 int fist_ground_height_sample(const fist_klc_image *height, int32_t map_x, int32_t map_y,
                               uint8_t *out);
+
+/* Complete original op-58 terrain visibility between effective aim positions.
+ * Callers own class-specific source/target height offsets. Samples intermediate
+ * points on the installed height plane, preserving original wrapped arithmetic,
+ * directional rounding and unsigned height comparison. The original asymmetric
+ * half-map displacement rejection returns success with visible=false.
+ * Return 0 on success, -1 on invalid input, preserving out. No state/RNG writes. */
+int fist_ground_visible(const fist_klc_image *height, const fist_object_pose *source,
+                        const fist_object_pose *target, bool *out);
 
 /* Original installed height/7fa0 slope query. Borrows a complete positive
  * square power-of-two height plane, with at most 16 index bits per axis.
