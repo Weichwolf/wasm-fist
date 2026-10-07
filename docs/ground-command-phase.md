@@ -1,5 +1,10 @@
 # Ground command phase: recovered input and pending consumption
 
+Closed WI 0096 proves complete original [target acquisition and later aim feedback](target-acquisition.md),
+including genuine ab03 entry-eight returns, conditional RNG, actual visibility, selected
+message/voice tails, target geometry and consuming throttle. Required full-domain/all-47 and
+paired-observer gates pass. Shared C consumption is open 0097; full 0081 remains pending.
+
 Closed WI 0095 supplies complete shared [command throttle and drive-profile transitions](ground-command-throttle.md),
 including independent retained target feedback +99 and actual class/component/display setters.
 Required native/WASM and ASan/UBSan gates prove the complete bank, all-47 prepared worlds and
@@ -169,8 +174,9 @@ The complete ab82 mode selector and its conditional additional RNG call are docu
 [ground command selection](ground-command-selection.md) (WI 0083). Saved mode/maneuver/target
 presence now survive owned restoration and initialization. The existing +42 counter remains
 the sole owner; no parent-phase heading update or partial callback bank is installed. Bearing/range and target discovery now have their complete shared child owners in 0094 and
-0093. Remaining navigation/throttle, acquisition, roster, presentation and full parent
-consumption are still required before accepting 0081.
+0093, while throttle/profile is delivered by 0095. Original acquisition/aim is proved by
+0096; its shared C consumer (0097), roster/maneuver/presentation and full parent consumption
+are still required before accepting 0081.
 
 The complete ac75 route/formation goal helper is documented in
 [ground command goals](ground-command-goals.md) (WI 0084). It shares canonical orders and the

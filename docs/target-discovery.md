@@ -52,7 +52,9 @@ existing coarse/fine angle mode. No secondary preserves the old bearing. Counter
 becomes the winner-update count and candidate word +9d becomes the retained primary pointer.
 Automatic control bit 1 clears a different nonzero old target +97 only when its class rank
 is worse than the scan's winning rank. The scan does not install a new primary target.
-Later ae32/a6e3 acquisition and the complete parent bank remain separate consuming work.
+Closed 0096 now proves later ae32/a6e3 acquisition and aim feedback, including genuine parent
+entry-eight returns. Their shared C consumer is open 0097; the complete parent bank remains
+separate consuming work. See [target acquisition](target-acquisition.md).
 
 Constructed reaching cases retain an earlier lower-priority primary pointer after a better
 rank resets the distance but fails range. Invisible secondary objects can win with operand

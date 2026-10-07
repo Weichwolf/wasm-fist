@@ -201,3 +201,18 @@ native/browser/sanitized scene gates pass. See docs/ground-command-throttle.md. 
 Contract/Accept remain unchanged; no partial bank is installed. Continue target feedback
 production/acquisition, maneuver/roster/diagnostic callbacks and full heading/RNG/class
 consumption. First playable battle/PCM/outcomes and the independent final streak remain open.
+
+
+Closed 0096 proves complete original ae32/a6e3 acquisition, actual visibility/selected display/
+voice tails and the later target geometry that produces +38/+99/+9b before throttle. Required
+eight-group evidence passes 276848 acquisitions, 12825 aim returns, 5804 real PM transfers,
+248 admitted requests and 8504 consuming throttle returns without skips. All 47 missions at
+four details reach discovery -> acquisition -> aim -> throttle. Separate complete original
+ab03 entry-eight evidence verifies 16384 parent returns in both control banks and all class/
+behavior/RNG-byte contexts. Required cache-policy replay matches 7168 complete sequences.
+See docs/target-acquisition.md and closed 0096 for exact boundaries/exclusions. C acquisition/
+aim and selected notifications are defined in open 0097. Use the existing turret elevation
+owner, one aim-position/visibility table owner, canonical RNG and opaque target lifetimes;
+do not copy adjacent variant text words or install a reused candidate's successor. This
+parent's Contract/Accept remain unchanged. Full class/living battle/PCM/outcomes and the final
+independent complete WASM streak remain open; the streak is zero.

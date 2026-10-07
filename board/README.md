@@ -54,6 +54,8 @@ frozen reconstruction, not rewrite completion.
 | 0093 | Complete shared target discovery, physical reference lifetimes and logical voice admission delivered. Both-target original/all-47 prepared-world/release-reuse/build/style/memory and real scene gates pass; full 0081, target acquisition and living battle/PCM remain open. |
 | 0094 | Complete shared command bearing/range/retreat and deliberate target-loss navigation delivered. Both-target required original/domain/all-47 canonical, full-build/style/memory and actual scene gates pass; full throttle/gear/0081 parent and living battle remain open. |
 | 0095 | Complete shared throttle bank and signed-pitch drive-profile/class/component/display transitions delivered. Both-target required original/domain/all-47 canonical/reached-repair, strict full-build/style/memory and actual scene gates pass; target feedback, full 0081 and living battle remain open. |
+| 0096 | Complete original acquisition/aim/consuming throttle and genuine parent entry-eight checkpoint delivered. Required full-domain/all-47 and paired-observer gates pass; shared C consumption is open 0097 and full 0081 remains open. |
+| 0097 | Shared target installation, aim feedback and selected typed notifications, using canonical lifetimes/visibility/RNG/voice/geometry; next complete C step within 0081. |
 | 0042 | Menus, settings, campaign/profile progression and persistent save/load. |
 | 0043 | All missions/maps/vehicles, AI, combat, objectives and resolved outcomes. |
 | 0044 | Keyboard/mouse/joystick, devices, audio timing and link behavior on both platforms. |
