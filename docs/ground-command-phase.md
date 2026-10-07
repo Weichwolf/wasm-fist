@@ -1,5 +1,11 @@
 # Ground command phase: recovered input and pending consumption
 
+Active WI 0093 records complete [target discovery and lifetime evidence](target-discovery.md).
+Actual full b011 returns preserve branch-specific secondary operands and old-target rules.
+Real release/reallocation repeats even the complete type/slot/registry/value tuple, silently
+retargeting a stale physical pointer. Canonical C discovery must consume an actual lifetime
+owner rather than the repeating saved registry word. Full 0081 and playable battle remain open.
+
 Closed WI 0092 supplies complete [target proximity](target-proximity.md), the a17e/08e8 service
 actually called by b011. Its directional max-plus-half estimate differs from navigation's
 0541 distance; a complete original scan with real aim/visibility proves the different winner.

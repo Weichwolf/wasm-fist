@@ -158,3 +158,10 @@ gates. Current scene binaries are identical to accepted 0091. See docs/target-pr
 retain actual candidate-to-actor argument order when consuming full discovery. Runtime target
 identities/lifetimes, priority/secondary/old-target branches, requests and full command/class
 consumption remain in this unchanged Contract/Accept; no partial parent bank is installed.
+
+Active 0093 now owns the consuming target-discovery/lifetime work. Its original-only observer
+executes complete b011, actual class/variant aim wrappers, real PM visibility, secondary bearing
+and logical request admission. Reaching release/reallocation repeats type/slot/registry/value
+while an old target silently addresses a successor. See docs/target-discovery.md. The complete
+original checkpoint is input for the necessary runtime lifetime repair and shared C discovery;
+it does not advance the C living prefix or satisfy this parent's unchanged Contract/Accept.
