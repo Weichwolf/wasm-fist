@@ -1,4 +1,5 @@
 #include "assets/bytes.h"
+#include "assets/orders.h"
 #include "assets/scenario.h"
 #include "assets/units.h"
 #include "mission_probe_io.h"
@@ -118,8 +119,16 @@ static int tree_commands(fist_mission_world *world, const uint8_t *input, size_t
 }
 
 static int reset_checked(fist_mission_world *world) {
+    world->orders_loaded = 1;
+    world->orders.routes[FIST_UNIT_PLATOON_COUNT - 1].count = FIST_ORDER_WAYPOINTS;
+    world->orders.descriptors[0].words[0] = UINT16_MAX;
     fist_mission_world_reset(world);
     fist_mission_world_reset(world);
+    const fist_mission_orders empty_orders = {0};
+    if (world->orders_loaded != 0 ||
+        !unchanged(&world->orders, sizeof(world->orders), &empty_orders)) {
+        return -1;
+    }
     if (!fist_object_pool_is_valid(&world->pool)) {
         return -1;
     }

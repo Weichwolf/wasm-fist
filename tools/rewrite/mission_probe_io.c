@@ -3,6 +3,7 @@
 #include "assets/units.h"
 #include "combat_probe_io.h"
 #include "object_pool_probe_io.h"
+#include "probe_io.h"
 #include "sim/mission_world.h"
 #include "sim/object_pool.h"
 #include "sim/random.h"
@@ -36,6 +37,9 @@ void fist_probe_write_tree(const fist_tree *tree) {
 }
 
 int fist_probe_write_mission_world(const fist_mission_world *world) {
+    if (world->orders_loaded > 1) {
+        return -1;
+    }
     fist_probe_write_object_pool(&world->pool);
     printf("random %u", (unsigned)world->random.next_stream);
     for (size_t index = 0; index < FIST_RANDOM_STREAMS; ++index) {
@@ -46,6 +50,7 @@ int fist_probe_write_mission_world(const fist_mission_world *world) {
         printf(" %u", (unsigned)world->combat.roster[index]);
     }
     printf("\n");
+    fist_probe_write_orders(world->orders_loaded != 0 ? &world->orders : NULL);
     for (size_t slot = 0; slot < FIST_UNIT_REGISTRY_COUNT; ++slot) {
         const fist_mission_object *object = fist_mission_world_object(world, (uint16_t)slot);
         if (world->pool.slots[slot].used == 0) {

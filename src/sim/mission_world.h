@@ -1,6 +1,7 @@
 #ifndef FIST_SIM_MISSION_WORLD_H
 #define FIST_SIM_MISSION_WORLD_H
 
+#include "assets/orders.h"
 #include "assets/units.h"
 #include "sim/object_pool.h"
 #include "sim/other_damage.h"
@@ -36,6 +37,10 @@ typedef union {
 typedef struct {
     fist_object_pool pool;
     fist_random random;
+    /* Canonical mission order owner. Saved-object-only installation leaves this
+     * explicitly unloaded; command dispatch requires complete mission input. */
+    fist_mission_orders orders;
+    uint8_t orders_loaded;
     fist_mission_object objects[FIST_UNIT_REGISTRY_COUNT];
     /* Owns the sole physical roster, including overwritten registry orphans.
      * Reset/import do not configure mission combat factors/census/player UI. */

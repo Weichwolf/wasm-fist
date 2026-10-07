@@ -39,8 +39,8 @@ frozen reconstruction, not rewrite completion.
 | 0078 | Canonical player control/render ownership in complete installed worlds delivered, with both-target original/visual/memory/build/style gates; living battle/PCM/outcomes remain under 0041/0065. |
 | 0079 | Canonical ground position histories and reached phase consumption delivered; all counter/phase/corpus, original timed, build/style/memory and real scene gates pass. |
 | 0080 | Complete per-class movement-word/speed-counter/component maintenance and six-update reached original M1 prefix delivered; both-target full-domain/corpus/timed/build/style/memory/scene gates pass. |
-| 0081 | Active heading/RNG/nested command recovery: actual banks and complete all-47 PATH/PINF original I/O/consumer checkpoint verified; owned orders under 0082 precede full C command acceptance. |
-| 0082 | Recovered 0081 prerequisite: own and install real PATH/PINF platoon descriptors and complete waypoint lists before nested command consumption. |
+| 0081 | Active heading/RNG/nested command recovery: actual banks and complete all-47 PATH/PINF original I/O/consumer checkpoint verified; closed 0082 supplies the canonical order input; full command C acceptance remains open. |
+| 0082 | Complete owned PATH/PINF descriptors/waypoint storage and canonical installation delivered, with both-target original/source-release/atomicity/build/style/memory/scene gates. |
 | 0042 | Menus, settings, campaign/profile progression and persistent save/load. |
 | 0043 | All missions/maps/vehicles, AI, combat, objectives and resolved outcomes. |
 | 0044 | Keyboard/mouse/joystick, devices, audio timing and link behavior on both platforms. |

@@ -3,6 +3,7 @@
 #include "assets/heightfield.h"
 #include "assets/klc.h"
 #include "assets/model.h"
+#include "assets/orders.h"
 #include "assets/scenario.h"
 #include "assets/source.h"
 #include "assets/terrain.h"
@@ -54,7 +55,8 @@ void fist_driving_destroy(fist_driving *driving) {
 }
 
 static int load_player(fist_driving *driving, const fist_driving_options *options,
-                       const fist_unit_definition *definition, int mission) {
+                       const fist_unit_definition *definition, const fist_scenario *scenario,
+                       int mission) {
     if (mission != 0) {
         driving->world = malloc(sizeof(*driving->world));
         if (driving->world == NULL) {
@@ -65,6 +67,10 @@ static int load_player(fist_driving *driving, const fist_driving_options *option
         if (status != 0) {
             return status;
         }
+        if (fist_mission_orders_decode(scenario, &driving->world->orders) != 0) {
+            return -1;
+        }
+        driving->world->orders_loaded = 1;
         driving->world->combat.selected_slot = driving->world->combat.roster[0];
         fist_vehicle_state *actor = player_state(driving);
         return actor == NULL ? -1 : fist_driver_take_control(actor);
@@ -88,7 +94,7 @@ static int load(const fist_scenario *scenario, const fist_asset_source *source,
     int status = fist_units_decode(scenario, &driving.units);
     const fist_unit_definition *player = fist_units_roster_get(&driving.units, 0);
     if (status == 0) {
-        status = load_player(&driving, options, player, mission);
+        status = load_player(&driving, options, player, scenario, mission);
     }
     fist_vehicle_state *actor = status == 0 ? player_state(&driving) : NULL;
     fist_weapon_status weapon = {0};

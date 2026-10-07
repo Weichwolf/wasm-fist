@@ -1,5 +1,9 @@
 #include "probe_io.h"
 
+#include "assets/orders.h"
+#include "assets/units.h"
+
+#include <inttypes.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -34,5 +38,30 @@ uint8_t *fist_probe_read_file(FILE *file, size_t *size) {
             return NULL;
         }
         data = grown;
+    }
+}
+
+void fist_probe_write_orders(const fist_mission_orders *orders) {
+    printf("orders %u\n", (unsigned)(orders != NULL));
+    if (orders == NULL) {
+        return;
+    }
+    for (size_t platoon = 0; platoon < FIST_UNIT_PLATOON_COUNT; ++platoon) {
+        const fist_order_route *route = &orders->routes[platoon];
+        printf("route %zu %u", platoon, (unsigned)route->count);
+        for (size_t index = 0; index < FIST_ORDER_HEADER_BYTES; ++index) {
+            printf(" %02x", (unsigned)route->header[index]);
+        }
+        for (size_t index = 0; index < FIST_ORDER_WAYPOINTS; ++index) {
+            printf(" %" PRId32 " %" PRId32, route->points[index].x, route->points[index].y);
+        }
+        printf("\n");
+    }
+    for (size_t platoon = 0; platoon < FIST_UNIT_PLATOON_COUNT; ++platoon) {
+        printf("descriptor %zu", platoon);
+        for (size_t index = 0; index < FIST_ORDER_DESCRIPTOR_WORDS; ++index) {
+            printf(" %u", (unsigned)orders->descriptors[platoon].words[index]);
+        }
+        printf("\n");
     }
 }

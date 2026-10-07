@@ -32,11 +32,13 @@ def snapshot(kind=0, *, pool=99, pose=(-2147483648, 2147483647, -65537), heading
     return bytes(data)
 
 
-def scenario_data(records):
+def scenario_data(records, *, orders=None):
     chunks = synthetic_chunks()
     chunks[1] = (b'DCBS', struct.pack('<H', len(records)) + b''.join(
         struct.pack('<3H', len(state), index, generation) + state
         for index, generation, state in records))
+    if orders is not None:
+        chunks[2], chunks[4] = (b'PATH', orders[0]), (b'PINF', orders[1])
     return envelope(chunks)
 
 

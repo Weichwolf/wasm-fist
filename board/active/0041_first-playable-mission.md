@@ -160,8 +160,9 @@ canonical timed/paused behavior verified against original returns on both target
 build/style, sanitizers and actual TRAIN1 devices/frames pass. See docs/vehicle-maintenance.md.
 The actual M1 prefix now agrees through six updates. Active 0081 owns the next tick-seven,
 phase-46 heading-history/command callback and shared RNG difference. Its verified all-47
-original PATH/PINF loader/consumer checkpoint identifies owned mission orders under 0082 as
-a prerequisite; complete command dispatch remains unimplemented. Other phase/behavior,
+original PATH/PINF checkpoint led to closed 0082: complete owned descriptors/waypoint data now
+load into the canonical world, with both-target original/build/style/memory/scene gates. See
+docs/mission-orders.md. Complete command dispatch remains unimplemented. Other phase/behavior,
 contacts, living world scheduling, visible battle, audible PCM and outcomes remain required;
 this does not complete a mission.
 

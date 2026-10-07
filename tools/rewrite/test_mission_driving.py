@@ -11,6 +11,7 @@ import tempfile
 import unittest
 
 import test_driving as driving
+from orders_contract import constructed_blocks, orders_lines, scenario_order_blocks
 from prepare_terrain_preview import synthetic_inputs
 from test_ground import installed
 from test_heightfield import resize
@@ -30,18 +31,22 @@ INTERVALS = [(0, 521), (166670, 33), (166670, 8210), (166670, 64), (166670, 0),
              (0, 128), (1000000, 256), (0, 384), (0, 0), (166670, 16384), (166670, 0)]
 
 
-def expected(records, intervals, side, pixels, seeds=SEEDS, cursor=0):
+def expected(records, intervals, side, pixels, seeds=SEEDS, cursor=0, orders=None):
     status, world = install(records, seeds, cursor)
     if status:
         return status, None
+    try:
+        orders_lines(orders)
+    except ValueError:
+        return -1, None
     pool, objects, roster, _, _ = world
     selected = roster[0]
     if selected == 65535 or objects[selected][0][0] >= 4:
         return -1, None
     if ORACLE:
         from original_mission_world_oracle import OriginalMissionWorldOracle
-        observed = OriginalMissionWorldOracle().install(records, seeds, cursor, 0, ())
-        wanted = 'status 0\n' + world_lines(world) * 2
+        observed = OriginalMissionWorldOracle().install(records, seeds, cursor, 0, (), orders=orders)
+        wanted = 'status 0\n' + world_lines(world, orders) * 2
         if observed != wanted:
             raise AssertionError('Original complete world installation differs')
     allocation, raw = objects[selected]
@@ -62,7 +67,7 @@ def expected(records, intervals, side, pixels, seeds=SEEDS, cursor=0):
         state = installed(side, pixels, [controlled])[0]
     def extra(updated):
         objects[selected] = allocation, bytearray(updated[2])
-        return f'selection {selected} 65535\n' + world_lines(world)
+        return f'selection {selected} 65535\n' + world_lines(world, orders)
     return 0, driving.trace(state, intervals, side, pixels, extra_state=extra)
 
 
@@ -87,16 +92,17 @@ class MissionDrivingTests(unittest.TestCase):
               f'boundaries, {cls.objects} installed objects, {cls.rejections} explicit rejections', flush=True)
 
     def run_scene(self, records=None, *, scenario=None, directory=None, intervals=INTERVALS,
-                  seeds=SEEDS, cursor=0, side=512, pixels=None, status_override=None):
+                  seeds=SEEDS, cursor=0, side=512, pixels=None, status_override=None, orders=None):
         if scenario is None:
             scenario = self.path / 'WORLD.FSG'
-            scenario.write_bytes(scenario_data(records))
+            scenario.write_bytes(scenario_data(records, orders=orders))
         else:
             records = records_from_scenario(scenario.read_bytes())
         if status_override is not None:
             status, wanted = status_override, None
         else:
-            status, wanted = expected(records, intervals, side, pixels or bytes([32]) * side * side, seeds, cursor)
+            status, wanted = expected(records, intervals, side, pixels or bytes([32]) * side * side, seeds, cursor,
+                                      scenario_order_blocks(scenario.read_bytes()))
         request = self.path / 'intervals.bin'
         request.write_bytes(struct.pack('<II4HB', side, len(intervals), *seeds, cursor) + b''.join(
             struct.pack('<IH', *interval) for interval in intervals))
@@ -184,6 +190,23 @@ class MissionDrivingTests(unittest.TestCase):
         for side in (0, 3, 768, 0xffffffff):
             # Invalid detail must fail after allocation without leaking or publishing.
             self.run_scene([self.player()], intervals=[], side=side, pixels=b' ', status_override=-1)
+
+    def test_complete_nonzero_orders_source_release_pause_and_invalid_input(self):
+        intervals = [(0, 1), (166670, 0), (0, 128), (1000000, 0)]
+        for count in (0, 1, 31, 32):
+            orders = constructed_blocks(count)
+            output = self.run_scene([self.player(), self.player(1, 10, 1)],
+                                    orders=orders, intervals=intervals)
+            self.assertEqual(output.count(orders_lines(orders)), len(intervals) + 1)
+        paths, descriptors = constructed_blocks()
+        for bad in ((paths[:-1], descriptors), (paths + b'x', descriptors),
+                    (paths, descriptors[:-1]), (paths, descriptors + b'x'),
+                    (b'', descriptors), (paths, b'')):
+            self.run_scene([self.player()], orders=bad, intervals=[])
+        for platoon in range(8):
+            bad = bytearray(paths)
+            bad[platoon * 268] = 33 if platoon % 2 else 255
+            self.run_scene([self.player()], orders=(bytes(bad), descriptors), intervals=[])
 
     def test_all_pinned_worlds_complete_supported_or_explicit_rejection(self):
         if not ORIGINALS:

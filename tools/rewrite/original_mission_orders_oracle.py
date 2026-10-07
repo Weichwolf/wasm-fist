@@ -87,3 +87,38 @@ class OriginalMissionOrdersOracle(OriginalVehicleStartOracle):
     def blocks(self, machine):
         return tuple(bytes(machine.mem_read(DGROUP + destination, size))
                      for _, _, destination, size in self.entries)
+
+    def append_boundaries(self):
+        """Actual editor admission/address prefix, before XY copy/UI calls.
+
+        This deliberately observes a bounded fragment, not a complete editor
+        action. Both branches stop at their real next instruction unchanged.
+        """
+        from unicorn.x86_const import UC_X86_REG_BX, UC_X86_REG_SI, UC_X86_REG_SP
+        if self.image[0x4df0:0x4df5] != bytes.fromhex('80 3c 20 73 13'):
+            raise RuntimeError('Original editor route-count comparison/branch differs')
+        machine = self.machine((1, 2, 32768, 65535), 0)
+        boundaries = []
+        for platoon in range(PLATOONS):
+            route = 0x7d40 + platoon * PATH_RECORD
+            for count in range(256):
+                machine.mem_write(DGROUP + 0x7000 + 0x1b, bytes([platoon]))
+                machine.mem_write(DGROUP + route, bytes([count]))
+                machine.reg_write(UC_X86_REG_SI, 0x7000)
+                machine.reg_write(UC_X86_REG_SP, 0x9000)
+                before = bytes(machine.mem_read(DGROUP, 65536))
+                admitted = count < WAYPOINTS
+                self.execute(machine, 0x4de6, 0x4dff if admitted else 0x4e08)
+                expected = bytearray(before)
+                if admitted:
+                    expected[0x8ffe:0x9000] = struct.pack('<H', route)
+                if bytes(machine.mem_read(DGROUP, 65536)) != bytes(expected):
+                    raise RuntimeError('Original editor admission mutated unrelated bytes')
+                registers = (machine.reg_read(UC_X86_REG_SI), machine.reg_read(UC_X86_REG_SP),
+                             machine.reg_read(UC_X86_REG_BX))
+                wanted = (route + PATH_HEADER + count * 8, 0x8ffe, count * 8) if admitted else (
+                    route, 0x9000, platoon * 2)
+                if registers != wanted:
+                    raise RuntimeError('Original editor route admission/address differs')
+                boundaries.append((platoon, count, admitted))
+        return boundaries

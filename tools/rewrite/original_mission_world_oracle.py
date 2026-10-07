@@ -5,6 +5,7 @@ constructors, initialization calls or method returns are replaced by hooks.
 """
 import struct
 
+from orders_contract import orders_lines
 from original_object_pool_oracle import OriginalObjectPoolOracle
 from original_unit_oracle import DGROUP
 from test_mission_world import install, payload_lines, tree_lines
@@ -13,10 +14,10 @@ from test_vehicle_start import random_line
 
 
 class OriginalMissionWorldOracle(OriginalObjectPoolOracle):
-    def world_lines(self, machine, objects):
+    def world_lines(self, machine, objects, order_loader=None):
         words,cursor=self.random_state(machine)
         roster=struct.unpack('<32H',machine.mem_read(DGROUP+0x6d3c,64))
-        output=self.state(machine)+random_line(words,cursor)+line('roster',[self.slot(p) if p else 65535 for p in roster])
+        output=self.state(machine)+random_line(words,cursor)+line('roster',[self.slot(p) if p else 65535 for p in roster])+orders_lines(order_loader.blocks(machine) if order_loader is not None else None)
         for slot,(allocation,pointer,size) in sorted(objects.items()):
             raw=bytes(machine.mem_read(DGROUP+pointer,size))
             output+=line('object',[slot,allocation[0]])+payload_lines(raw,allocation)
@@ -52,13 +53,20 @@ class OriginalMissionWorldOracle(OriginalObjectPoolOracle):
         if self.random_state(machine)!=(golden[3],golden[4]): raise AssertionError('Original complete installation RNG differs')
         return machine, objects
 
-    def install(self, records, seeds, cursor, link, commands, reload=False):
+    def install(self, records, seeds, cursor, link, commands, reload=False, orders=None):
         from unicorn.x86_const import UC_X86_REG_DI
         machine, objects = self.prepare(records, seeds, cursor, link)
-        output=line('status',[0])+self.world_lines(machine,objects)
+        loader = None
+        if orders is not None:
+            from original_mission_orders_oracle import OriginalMissionOrdersOracle
+            loader = OriginalMissionOrdersOracle()
+            loader.load(machine, *orders)
+            if loader.blocks(machine) != orders:
+                raise AssertionError('Original complete order installation differs')
+        output=line('status',[0])+self.world_lines(machine,objects,loader)
         if reload:
             words,end=self.random_state(machine)
-            next_output=self.install(records,words,end,link,commands)
+            next_output=self.install(records,words,end,link,commands,orders=orders)
             return output+line('reload',[0])+next_output.removeprefix('status 0\n')
         for slot,changed,variant in commands:
             status=-1
@@ -75,4 +83,4 @@ class OriginalMissionWorldOracle(OriginalObjectPoolOracle):
                     status=0
                 output+=line('update',[slot,status])+tree_lines(bytes(machine.mem_read(DGROUP+pointer,size)),allocation)
             else:output+=line('update',[slot,status])
-        return output+self.world_lines(machine,objects)
+        return output+self.world_lines(machine,objects,loader)

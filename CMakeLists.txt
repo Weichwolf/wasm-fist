@@ -25,7 +25,7 @@ target_compile_options(fist_build_options INTERFACE
     -fno-strict-aliasing -ffast-math)
 target_link_libraries(softgl PRIVATE fist_build_options)
 
-add_library(fist_assets STATIC src/assets/scenario.c src/assets/units.c src/assets/model.c src/assets/vehicle.c src/assets/klc.c
+add_library(fist_assets STATIC src/assets/scenario.c src/assets/orders.c src/assets/units.c src/assets/model.c src/assets/vehicle.c src/assets/klc.c
     src/assets/palette.c src/assets/resource.c src/assets/terrain.c src/assets/heightfield.c src/render/model_bitmap.c)
 target_include_directories(fist_assets PUBLIC src)
 target_link_libraries(fist_assets PRIVATE fist_build_options)
@@ -340,6 +340,9 @@ if(BUILD_TESTING AND NOT EMSCRIPTEN)
     add_test(NAME renderer_integration COMMAND fist_renderer_probe)
     add_test(NAME scenario_contract COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_SOURCE_DIR}/tools/rewrite/test_scenario.py
+        --target native --native-probe $<TARGET_FILE:fist_scenario_probe>)
+    add_test(NAME orders_contract COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_SOURCE_DIR}/tools/rewrite/test_orders.py
         --target native --native-probe $<TARGET_FILE:fist_scenario_probe>)
     add_test(NAME unit_contract COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_SOURCE_DIR}/tools/rewrite/test_units.py

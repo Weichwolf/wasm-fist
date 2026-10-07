@@ -9,6 +9,7 @@ import subprocess
 import tempfile
 import unittest
 
+from orders_contract import orders_lines
 from test_destruction import parent_lines, smoke_lines
 from test_other_damage import actor_lines
 from test_projectile_flight import Pool, line
@@ -74,9 +75,9 @@ def install(records, seeds=SEEDS, cursor=0, link=0):
     return 0, (pool, objects, roster, words, end)
 
 
-def world_lines(world):
+def world_lines(world, orders=None):
     pool, objects, roster, words, cursor = world
-    output = pool.state() + random_line(words, cursor) + line('roster', roster)
+    output = pool.state() + random_line(words, cursor) + line('roster', roster) + orders_lines(orders)
     for slot, (allocation, raw) in sorted(objects.items()):
         output += line('object', [slot, allocation[0]]) + payload_lines(raw, allocation)
     return output

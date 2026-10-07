@@ -1,4 +1,6 @@
+#include "assets/orders.h"
 #include "assets/scenario.h"
+#include "assets/units.h"
 #include "probe_io.h"
 
 #include <inttypes.h>
@@ -43,9 +45,104 @@ static int check_prefixes(const uint8_t *data, size_t size) {
     return EXIT_SUCCESS;
 }
 
+static int orders_failure(const fist_scenario *scenario, const fist_mission_orders *before) {
+    fist_mission_orders out = *before;
+    return fist_mission_orders_decode(scenario, &out) == -1 &&
+           memcmp(&out, before, sizeof(out)) == 0;
+}
+
+static int check_order_counts(const fist_scenario *scenario, const fist_mission_orders *before) {
+    uint8_t paths[FIST_ORDER_PATH_BLOCK_BYTES] = {0};
+    for (size_t index = 0; index < FIST_ORDER_PATH_BLOCK_BYTES; ++index) {
+        paths[index] = scenario->chunks[FIST_SCENARIO_PATHS].data[index];
+    }
+    fist_scenario changed = *scenario;
+    changed.chunks[FIST_SCENARIO_PATHS].data = paths;
+    for (size_t platoon = 0; platoon < FIST_UNIT_PLATOON_COUNT; ++platoon) {
+        const size_t offset = platoon * FIST_ORDER_PATH_BYTES;
+        for (unsigned count = 0; count <= UINT8_MAX; ++count) {
+            paths[offset] = (uint8_t)count;
+            if (count > FIST_ORDER_WAYPOINTS) {
+                if (orders_failure(&changed, before) == 0) {
+                    return -1;
+                }
+            } else {
+                fist_mission_orders expected = *before;
+                expected.routes[platoon].count = (uint8_t)count;
+                fist_mission_orders out = {0};
+                if (fist_mission_orders_decode(&changed, &out) != 0 ||
+                    memcmp(&out, &expected, sizeof(out)) != 0) {
+                    return -1;
+                }
+            }
+        }
+        paths[offset] = scenario->chunks[FIST_SCENARIO_PATHS].data[offset];
+    }
+    return 0;
+}
+
+static int check_orders(const fist_scenario *scenario, const fist_mission_orders *before) {
+    if (orders_failure(NULL, before) == 0 || fist_mission_orders_decode(scenario, NULL) != -1) {
+        return -1;
+    }
+    const fist_scenario_chunk chunks[] = {FIST_SCENARIO_PATHS, FIST_SCENARIO_PLAYER_INFO};
+    for (size_t index = 0; index < sizeof(chunks) / sizeof(chunks[0]); ++index) {
+        fist_scenario changed = *scenario;
+        const fist_scenario_chunk chunk = chunks[index];
+        for (size_t length = 0; length < scenario->chunks[chunk].size; ++length) {
+            changed.chunks[chunk].size = length;
+            if (orders_failure(&changed, before) == 0) {
+                return -1;
+            }
+        }
+        changed.chunks[chunk].size = scenario->chunks[chunk].size + 1;
+        if (orders_failure(&changed, before) == 0) {
+            return -1;
+        }
+        changed.chunks[chunk].size = scenario->chunks[chunk].size;
+        changed.chunks[chunk].data = NULL;
+        if (orders_failure(&changed, before) == 0) {
+            return -1;
+        }
+    }
+    return check_order_counts(scenario, before);
+}
+
+static int observe_orders(uint8_t *data, size_t size, const fist_scenario *scenario, int checks) {
+    fist_mission_orders orders = {0};
+    orders.routes[0].header[0] = UINT8_MAX;
+    orders.routes[FIST_UNIT_PLATOON_COUNT - 1].points[FIST_ORDER_WAYPOINTS - 1].y = INT32_MIN;
+    orders.descriptors[FIST_UNIT_PLATOON_COUNT - 1].words[FIST_ORDER_DESCRIPTOR_WORDS - 1] =
+        UINT16_MAX;
+    const fist_mission_orders before = orders;
+    if (fist_mission_orders_decode(scenario, &orders) != 0) {
+        if (memcmp(&orders, &before, sizeof(orders)) != 0) {
+            free(data);
+            return 2;
+        }
+        free(data);
+        return EXIT_FAILURE;
+    }
+    if (check_orders(scenario, &orders) != 0) {
+        free(data);
+        return 2;
+    }
+    /* Observation happens only after all borrowed source storage is freed. */
+    for (size_t index = 0; index < size; ++index) {
+        data[index] = UINT8_MAX;
+    }
+    free(data);
+    if (checks == 0) {
+        fist_probe_write_orders(&orders);
+    }
+    return EXIT_SUCCESS;
+}
+
 int main(int argc, char **argv) {
     const int prefixes = argc == 3 && strcmp(argv[1], "--prefixes") == 0;
-    if (argc != 2 && prefixes == 0) {
+    const int orders_mode = argc == 3 && strcmp(argv[1], "--orders") == 0;
+    const int orders_checks = argc == 3 && strcmp(argv[1], "--orders-checks") == 0;
+    if (argc != 2 && prefixes == 0 && orders_mode == 0 && orders_checks == 0) {
         return EXIT_FAILURE;
     }
     FILE *file = fopen(argv[argc - 1], "rb");
@@ -64,6 +161,9 @@ int main(int argc, char **argv) {
         const int result = check_prefixes(data, size);
         free(data);
         return result;
+    }
+    if (orders_mode != 0 || orders_checks != 0) {
+        return observe_orders(data, size, &scenario, orders_checks);
     }
     printf("header %u %u %u\n", (unsigned)scenario.version, (unsigned)scenario.mode,
            (unsigned)scenario.limit);

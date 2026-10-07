@@ -34,8 +34,8 @@ to actual canonical control and any still-delivered standalone boundary. Consume
 controlled work and explicitly account for other callback requirements. Advance the original
 living prefix again; keep the engine-audio device boundary declared until fully configured.
 
-The recovered input prerequisite is now open 0082: own/install real PATH/PINF platoon orders
-before accepting any later command callback. The original-only boundary verification below
+Closed 0082 now owns and canonically installs complete real PATH/PINF platoon orders. Use that
+world owner before accepting any later command callback; do not restore private empty inputs. The original-only boundary verification below
 is a completed research checkpoint; 0081 itself remains active and its C acceptance is unproved.
 
 ## Accept
@@ -81,3 +81,9 @@ Reproduction and remaining ownership/callback requirements live in docs/ground-c
 Commit/push this verified input checkpoint and retain a compact `/tmp/wasm-fist-0081-review`
 summary; remove raw logs/traces after verification. Full 0081 acceptance, first playable
 mission and complete WASM streak remain unproved; streak zero.
+
+The consuming prerequisite is accepted in closed 0082 and docs/mission-orders.md. Both targets
+retain every order field at complete canonical timed boundaries; payload-only worlds explicitly
+remain unloaded. Return to the first ab03/ab82 heading/RNG/nested command difference using that
+canonical state. No heading-only acceptance or complete command/class return follows from the
+delivered input owner; this WI's Contract and Accept remain unchanged.

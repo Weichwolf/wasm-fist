@@ -117,3 +117,7 @@ Exact verified results and the next owned-input requirements are recorded in act
 No C runtime, production build, dependency or original file changes in this recovery step.
 Complete phase/world dispatch, PCM, battle, outcomes and final independent WASM acceptance
 remain required; the complete ten-run streak stays zero.
+
+The shared owned decoder and canonical mission installation are documented in
+[mission orders](mission-orders.md) (WI 0082). Saved-object-only worlds remain explicitly unloaded;
+complete command consumption must use the canonical order owner rather than private empty input.

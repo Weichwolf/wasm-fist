@@ -9,6 +9,7 @@ import subprocess
 import tempfile
 import unittest
 
+from orders_contract import orders_lines
 from test_aircraft_death import expected as aircraft_expected, fixture as aircraft_fixture, new_effect
 from test_collision import expected as collision_expected, from_raw, delta
 from test_destruction import advance_parent, advance_smoke
@@ -93,7 +94,7 @@ class World:
 
     def state(self):
         text=line('combat',[*self.scales,self.selected,self.flash,*self.counters,self.pending])
-        text+=line('sizes',self.sizes)+self.pool.state()+random_line(self.words,self.cursor)+line('roster',self.roster)
+        text+=line('sizes',self.sizes)+self.pool.state()+random_line(self.words,self.cursor)+line('roster',self.roster)+orders_lines()
         for slot,(allocation,raw) in sorted(self.objects.items()):
             if not self.pool.slots[slot][0]: continue
             kind=self.pool.slots[slot][1]
