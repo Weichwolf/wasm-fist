@@ -221,8 +221,19 @@ physical slot before further current-entry traversal; combat and installation sh
 physical roster. Selected fatal hits suspend visits/fire until the explicit player-loss
 consumer acknowledgement, then continue impact once. See docs/mission-combat.md for the
 complete state/raw-record gates and explicit living-method, UI/device and constructed-height
-boundaries. Full living dispatch, installed terrain/contact/take-control, actual command
-eligibility, battle drawing, audible events and mission outcomes remain next requirements.
+boundaries. Full living dispatch, actual command eligibility, battle drawing, audible events and mission
+outcomes remain required. Selected controlled contact/take-control installation is delivered
+by 0078 below; complete world class/terrain scheduling remains open.
+
+
+0078 connects the continuous native/browser scene to the selected physical ground actor in the
+complete installed world. Contact/take-control installation and timed manual control, camera
+and HUD consume that canonical actor directly; final initialization RNG and every other object
+are retained. The ten supported installations and 37 explicit unsupported inputs, old all-47
+standalone diagnostics, original stage returns, actual devices/pixels, strict tooling and memory
+all pass. See docs/driving-scene.md and closed 0078. Complete living dispatch and command
+eligibility, canonical battle scheduling/drawing, audible PCM, selected-loss UI and outcomes
+remain required; this controlled subset does not complete a playable mission.
 
 ## Accept
 

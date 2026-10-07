@@ -39,3 +39,9 @@ jobs:
           python3 tools/rewrite/prepare_driving_preview.py
           python3 tools/rewrite/verify_browser.py --driving
           python3 tools/rewrite/verify_driving_native.py --scenario /tmp/wasm-fist-rewrite/wasm/assets/TEST.FSG --assets /tmp/wasm-fist-rewrite/wasm/assets
+      - name: Canonical mission scene ownership and native/browser presentation
+        run: |
+          rm -rf /tmp/wasm-fist-rewrite/wasm/assets
+          python3 tools/rewrite/prepare_driving_preview.py --mission
+          python3 tools/rewrite/verify_browser.py --driving
+          python3 tools/rewrite/verify_driving_native.py --mission --scenario /tmp/wasm-fist-rewrite/wasm/assets/TEST.FSG --assets /tmp/wasm-fist-rewrite/wasm/assets

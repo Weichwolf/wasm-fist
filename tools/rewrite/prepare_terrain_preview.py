@@ -113,7 +113,7 @@ def verify_file(path, expected):
         raise ValueError(f"Changed or incomplete original: {path}")
 
 
-def write_manifest(directory, scenario, heading=None, *, vehicle=False):
+def write_manifest(directory, scenario, heading=None, *, vehicle=False, mission=False):
     files = []
     for path in sorted(directory.iterdir()):
         if path.is_file() and path.suffix.upper() in (".FSG", ".KLC", ".SKY", ".PAL", ".RES", ".MAL", ".M00", ".M08", ".M16", ".M32"):
@@ -122,6 +122,8 @@ def write_manifest(directory, scenario, heading=None, *, vehicle=False):
     manifest = dict(scenario=scenario, files=files)
     if vehicle:
         manifest["vehicle"] = True
+    if mission:
+        manifest["mission"] = True
     if heading is not None:
         manifest["heading"] = heading
     (directory / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")

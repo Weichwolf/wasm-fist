@@ -5,6 +5,8 @@
 #include "probe_io.h"
 #include "probe_source.h"
 #include "render/renderer.h"
+#include "sim/mission_world.h"
+#include "sim/object_pool.h"
 #include "sim/vehicle_state.h"
 #include "sim/weapon_control.h"
 
@@ -14,6 +16,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #ifdef __EMSCRIPTEN__
 #include "platform/wasm/present.h"
@@ -111,34 +114,37 @@ enum {
     VALUE_RELOAD,
     VALUE_SELECTIONS,
     VALUE_RELOADS,
-    VALUE_TYPE
+    VALUE_TYPE,
+    VALUE_MISSION,
+    VALUE_SELECTED_SLOT
 };
 double fist_preview_value(int field) {
+    const fist_vehicle_state *player = fist_driving_player(&driving);
     fist_weapon_status weapon = {0};
-    if (renderer == NULL || fist_weapon_inspect(&driving.player, &weapon) != 0) {
+    if (renderer == NULL || player == NULL || fist_weapon_inspect(player, &weapon) != 0) {
         return -1;
     }
     switch (field) {
     case VALUE_TICKS:
         return (double)driving.ticks;
     case VALUE_X:
-        return driving.player.map_x;
+        return player->map_x;
     case VALUE_Y:
-        return driving.player.map_y;
+        return player->map_y;
     case VALUE_HULL:
-        return driving.player.drive.heading;
+        return player->drive.heading;
     case VALUE_TURRET:
-        return driving.player.turret.heading;
+        return player->turret.heading;
     case VALUE_SPEED:
-        return driving.player.drive.speed;
+        return player->drive.speed;
     case VALUE_THROTTLE:
-        return driving.player.drive.throttle;
+        return player->drive.throttle;
     case VALUE_PAUSED:
         return driving.paused;
     case VALUE_KEYS:
         return driving.keys;
     case VALUE_HEIGHT:
-        return driving.player.ground_height;
+        return player->ground_height;
     case VALUE_WEAPON:
         return weapon.selected;
     case VALUE_AMMUNITION:
@@ -150,13 +156,17 @@ double fist_preview_value(int field) {
     case VALUE_RELOADS:
         return (double)driving.feedback.reloads;
     case VALUE_TYPE:
-        return driving.player.type;
+        return player->type;
+    case VALUE_MISSION:
+        return driving.world != NULL;
+    case VALUE_SELECTED_SLOT:
+        return driving.world == NULL ? FIST_POOL_NO_SLOT : driving.world->combat.selected_slot;
     default:
         return -1;
     }
 }
 
-static int load_scene(char **argv) {
+static int load_scene(char **argv, int mission) {
     errno = 0;
     char *end = NULL;
     const unsigned long side = strtoul(argv[3], &end, DECIMAL_BASE);
@@ -176,7 +186,8 @@ static int load_scene(char **argv) {
         fist_probe_source storage = {.directory = argv[2]};
         const fist_asset_source source = {fist_probe_source_read, &storage};
         const fist_driving_options options = {.height_side = (uint32_t)side};
-        result = fist_driving_load(&scenario, &source, &options, &driving);
+        result = mission != 0 ? fist_driving_load_mission(&scenario, &source, &options, &driving)
+                              : fist_driving_load(&scenario, &source, &options, &driving);
         fist_probe_source_close(&storage);
     }
     free(data);
@@ -302,9 +313,11 @@ static int native_display(void) {
 #endif
 
 int main(int argc, char **argv) {
-    if (argc != ARGUMENT_COUNT || load_scene(argv) != 0) {
-        if (fputs("Usage: fist_driving_preview SCENARIO.FSG ASSET_DIRECTORY HEIGHT_SIDE\n",
-                  stderr) == EOF) {
+    const int mission = argc == ARGUMENT_COUNT + 1 && strcmp(argv[ARGUMENT_COUNT], "mission") == 0;
+    if ((argc != ARGUMENT_COUNT && mission == 0) || load_scene(argv, mission) != 0) {
+        if (fputs(
+                "Usage: fist_driving_preview SCENARIO.FSG ASSET_DIRECTORY HEIGHT_SIDE [mission]\n",
+                stderr) == EOF) {
             return EXIT_FAILURE;
         }
         return EXIT_FAILURE;

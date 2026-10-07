@@ -65,7 +65,7 @@ def driver_step(record, keys, side, pixels):
     return installed(side, pixels, [(identity, generation, bytes(raw))])[0], events
 
 
-def trace(record, intervals, side, pixels):
+def trace(record, intervals, side, pixels, *, extra_state=None):
     ticks = phase = keys = paused = 0
     feedback = [0, 0, 0, 255, 255, 0]
     oracle = None
@@ -81,7 +81,8 @@ def trace(record, intervals, side, pixels):
                   raw[0xbb] if has_reserve else 0, has_reserve)
         return (f'clock {ticks} {phase} {keys} {paused}\n' + state_lines([record]) +
                 'feedback ' + ' '.join(map(str, feedback)) + '\n' +
-                'weapon_status ' + ' '.join(map(str, status)) + '\n')
+                'weapon_status ' + ' '.join(map(str, status)) + '\n' +
+                (extra_state(record) if extra_state else ''))
     def notify(events):
         feedback[0] += events[0]
         feedback[1] += events[1]

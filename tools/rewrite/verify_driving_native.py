@@ -9,8 +9,22 @@ import tempfile
 import time
 
 
+# Reviewed 640x400 native TRAIN1 frames show this authored PAUSED label.
+# Synchronize presentation to that visible state before testing whole-frame
+# stability; a fixed sleep cannot acknowledge queued SDL input/publication.
+PAUSED_LABEL = 'a0f9f12a4cc37830cc11501af619207a8b36a43a34290a73982fc0e1eb68017c'
+
+
+def has_paused_label(pixels):
+    left, top, width, height = 178, 316, 70, 14
+    label = b''.join(pixels[((top + row) * 640 + left) * 4:
+                           ((top + row) * 640 + left + width) * 4] for row in range(height))
+    return hashlib.sha256(label).hexdigest() == PAUSED_LABEL
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--mission', action='store_true')
     parser.add_argument('--scenario', required=True, type=pathlib.Path)
     parser.add_argument('--assets', required=True, type=pathlib.Path)
     parser.add_argument('--native-preview', type=pathlib.Path,
@@ -36,7 +50,7 @@ def main():
             env = dict(os.environ, DISPLAY=f':{number}', SDL_VIDEODRIVER='x11')
             def xdo(*arguments):
                 return subprocess.check_output(['xdotool', *map(str, arguments)], env=env, timeout=5).decode().strip()
-            game = subprocess.Popen([str(args.native_preview), str(args.scenario), str(args.assets), '2048'],
+            game = subprocess.Popen([str(args.native_preview), str(args.scenario), str(args.assets), '2048', *(['mission'] if args.mission else [])],
                                     env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
             window = None
             for _ in range(100):
@@ -53,7 +67,7 @@ def main():
             time.sleep(args.settle_seconds)
             xdo('key', '--window', window, 'p')
             time.sleep(args.settle_seconds)
-            def capture(name):
+            def capture(name, *, paused=None):
                 path = output / (name + '.png')
                 subprocess.run(['import', '-window', window, str(path)], env=env, check=True, timeout=5)
                 pixels = subprocess.check_output(['convert', str(path), '-depth', '8', 'rgba:-'], timeout=5)
@@ -61,22 +75,40 @@ def main():
                     raise AssertionError('Missing/incomplete native frame')
                 if len({pixels[i:i + 3] for i in range(0, len(pixels), 4)}) <= 256:
                     raise AssertionError('Missing textured terrain/vehicle output')
+                if paused is not None and has_paused_label(pixels) != paused:
+                    return None
                 return hashlib.sha256(pixels).hexdigest()
-            before = capture('native-before')
+            def published_frame(name, paused):
+                deadline = time.monotonic() + 5
+                attempts = 0
+                while time.monotonic() < deadline:
+                    waiting = f'{name}-await-{attempts}'
+                    digest = capture(waiting, paused=paused)
+                    if digest is not None:
+                        (output / (waiting + '.png')).replace(output / (name + '.png'))
+                        if attempts:
+                            print(f'Native visible pause={paused} acknowledged after {attempts} earlier frames: {name}', flush=True)
+                        return digest
+                    attempts += 1
+                    time.sleep(.05)
+                raise AssertionError(f'Native pause={paused} was not published: {name}')
+            before = published_frame('native-before', True)
             time.sleep(.15)
             assert capture('native-paused') == before, 'Paused native scene must preserve the complete frame'
             xdo('key', '--window', window, 'p')
+            published_frame('native-driving-resumed', False)
             xdo('keydown', '--window', window, 'w', 'd', 'e')
             time.sleep(1.5)
             xdo('keyup', '--window', window, 'w', 'd', 'e')
             xdo('key', '--window', window, 'p')
             time.sleep(args.settle_seconds)
-            after = capture('native-after')
+            after = published_frame('native-after', True)
             assert after != before, 'Actual held SDL inputs must change the displayed scene'
             xdo('key', '--window', window, '2')
             time.sleep(args.settle_seconds)
             assert capture('native-weapon-paused') == after, 'Paused weapon presses must not change the scene'
             xdo('key', '--window', window, 'p')
+            published_frame('native-weapon-resumed', False)
             xdo('key', '--window', window, '1', '2')
             xdo('keydown', '--window', window, '1')
             time.sleep(.1)
@@ -84,20 +116,22 @@ def main():
             xdo('keyup', '--window', window, '1')
             xdo('key', '--window', window, 'p')
             time.sleep(args.settle_seconds)
-            selected = capture('native-weapon-selected')
+            selected = published_frame('native-weapon-selected', True)
             assert selected != after, 'Actual SDL weapon selection must reach the displayed HUD'
             time.sleep(.15)
             assert capture('native-weapon-stable') == selected, 'Paused reload/weapon display remains stable'
             xdo('key', '--window', window, 'p')
+            published_frame('native-cycle-resumed', False)
             xdo('key', '--window', window, 'Tab')
             xdo('key', '--window', window, 'p')
             time.sleep(args.settle_seconds)
-            assert capture('native-weapon-cycled') != selected, 'SDL Tab must update the displayed weapon and store'
+            assert published_frame('native-weapon-cycled', True) != selected, 'SDL Tab must update the displayed weapon and store'
             xdo('key', '--window', window, 'p')
+            published_frame('native-focus-resumed', False)
             xdo('keydown', '--window', window, 'w')
             xdo('windowfocus', '0')
             time.sleep(args.settle_seconds)
-            frozen = capture('native-focus-lost')
+            frozen = published_frame('native-focus-lost', True)
             xdo('windowfocus', '--sync', window)
             xdo('keyup', '--window', window, 'w')
             time.sleep(.2)

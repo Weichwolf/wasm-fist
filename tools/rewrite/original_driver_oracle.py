@@ -31,6 +31,14 @@ class OriginalDriverOracle:
                 machine.reg_read(UC_X86_REG_SS)) != (0x9004, 0x1c00, 0x1c00):
             raise RuntimeError('Original complete control-prefix return failed')
 
+    def control(self, record):
+        from unicorn.x86_const import UC_X86_REG_DI
+        identity, generation, raw = record
+        self.machine.mem_write(DGROUP + 0x7000, raw)
+        self.machine.reg_write(UC_X86_REG_DI, 0x7000)
+        self.take_control(self.machine)
+        return identity, generation, bytes(self.machine.mem_read(DGROUP + 0x7000, len(raw)))
+
     def step(self, record, keys):
         from unicorn.x86_const import UC_X86_REG_DI
         identity, generation, raw = record

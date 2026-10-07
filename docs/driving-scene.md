@@ -1,7 +1,11 @@
 # Controlled ground-vehicle scene
 
-`app/driving` owns an initialized roster-zero player, immutable unit definitions, original
-terrain/model assets and a separately installed numerical height field. `sim/driver` connects
+`app/driving` owns either an initialized standalone roster-zero player or the complete supported
+mission world, plus immutable unit definitions, original terrain/model assets and a separately
+installed numerical height field. In mission mode, control, camera, sprite composition and HUD
+borrow the selected physical ground actor directly from `world->objects`; there is no retained
+second player. The canonical combat owner owns selection and the physical roster. All other
+objects and the final file-order initialization RNG survive controlled intervals unchanged. `sim/driver` connects
 manual commands, altitude transfer, gun/recoil, movement/manual turret, phase progression,
 reload dispatch and ground contact. `app/driving_view` draws the current actor through the
 common sprite compositor and follow camera, then its C/softgl weapon display. Native SDL2
@@ -9,9 +13,9 @@ common sprite compositor and follow camera, then its C/softgl weapon display. Na
 storage, monotonic elapsed time and
 presentation; neither platform implements movement or control rules.
 
-This delivers driving with weapon selection and mechanical reload feedback. Firing/projectiles,
-targeting, AI, collision, objectives, outcomes, suspension animation and audio remain work in
-0041/0043/0044; it is not a complete playable mission.
+The scene delivers driving with weapon selection and mechanical reload feedback. Firing/projectiles,
+targeting, living AI, world scheduling, battle presentation, objectives, outcomes, suspension
+animation and audible PCM remain work in 0041/0043/0044; it is not a complete playable mission.
 Only the player is currently displayed. Original targeting references are outside the typed
 manual actor: CYPRUS4/INDIA5 contain nonzero references, so the original stage oracle explicitly
 uses an untargeted boundary. That test does not claim complete original class execution.
@@ -159,3 +163,47 @@ ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
 ```
 
 Prepare the isolated assets with `prepare_driving_preview.py` before the SDL command, as above.
+
+## Canonical mission mode (0078)
+
+Append the explicit `mission` argument to the native scene, or prepare a browser manifest with
+`--mission`. Both frontends call the same `fist_driving_load_mission` API. Complete unsupported
+worlds return `FIST_MISSION_UNSUPPORTED`; exhaustion returns `FIST_POOL_UNAVAILABLE`; invalid
+inputs, missing player/assets and allocation/detail failures return -1 without publishing a
+partial session. There is no standalone fallback. The existing default diagnostic mode still
+accepts all 47 original player starts independently of whole-world class support.
+
+Selection initially uses physical roster entry zero, performs the delivered original control
+refresh, and installs ground contact. Driving intervals stage only a temporary transactional
+actor, then commit directly to that physical payload. They do not run complete living methods,
+consume world combat RNG, schedule combat visits or acknowledge selected-loss impacts. An open
+selected-loss continuation rejects control intervals atomically. Changing vehicle selection,
+loading its replacement visual family and actual takeover UI remain separate work.
+
+```sh
+/tmp/wasm-fist-rewrite/native/fist_driving_preview \
+  armoredfist/FISTDATA/TRAIN1.FSG armoredfist/FISTDATA 2048 mission
+python3 tools/rewrite/prepare_driving_preview.py --mission \
+  --scenario armoredfist/FISTDATA/TRAIN1.FSG --output-dir /tmp/wasm-fist-0078-browser/assets
+python3 tools/rewrite/test_mission_driving.py
+/tmp/wasm-fist-decoder-oracle/bin/python tools/rewrite/test_mission_driving.py --originals --oracle
+python3 tools/rewrite/verify_driving_native.py --mission \
+  --scenario armoredfist/FISTDATA/TRAIN1.FSG --assets armoredfist/FISTDATA
+```
+
+The mission gate compares complete unfiltered timed session/world streams and byte lengths.
+Its C probe additionally checks the actual canonical pointer, every invalid physical selection,
+dual-owner rejection, selected-loss suspension, failure atomicity, unchanged options and complete
+nonplayer/world preservation. Source buffers are released before the first observed state.
+The required original gate executes complete saved-object installation, immediate control
+refresh, initial ground contact and each declared manual stage. All ten supported contexts
+(671 objects) and all 37 explicit whole-world rejections are required. The standalone original
+47-player gate remains a separate regression. Actual SDL/browser device and pixel gates exercise
+movement, independent turret, pause, weapon HUD/reload, focus loss, shutdown and startup failure.
+The SDL gate acknowledges visible pause/resume through the reviewed authored PAUSED label
+before checking complete changing/stable frames; queued presentation cannot be synchronized
+by a fixed sleep alone. The five-second acknowledgement deadline fails missing publication,
+and every observed frame still requires complete opaque RGBA and textured output. This
+verification change follows a reaching .25-second paused-frame capture failure under concurrent
+load; simulation and input rules were unchanged. These observations prove the controlled subset; complete battle/PCM/mission acceptance remains
+open under 0041/0065, and the final complete WASM streak remains zero.

@@ -22,6 +22,7 @@ def synthetic_driving_inputs(directory, kind=0):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--mission', action='store_true', help='Control the canonical player in a complete supported world')
     parser.add_argument('--scenario', type=pathlib.Path, help='Pinned original; default: constructed player/terrain/models')
     parser.add_argument('--output-dir', type=pathlib.Path, default=BUILD / 'wasm/assets')
     parser.add_argument('--build-root', type=pathlib.Path, default=BUILD)
@@ -38,7 +39,7 @@ def main():
         parser.error('Output directory must be empty')
     scenario = (original_inputs(args.scenario, output, args.build_root, vehicle=True)
                 if args.scenario else synthetic_driving_inputs(output, classes.index(args.vehicle_class or 'M1')))
-    write_manifest(output, scenario, None, vehicle=True)
+    write_manifest(output, scenario, None, vehicle=True, mission=args.mission)
     print(f'Prepared controlled {scenario} in {output}')
 
 

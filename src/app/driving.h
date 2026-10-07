@@ -8,6 +8,7 @@
 #include "assets/terrain.h"
 #include "assets/units.h"
 #include "assets/vehicle.h"
+#include "sim/mission_world.h"
 #include "sim/random.h"
 #include "sim/vehicle_state.h"
 
@@ -52,7 +53,10 @@ typedef struct {
     fist_model model;
     fist_vehicle_visual visual;
     fist_klc_image installed_height;
-    fist_vehicle_state player;
+    /* Exactly one owned heap state: diagnostic player or complete mission.
+     * Mission selection belongs to world->combat.selected_slot. */
+    fist_vehicle_state *preview_player;
+    fist_mission_world *world;
     fist_driving_feedback feedback;
     uint64_t clock_phase;
     uint64_t ticks;
@@ -70,6 +74,14 @@ typedef struct {
  * success owns all data. Explicit random/detail options choose the start. */
 int fist_driving_load(const fist_scenario *scenario, const fist_asset_source *source,
                       const fist_driving_options *options, fist_driving *out);
+/* Explicit complete supported-world load. Reuse the existing controller stages
+ * against the canonical selected actor; no standalone fallback or full class
+ * tick/AI/fire/device claim. Returns 0, UNAVAILABLE, UNSUPPORTED or -1; failures
+ * preserve out. Source/options stay unchanged. */
+int fist_driving_load_mission(const fist_scenario *scenario, const fist_asset_source *source,
+                              const fist_driving_options *options, fist_driving *out);
+/* Borrow the sole active player state, or NULL for missing/invalid selection. */
+const fist_vehicle_state *fist_driving_player(const fist_driving *driving);
 void fist_driving_destroy(fist_driving *driving);
 
 /* Advance the prior input through the full elapsed interval, then install new

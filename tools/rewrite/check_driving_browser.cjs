@@ -6,7 +6,7 @@ const {createHash} = require('node:crypto');
 const {chromium} = require(process.env.FIST_PLAYWRIGHT_MODULE || 'playwright');
 
 async function state(page) {
-    return page.evaluate(() => Array.from({length: 16}, (_, i) => window.fistDriving.module._fist_preview_value(i)));
+    return page.evaluate(() => Array.from({length: 18}, (_, i) => window.fistDriving.module._fist_preview_value(i)));
 }
 async function frame(page, output) {
     const result = await page.evaluate(async () => {
@@ -49,6 +49,10 @@ async function main() {
         await page.keyboard.press('p');
         await page.waitForTimeout(100);
         const before = await state(page);
+        const manifestURL = new URL('assets/manifest.json', url);
+        const manifest = await (await fetch(manifestURL)).json();
+        assert.equal(before[16], Number(manifest.mission === true), 'The actual C session must honor explicit world ownership');
+        assert.equal(before[17] === 65535, manifest.mission !== true, 'Mission selection must name a physical actor');
         assert.equal(before[7], 1);
         const first = await frame(page, directory && path.join(directory, 'browser-before.png'));
         await page.keyboard.down('w');
@@ -145,8 +149,6 @@ async function main() {
         assert.deepEqual(errors, [], 'Browser runtime must be clean');
         // Reach a C startup failure after valid manifest/download verification.
         // Its scene and prestarted render workers must both be released.
-        const manifestURL = new URL('assets/manifest.json', url);
-        const manifest = await (await fetch(manifestURL)).json();
         const damaged = Buffer.from(await (await fetch(new URL(manifest.scenario, manifestURL))).arrayBuffer());
         damaged[0] ^= 255;
         manifest.files.find(file => file.name === manifest.scenario).sha256 = createHash('sha256').update(damaged).digest('hex');

@@ -8,7 +8,9 @@ async function startDrivingPreview() {
     module.FS.mkdir('/assets');
     for (const [name, bytes] of files) module.FS.writeFile(`/assets/${name}`, bytes);
     // Explicit inspection installation detail; original default TCB+59h is 11 bits.
-    if (module.callMain([`/assets/${manifest.scenario}`, '/assets', '2048']) !== 0) {
+    const sceneArguments = [`/assets/${manifest.scenario}`, '/assets', '2048'];
+    if (manifest.mission === true) sceneArguments.push('mission');
+    if (module.callMain(sceneArguments) !== 0) {
         module._fist_preview_destroy();
         module.PThread.terminateAllThreads();
         throw new Error('Could not load the driving scene');

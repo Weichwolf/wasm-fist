@@ -10,12 +10,35 @@
 #include "assets/vehicle.h"
 #include "sim/driver.h"
 #include "sim/ground.h"
+#include "sim/mission_world.h"
+#include "sim/object_pool.h"
 #include "sim/random.h"
 #include "sim/vehicle_state.h"
 #include "sim/weapon_control.h"
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdlib.h>
+
+static fist_vehicle_state *player_state(const fist_driving *driving) {
+    if (driving == NULL || (driving->world != NULL && driving->preview_player != NULL)) {
+        return NULL;
+    }
+    if (driving->world == NULL) {
+        return driving->preview_player;
+    }
+    fist_mission_world *world = driving->world;
+    const uint16_t slot = world->combat.selected_slot;
+    if (fist_mission_world_object(world, slot) == NULL ||
+        world->pool.slots[slot].type >= FIST_UNIT_GROUND_VEHICLE_COUNT) {
+        return NULL;
+    }
+    return &world->objects[slot].vehicle;
+}
+
+const fist_vehicle_state *fist_driving_player(const fist_driving *driving) {
+    return player_state(driving);
+}
 
 void fist_driving_destroy(fist_driving *driving) {
     if (driving == NULL) {
@@ -25,26 +48,52 @@ void fist_driving_destroy(fist_driving *driving) {
     fist_units_destroy(&driving->units);
     fist_model_destroy(&driving->model);
     fist_klc_destroy(&driving->installed_height);
+    free(driving->preview_player);
+    free(driving->world);
     *driving = (fist_driving){0};
 }
 
-int fist_driving_load(const fist_scenario *scenario, const fist_asset_source *source,
-                      const fist_driving_options *options, fist_driving *out) {
+static int load_player(fist_driving *driving, const fist_driving_options *options,
+                       const fist_unit_definition *definition, int mission) {
+    if (mission != 0) {
+        driving->world = malloc(sizeof(*driving->world));
+        if (driving->world == NULL) {
+            return -1;
+        }
+        const int status =
+            fist_mission_world_initialize(&driving->units, &options->random, 0, driving->world);
+        if (status != 0) {
+            return status;
+        }
+        driving->world->combat.selected_slot = driving->world->combat.roster[0];
+        fist_vehicle_state *actor = player_state(driving);
+        return actor == NULL ? -1 : fist_driver_take_control(actor);
+    }
+    driving->preview_player = malloc(sizeof(*driving->preview_player));
+    if (driving->preview_player == NULL) {
+        return -1;
+    }
+    fist_random random = options->random;
+    return fist_vehicle_initialize(definition, &random, 0, driving->preview_player);
+}
+
+static int load(const fist_scenario *scenario, const fist_asset_source *source,
+                const fist_driving_options *options, fist_driving *out, int mission) {
     if (scenario == NULL || source == NULL || options == NULL || out == NULL) {
         return -1;
     }
     fist_driving driving = {0};
     driving.feedback.voice_request = FIST_WEAPON_NO_REQUEST;
     driving.feedback.notice = FIST_WEAPON_NO_REQUEST;
-    fist_random random = options->random;
     int status = fist_units_decode(scenario, &driving.units);
     const fist_unit_definition *player = fist_units_roster_get(&driving.units, 0);
     if (status == 0) {
-        status = fist_vehicle_initialize(player, &random, 0, &driving.player);
+        status = load_player(&driving, options, player, mission);
     }
+    fist_vehicle_state *actor = status == 0 ? player_state(&driving) : NULL;
     fist_weapon_status weapon = {0};
     if (status == 0) {
-        status = fist_weapon_inspect(&driving.player, &weapon);
+        status = fist_weapon_inspect(actor, &weapon);
     }
     if (status == 0) {
         status = fist_vehicle_visual_decode(player, &driving.visual);
@@ -57,17 +106,27 @@ int fist_driving_load(const fist_scenario *scenario, const fist_asset_source *so
                                            &driving.installed_height);
     }
     if (status == 0) {
-        status = fist_vehicle_ground_update(&driving.player, &driving.installed_height);
+        status = fist_vehicle_ground_update(actor, &driving.installed_height);
     }
     if (status == 0) {
         status = fist_model_load(driving.visual.model_name, source, &driving.model);
     }
     if (status != 0) {
         fist_driving_destroy(&driving);
-        return -1;
+        return status;
     }
     *out = driving;
     return 0;
+}
+
+int fist_driving_load(const fist_scenario *scenario, const fist_asset_source *source,
+                      const fist_driving_options *options, fist_driving *out) {
+    return load(scenario, source, options, out, 0);
+}
+
+int fist_driving_load_mission(const fist_scenario *scenario, const fist_asset_source *source,
+                              const fist_driving_options *options, fist_driving *out) {
+    return load(scenario, source, options, out, 1);
 }
 
 static int direction(uint16_t keys, uint16_t positive, uint16_t negative) {
@@ -135,13 +194,15 @@ static int weapon_edges(driving_update *update, uint16_t edges) {
 }
 
 int fist_driving_advance(fist_driving *driving, fist_driving_interval interval) {
+    fist_vehicle_state *player = player_state(driving);
     const uint16_t keys = interval.keys;
     const uint64_t microseconds = UINT64_C(1000000);
     const uint64_t tick_phase = FIST_DRIVER_TICK_COUNTS * microseconds;
-    if (driving == NULL || keys > FIST_DRIVE_KEYS || driving->keys > FIST_DRIVE_KEYS ||
+    if (player == NULL || keys > FIST_DRIVE_KEYS || driving->keys > FIST_DRIVE_KEYS ||
         driving->paused > 1 || driving->clock_phase >= tick_phase ||
-        driving->player.type >= FIST_UNIT_GROUND_VEHICLE_COUNT ||
-        driving->player.component_size != fist_vehicle_component_size(driving->player.type)) {
+        player->type >= FIST_UNIT_GROUND_VEHICLE_COUNT ||
+        player->component_size != fist_vehicle_component_size(player->type) ||
+        (driving->world != NULL && driving->world->pending_player_impact != FIST_POOL_NO_SLOT)) {
         return -1;
     }
     const fist_driver_controls controls = {
@@ -161,7 +222,7 @@ int fist_driving_advance(fist_driving *driving, fist_driving_interval interval) 
     if (driving->ticks > UINT64_MAX - count) {
         return -1;
     }
-    driving_update update = {driving->player, driving->feedback, driving->ticks};
+    driving_update update = {*player, driving->feedback, driving->ticks};
     for (uint64_t tick = 0; tick < count; ++tick) {
         fist_weapon_events events = {0};
         if (fist_driver_step(&update.player, &driving->installed_height, &controls, &events) != 0) {
@@ -179,7 +240,7 @@ int fist_driving_advance(fist_driving *driving, fist_driving_interval interval) 
     if (paused == 0 && weapon_edges(&update, keys & (uint16_t)~driving->keys) != 0) {
         return -1;
     }
-    driving->player = update.player;
+    *player = update.player;
     driving->feedback = update.feedback;
     driving->clock_phase = phase;
     driving->ticks = update.tick;

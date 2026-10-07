@@ -309,6 +309,9 @@ if(BUILD_TESTING AND NOT EMSCRIPTEN)
     add_test(NAME object_pool_contract COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_SOURCE_DIR}/tools/rewrite/test_object_pool.py
         --target native --native-probe $<TARGET_FILE:fist_object_pool_probe>)
+    add_test(NAME mission_driving_contract COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_SOURCE_DIR}/tools/rewrite/test_mission_driving.py
+        --target native --native-probe $<TARGET_FILE:fist_driving_probe>)
     add_test(NAME driving_contract COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_SOURCE_DIR}/tools/rewrite/test_driving.py
         --target native --native-probe $<TARGET_FILE:fist_driving_probe>)
