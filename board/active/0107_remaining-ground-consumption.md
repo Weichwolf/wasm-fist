@@ -72,8 +72,9 @@ actual release/reuse/orphans, unused-invalid-input ordering and complete transac
 See docs/ground-support-consumption.md. Declared prepared fixtures do not prove the all47
 canonical-world gate or the real preparation-to-consumption lifetime producer chain.
 
-The full sequential production native/WASM build/test run is in progress; current command,
-source pins and process handle are recorded under `/tmp/wasm-fist-0107-review/progress.json`.
+Current verification status and source pins are recorded under
+`/tmp/wasm-fist-0107-review/progress.json`. The production run described in the historical
+checkpoints below has finished; no production run is currently active.
 The C implementation remains uncommitted until a verified bounded success is established.
 Compact previous checkpoints remain there; completed obsolete raw logs are removed only after
 recording their results/hashes. Prior accepted runtime evidence does not cover these changes.
@@ -103,7 +104,33 @@ verifier has no dependency on the unfinished consuming test or shared-C program.
 These proved inputs now support the pending C producer-to-consumer/lifetime gate.
 The current production consuming fixture gate also passed on WASM: twelve groups,
 247147 transitions and the same complete digest as native. The remaining default
-WASM production suites are still running; neither result closes this WI.
+WASM production suites subsequently passed. That complete run precedes the canonical probe
+extension and does not verify the current candidate; neither result closes this WI.
+
+Current cleanup/push checkpoint (2026-10-08, implementation still unaccepted): the extended
+actual prepared-world consuming probe passes on both native and WASM for all47 missions,
+eight real heights and four details. Each target covers 188 worlds, 3840 actors, 26880
+ordinary child inputs and 944 prepared resources, plus 476 each resource release/reuse/orphan
+cases, 1480 admitted requester lifetime cases and five malformed input rejections. Twelve
+groups complete with zero skips and identical full output digest
+`d878e5a82b52257c1fe29fab23a8d8c1858ca55de0a4868366a162021d3d9010`.
+
+The extended production regression exposed two probe diagnostic failures for deliberately
+inconsistent type metadata; world-state guards preserved the expected ammunition. The failed
+owned run was explicitly terminated for correction (exit143), not accepted. The diagnostic
+fix passes both affected groups on native and WASM, 99 cases per target, with expectations
+unchanged. Current full strict style passes all94 translation units. The corrected complete
+production regression remains pending. ASan/UBSan binaries compile successfully; sanitizer
+behavior checks have not run and compilation alone is not memory acceptance.
+
+Actual current TRAIN1 native and browser scene/input checks pass; four before/after frames
+remain under `/tmp/wasm-fist-0107-scene/`. Completed ten raw logs and nineteen intermediate
+captures were removed (3424329 bytes), retaining complete log summaries, hashes, current
+source/program pins and reproduction commands in
+`/tmp/wasm-fist-0107-review/cleanup-current-receipt.json`. Builds and isolated assets needed
+by pending checks remain in `/tmp`; unrelated work and original files were untouched.
+The checkout remains 348MiB. This published checkpoint updates evidence only; the C/test/build
+candidate stays local until all required acceptance gates pass.
 
 Use closed0104 complete original source/required result pins, closed0105
 consumed audio return and closed0106 full producer/list gates. The additional required original
@@ -116,12 +143,13 @@ See docs/remaining-ground-command.md and docs/support-state-boundary.md.
 
 ## Next
 
-Finish the current complete production build/test run without restarting it on observation
-timeouts. Then extend consuming probes to the real preparation-to-consumption resource chain
-and all47 canonical prepared worlds/eight heights/four details. Complete the required original
-coupling, current memory and actual native/browser scene gates; retain exact source/program
-pins and compact results. Keep full parent/class integration and later dispatcher/PCM
-requirements visible; no selected diagnostic, battle or complete-game claim from this WI.
+Run a fresh complete sequential production build/test gate for the corrected probe; do not
+restart live runs on observation timeouts. Run the current sanitizer behavior and canonical
+resource/requester lifetime checks, and consolidate the required original coupling and actual
+scene evidence against exact candidate source/program pins. The all47 real preparation-to-
+consumption probe now passes both targets. Retain compact results and remove obsolete owned
+artifacts after success. Keep full parent/class integration and later dispatcher/PCM requirements
+visible; no selected diagnostic, battle or complete-game claim from this WI.
 
 ## Accept
 
