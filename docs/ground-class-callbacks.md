@@ -172,6 +172,7 @@ group without filters and write receipts under /tmp. With the pinned oracle
 environment, reproduce directly from the repository:
 
 ```sh
+mkdir -p /tmp/wasm-fist-0119-class-research
 PYTHONPATH=tests PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
   /tmp/wasm-fist-decoder-oracle/bin/python \
   tests/fixtures/ground_class_callbacks/status_timers.py
@@ -179,3 +180,33 @@ PYTHONPATH=tests PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
   /tmp/wasm-fist-decoder-oracle/bin/python \
   tests/fixtures/ground_class_callbacks/roster_visibility.py
 ```
+
+## Counter restoration and retention
+
+The recovered byte fields+37 (roster cursor),+a6 and+52 are retained by both
+complete c296/class initialization and each ground readiness method. The existing
++36 owner is distinct: readiness clears it. A required4,096-return proof covers
+all four classes, both declared link inputs0/2 and every byte value of each new
+field. Complete251-byte payload predictions, original return ABI and RNG match:
+2,048 class-start returns and2,048 readiness returns. No field is inferred zero
+merely because the current saved scene happens to contain zero.
+
+Output digest:
+e1c4c6eb2a4649a51852bc992172d813d8d3d240269951de46486f1ca7f45881.
+Fixture digest:
+5afa7339acb0166f82c2774b0a212d3d4eb0741c8421158a727a385aebdb06cd.
+Receipt: /tmp/wasm-fist-0119-class-research/callback-retention.json. This payload
+retention proof does not accept every class/global write or shared scheduling.
+Reproduce with the same pinned environment and review directory above:
+
+```sh
+PYTHONPATH=tests PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
+  /tmp/wasm-fist-decoder-oracle/bin/python \
+  tests/fixtures/ground_class_callbacks/callback_retention.py
+```
+
+Shared consumption must add the three missing bytes to typed saved restoration
+and preserve them through initialization/readiness. Use drive.motion_flags for
++19 and the existing reset_state for+36. M3/BMP+bb already belongs to
+weapons.ready_stock; their secondary rounds are existing weapon slots0/2. A
+second pending-flag or reserve owner would duplicate canonical state.

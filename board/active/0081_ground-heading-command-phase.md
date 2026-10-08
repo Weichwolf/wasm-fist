@@ -43,6 +43,11 @@ Exact verified status/roster fixtures are versioned under
 tests/fixtures/ground_class_callbacks with unchanged receipt hashes. M3/BMP
 secondary rack callbacks remain required. Active0120 production inputs stay frozen
 while its five gates run.
+The three new byte fields+37/+a6/+52 also pass4,096 complete original payload
+retention returns: all classes, every field byte and link inputs0/2 through
+class start and readiness. The exact versioned callback_retention.py, receipt
+and owner mapping are recorded in docs/ground-class-callbacks.md. Shared typed
+restoration must retain these fields; existing +19/+36/+bb owners remain unique.
 
 Closed0117 now publishes the exact canonical target-motion owner after its full
 production/original/style/memory/presentation gates. Active0120 isolates complete
