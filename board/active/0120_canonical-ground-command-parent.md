@@ -70,6 +70,17 @@ cycle/fifth-station/focus/shutdown/failed-start assertions pass with six capture
 Actual native and browser after-frames are visually reviewed. The failed attempt
 remains explicitly recorded; no timeout, scene assertion or game input was changed.
 
+The exact instrumented original/canonical corpus is now terminal0 under22810:
+122,880 complete original/native parent and separate child returns, all47
+missions/eight heights/four details,188 prepared worlds and3,840 actors. All32
+bank entries have3,840 cases each, with140,376 genuine visibility and640 audio
+returns. Every required group completes without skips; the exact-source digest
+matches the retained independent prediction:
+cebbaa021e196a2360df991b6a111bd78cac2377a9504daf8df48f413abe485f.
+Program hashes are unchanged. Receipt: /tmp/wasm-fist-0120-review/sanitized/corpus.json;
+terminal session/command/source/program pins are recorded in candidate.json.
+This full memory subgate does not accept C before the other required gates finish.
+
 The old retained development domain gate also completes,47755, terminal0:
 264,192 original/native/WASM parent returns each, all65,536 values in each of four
 heading fields and2,048 counter cases, no skips. Its prior-policy programs remain
@@ -81,8 +92,8 @@ and compact results; live exact-gate logs and failure evidence remain retained.
 
 Keep all exact-candidate inputs unchanged. Full production regression remains live
 under82768, exact original/native/WASM corpus under66293 and exact heading/counter
-domains under13754. Exact native sanitizer corpus/domain gates are live under22810
-and84842. Require all five complete terminal results and unchanged source/program
+domains under13754. Exact native sanitizer domains remain live under84842; its
+corpus has completed under22810. Require all four remaining terminal results and unchanged source/program
 pins before publication; no partial coverage or scene-only success accepts C.
 Retain compact results and clean completed artifacts.
 

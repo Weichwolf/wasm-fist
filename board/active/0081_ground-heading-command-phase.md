@@ -49,6 +49,15 @@ class start and readiness. The exact versioned callback_retention.py, receipt
 and owner mapping are recorded in docs/ground-class-callbacks.md. Shared typed
 restoration must retain these fields; existing +19/+36/+bb owners remain unique.
 
+A separate complete class observer repeats all4,096 reached instruction returns,
+512 parents,448 visibility and4,096 engine queue returns with the identical
+accepted actor/RNG/PM digest. It inventories106 changed DGROUP bytes outside
+actual allocated payload ranges, including stack/scratch/other globals; this
+inventory is discovery, not independently predicted global acceptance. Receipt:
+/tmp/wasm-fist-0119-class-research/reached-ground-class-global-observer.json.
+Classify and predict these writes through their existing semantic owners before
+complete class consumption; no copied scratch fields are added to shared C.
+
 Closed0117 now publishes the exact canonical target-motion owner after its full
 production/original/style/memory/presentation gates. Active0120 isolates complete
 parent integration at that published base; fresh current-policy gates are required.
