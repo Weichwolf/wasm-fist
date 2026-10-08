@@ -15,6 +15,7 @@
 #include "sim/smoke.h"
 #include "sim/tree.h"
 #include "sim/vehicle_damage.h"
+#include "sim/vehicle_motion.h"
 #include "sim/vehicle_state.h"
 #include "sim/voice.h"
 
@@ -39,9 +40,10 @@ typedef struct {
 /* The existing pool's physical type is the payload tag. Ground 0..3, other
  * 5/6/26/27, saved base 11/13/16/25, smoke 17/18, tree 21 and wreck 23 have
  * delivered typed restoration.
- * Primary launch installs dynamic shell 8 and muzzle 18. Canonical combat visits
- * publish explosion 4 and consume delivered death/effect/retirement classes.
- * Saved restoration of shell/explosion classes and living dispatch remain separate. */
+ * Primary launch installs dynamic shell 8 and muzzle 18. Canonical combat
+ * visits publish explosion 4 and consume delivered death/effect/retirement
+ * classes. Saved restoration of shell/explosion classes and living dispatch
+ * remain separate. */
 typedef union {
     fist_vehicle_state vehicle;
     fist_other_actor other;
@@ -61,7 +63,8 @@ typedef struct {
     uint16_t counted_static;
     uint16_t artillery_count[FIST_DAMAGE_SIDES];
     /* Actual runtime identities, in original registry order; no saved near
-     * pointer translation. After preparation, entries beyond each count are NO_SLOT. */
+     * pointer translation. After preparation, entries beyond each count are
+     * NO_SLOT. */
     fist_artillery_resource artillery[FIST_DAMAGE_SIDES][FIST_MISSION_ARTILLERY_SIDE_SLOTS];
     uint8_t prepared;
 } fist_mission_preparation;
@@ -173,14 +176,16 @@ typedef struct {
 /* Complete b011 using prepared canonical state. Preserve original preference,
  * range, secondary and old-target rules; invalidate stale runtime targets.
  * Saved near words are never interpreted. No RNG, parent dispatch or PCM.
- * Return 0, or -1 for invalid state/input, including a missing/mistagged projection;
- * all failures preserve world/output, including notification history. */
+ * Return 0, or -1 for invalid state/input, including a missing/mistagged
+ * projection; all failures preserve world/output, including notification
+ * history. */
 int fist_mission_world_discover_targets(fist_mission_world *world, const fist_klc_image *height,
                                         fist_target_discovery_request request,
                                         fist_target_discovery_result *out);
 
 /* Actual shared e21c class/variant aim offsets. Inputs are canonical physical
- * projections; outputs own their poses. No visibility, references or mutation. */
+ * projections; outputs own their poses. No visibility, references or mutation.
+ */
 int fist_mission_world_target_positions(const fist_mission_world *world, uint16_t actor,
                                         uint16_t target, fist_object_pose *source,
                                         fist_object_pose *destination);
@@ -202,11 +207,12 @@ typedef struct {
 
 /* Complete ae32/a6e3 from prepared canonical orders/RNG/lifetimes. Direct
  * rejects preserve a valid old target; attempted invisible candidates clear it.
- * Automatic admission sets bit 128 even after a failed attempt. Stale references
- * cannot address successors. Selected live type-26 modes outside the authored
- * four-message domain fail atomically rather than read adjacent text. Unused
- * behavior/height/variant inputs do not restrict original early branches.
- * All failures preserve complete world/output; no parent, aiming or PCM. */
+ * Automatic admission sets bit 128 even after a failed attempt. Stale
+ * references cannot address successors. Selected live type-26 modes outside the
+ * authored four-message domain fail atomically rather than read adjacent text.
+ * Unused behavior/height/variant inputs do not restrict original early
+ * branches. All failures preserve complete world/output; no parent, aiming or
+ * PCM. */
 int fist_mission_world_acquire_target(fist_mission_world *world, const fist_klc_image *height,
                                       fist_target_acquisition_request request,
                                       fist_target_acquisition_result *out);
@@ -217,17 +223,26 @@ int fist_mission_world_acquire_target(fist_mission_world *world, const fist_klc_
  * Invalid used projection/state fails atomically. */
 int fist_mission_world_aim_target(fist_mission_world *world, uint16_t slot, bool coarse);
 
+/* Complete class motion followed by target-aware turret slew. M1/M3 retain
+ * aim feedback; T80/BMP refresh it after translation, using captured live
+ * targets. Lost references retain feedback and cannot bind a reused slot.
+ * No command, phase, terrain, RNG, devices or orders are consumed. Invalid
+ * used state/projection preserves the complete world and event output. */
+int fist_mission_world_ground_motion(fist_mission_world *world, uint16_t slot, bool coarse,
+                                     fist_vehicle_motion_events *out);
+
 void fist_mission_world_reset(fist_mission_world *world);
 
 /* Complete normal-side d84a/43c1 saved-object installation for delivered
  * classes, using decoded immutable definitions. Initialize only participating
  * ground actors, in input order; retain final RNG and all physical orphans.
- * Input units/random are borrowed; no input views survive. Units stay unchanged.
- * Random stays unchanged unless it aliases out->random; that supported reload
- * replaces the old world using its current RNG as the new initial state.
- * Returns OK, UNAVAILABLE for physical exhaustion, UNSUPPORTED for an undelivered
- * type, or -1 for invalid data/allocation. Every failure preserves out. This
- * owns neither terrain/contact installation nor living class dispatch/devices. */
+ * Input units/random are borrowed; no input views survive. Units stay
+ * unchanged. Random stays unchanged unless it aliases out->random; that
+ * supported reload replaces the old world using its current RNG as the new
+ * initial state. Returns OK, UNAVAILABLE for physical exhaustion, UNSUPPORTED
+ * for an undelivered type, or -1 for invalid data/allocation. Every failure
+ * preserves out. This owns neither terrain/contact installation nor living
+ * class dispatch/devices. */
 int fist_mission_world_initialize(const fist_units *units, const fist_random *random,
                                   uint8_t link_mode, fist_mission_world *out);
 
@@ -235,11 +250,12 @@ int fist_mission_world_initialize(const fist_units *units, const fist_random *ra
  * for every delivered current binding. Visit registry order, including deleted
  * nonparticipants; preserve physical orphans. Reset ground fields, initialize
  * tree/target/artillery preparation, sample actual op-54 heights and release
- * temporary objects. Height is borrowed; no views survive. Reuses class defaults,
- * canonical RNG and pool release. Repeated preparation consumes tree RNG again.
- * Invalid used variants/identities/terrain or >4 artillery entries per side fail
- * atomically. An undelivered current type returns UNSUPPORTED. Does not configure
- * full e006 devices, take player control, install contact or dispatch living AI. */
+ * temporary objects. Height is borrowed; no views survive. Reuses class
+ * defaults, canonical RNG and pool release. Repeated preparation consumes tree
+ * RNG again. Invalid used variants/identities/terrain or >4 artillery entries
+ * per side fail atomically. An undelivered current type returns UNSUPPORTED.
+ * Does not configure full e006 devices, take player control, install contact or
+ * dispatch living AI. */
 int fist_mission_world_prepare(fist_mission_world *world, const fist_klc_image *height,
                                uint8_t link_mode);
 
@@ -282,19 +298,22 @@ int fist_mission_world_assign_command_goal(fist_mission_world *world, uint16_t s
  * Lost targets deliberately resume fresh route/formation navigation; missing
  * goals stay invalid for the navigation throttle stop. Ongoing retreat needs
  * no target. No RNG, route advancement, throttle/gear or parent-bank dispatch.
- * Invalid used fields/payloads fail atomically, preserving the complete world. */
+ * Invalid used fields/payloads fail atomically, preserving the complete world.
+ */
 int fist_mission_world_bear_command(fist_mission_world *world, uint16_t slot, bool coarse);
 
 /* Complete ad2f eight-entry throttle and unconditional ad3b profile update.
  * Consume canonical PINF +6 only for a valid leader goal with range >8.
  * Target mode uses retained +99, not navigation range. Publish explicit full
  * drive-control refresh; no RNG, target lookup, route or parent dispatch.
- * Invalid used selectors/state/output preserve the complete world and output. */
+ * Invalid used selectors/state/output preserve the complete world and output.
+ */
 int fist_mission_world_throttle_command(fist_mission_world *world, uint16_t slot,
                                         fist_drive_control_events *out);
 
 /* Complete controlled-bank ad3b using the same canonical actor/profile owner.
- * Does not inspect command mode or PINF choices. Atomic failures preserve both. */
+ * Does not inspect command mode or PINF choices. Atomic failures preserve both.
+ */
 int fist_mission_world_update_command_profile(fist_mission_world *world, uint16_t slot,
                                               fist_drive_control_events *out);
 
@@ -314,7 +333,8 @@ int fist_mission_world_advance_command_route(fist_mission_world *world, uint16_t
  * other ground/retiring predecessors use actual +19 bits. Mutate the sole
  * canonical roster and existing typed member bytes, clearing goal validity.
  * No orders, RNG, target lookup, census, player selection or parent dispatch.
- * Invalid used member/index/identity/payload fails before any world mutation. */
+ * Invalid used member/index/identity/payload fails before any world mutation.
+ */
 int fist_mission_world_promote_member(fist_mission_world *world, uint16_t slot);
 
 /* Complete ae66/af1c obstacle state/countdown and ordered fifteen-direction
@@ -326,8 +346,9 @@ int fist_mission_world_maneuver(fist_mission_world *world, uint16_t slot, bool c
 
 /* Complete reaching b059/f69:b2a0: a physically identified candidate supplies
  * the angular gate and 24-step prediction. Any nonzero maneuver selector uses
- * hull rotation; zero uses retained velocity. A hit ORs control bit 8. No target
- * lookup/filter, registry scan or other state mutation; failures are atomic. */
+ * hull rotation; zero uses retained velocity. A hit ORs control bit 8. No
+ * target lookup/filter, registry scan or other state mutation; failures are
+ * atomic. */
 typedef struct {
     uint16_t slot;
     uint16_t candidate;
@@ -340,14 +361,16 @@ int fist_mission_world_observe_obstacle(fist_mission_world *world,
 /* Complete b017: control bit 4 or retained target presence returns without
  * touching target payloads/lifetimes/RNG. Otherwise consume one canonical draw
  * and only the proved conditional second draw to update requested turret
- * offset. Existing owners clear targets. Used invalid state fails atomically. */
+ * offset. Existing owners clear targets. Used invalid state fails atomically.
+ */
 int fist_mission_world_idle_turret(fist_mission_world *world, uint16_t slot);
 
 /* Complete af97/afa2, including genuine missile readiness/loading/constructor,
  * selected display and c047 logical request. Use canonical orders and exact
  * live retained targets only when their payload is used. No parent dispatch,
  * phase/RNG advancement, missile flight or PCM playback. Invalid used state
- * preserves the complete world and output; capacity retains reserve consumption. */
+ * preserves the complete world and output; capacity retains reserve
+ * consumption. */
 int fist_mission_world_automatic_fire(fist_mission_world *world,
                                       fist_automatic_fire_request request,
                                       fist_automatic_fire_result *out);

@@ -143,7 +143,7 @@ static int32_t add_velocity(int32_t position, int16_t velocity) {
     return sum < INT32_MIN ? (int32_t)(sum + range) : (int32_t)sum;
 }
 
-static void integrate(fist_vehicle_state *vehicle) {
+static void integrate(fist_vehicle_state *vehicle, bool coarse) {
     fist_vehicle_drive *drive = &vehicle->drive;
     const int16_t magnitude = (int16_t)floor_divide(drive->speed, 2);
     const unsigned direction = drive->motion_flags & DIRECTION_FLAGS;
@@ -152,8 +152,8 @@ static void integrate(fist_vehicle_state *vehicle) {
         drive->heading = (uint16_t)(drive->heading + (magnitude * MOTION_TURN_FACTOR * sign));
         drive->requested_heading = drive->heading;
     }
-    const fist_velocity velocity =
-        fist_rotate((fist_rotation){.heading = drive->heading, .magnitude = magnitude});
+    const fist_velocity velocity = fist_rotate(
+        (fist_rotation){.heading = drive->heading, .magnitude = magnitude, .coarse = coarse});
     drive->velocity_x = velocity.x;
     drive->velocity_y = velocity.y;
     vehicle->map_x = add_velocity(vehicle->map_x, velocity.x);
@@ -180,9 +180,14 @@ static void mark_heading(fist_vehicle_state *vehicle) {
     }
 }
 
-int fist_vehicle_motion_step(fist_vehicle_state *vehicle, fist_vehicle_motion_events *out) {
-    if (vehicle == NULL || out == NULL || vehicle->type >= FIST_UNIT_GROUND_VEHICLE_COUNT ||
-        vehicle->component_size != fist_vehicle_component_size(vehicle->type)) {
+static bool valid_vehicle(const fist_vehicle_state *vehicle) {
+    return vehicle != NULL && vehicle->type < FIST_UNIT_GROUND_VEHICLE_COUNT &&
+           vehicle->component_size == fist_vehicle_component_size(vehicle->type);
+}
+
+int fist_vehicle_motion_drive_step(fist_vehicle_state *vehicle, bool coarse,
+                                   fist_vehicle_motion_events *out) {
+    if (!valid_vehicle(vehicle) || out == NULL) {
         return -1;
     }
     fist_vehicle_motion_events events = {0};
@@ -194,11 +199,34 @@ int fist_vehicle_motion_step(fist_vehicle_state *vehicle, fist_vehicle_motion_ev
     if (events.hull_refreshed != 0) {
         mark_heading(vehicle);
     }
-    integrate(vehicle);
-    events.turret_changed = (uint8_t)turret_step(vehicle);
-    if (events.turret_changed != 0) {
+    integrate(vehicle, coarse);
+    *out = events;
+    return 0;
+}
+
+int fist_vehicle_motion_turret_step(fist_vehicle_state *vehicle, bool *changed) {
+    if (!valid_vehicle(vehicle) || changed == NULL) {
+        return -1;
+    }
+    const bool result = turret_step(vehicle);
+    if (result) {
         mark_heading(vehicle);
     }
+    *changed = result;
+    return 0;
+}
+
+int fist_vehicle_motion_step(fist_vehicle_state *vehicle, fist_vehicle_motion_events *out) {
+    if (!valid_vehicle(vehicle) || out == NULL) {
+        return -1;
+    }
+    fist_vehicle_motion_events events = {0};
+    bool changed = false;
+    if (fist_vehicle_motion_drive_step(vehicle, false, &events) != 0 ||
+        fist_vehicle_motion_turret_step(vehicle, &changed) != 0) {
+        return -1;
+    }
+    events.turret_changed = (uint8_t)changed;
     *out = events;
     return 0;
 }

@@ -73,3 +73,34 @@ uses the existing rotation owner. A self target resolves the already moved actor
 including its class-specific source/target heights. The new group's digest is
 8c52b41d4db3f40d89cd34c42fbcaa2f27ccff9adf3ba2b7ea5121d917320561;
 its full receipt is /tmp/wasm-fist-0115-review/target-motion.json.
+
+## Shared canonical implementation
+
+Closed 0117 delivers fist_mission_world_ground_motion. It reuses the movement
+owner's separate drive and turret stages and the existing canonical aim/geometry
+owner. M1/M3 retain target feedback; T80/BMP measure it after translation. Self
+targets see the moved actor. A captured target identity must still name the same
+live allocation; release/reuse/reset cannot silently bind a successor. Lost
+targets retain feedback and continue the untargeted stage. An invalid used state
+or projection leaves the entire world and event output unchanged.
+
+The caller supplies the angle mode. This boundary consumes no phase, RNG, orders,
+terrain or device state and does not install full class/world scheduling. The
+existing untargeted driver reuses the same numerical stages.
+
+Exact native/WASM checks cover 10,032 default and 240 lifetime/atomicity/projection
+cases per target. Original/native/WASM retained and canonical gates add 10,752
+and 92,160 complete returns per target without skips: all 28 target types, 47
+missions, eight heights, four details and 188 prepared worlds. A fresh fully
+instrumented production-fast-math build passes all 113,184 corresponding cases.
+Valgrind lifetime and actual SDL input/scene/shutdown gates pass; graphical
+Memcheck reports no errors/lost blocks and retains explicitly recorded X11/D-Bus
+reachable allocations.
+
+Strict LLVM 19.1 format/tidy passes 95 owned translation units. The exact complete
+production run passes 48 native CTests, 44 WASM unittest suites, motion/lifetime
+scripts and both Node presentation probes without warnings. Actual browser/SDL
+controls and the paired all-47/four-detail presentation corpus pass with visually
+reviewed frames. Exact source/program pins, commands, counts and digests are in
+/tmp/wasm-fist-0117-review/candidate.json and production-all.json. Complete living
+class/command/battle/PCM and full-game acceptance remain open under 0081/0041.

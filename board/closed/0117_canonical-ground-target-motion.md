@@ -28,8 +28,12 @@ The WASM phase is terminal0, session83319; it ran while the full sequential scri
 was already in native CTest, with one actual compiler writer. Requested production
 C11/fast-math/warning flags and owned -Werror are checked in compile commands.
 Strict LLVM 19.1 format/tidy passes all 95 owned translation units, session37146,
-terminal0. The complete bash tools/build.sh all regression remains live under
-session81969; partial native CTest results do not accept this integration.
+terminal0. The complete bash tools/build.sh all regression is terminal0 under
+session81969: all 48 native CTest contracts, 44 WASM unittest suites, the complete
+motion/lifetime scripts and both Node presentation probes pass without warnings.
+Optional original-only unittest gates retain their explicit documented skips;
+the required motion original comparisons separately pass without skips. Source
+pins and complete output/count checks are recorded in production-all.json.
 
 Default native/WASM comparisons pass 10,032 complete motion cases per target,
 session27440, terminal0, with digest
@@ -76,10 +80,9 @@ under /tmp; original assets remain ignored/read-only.
 
 ## Next
 
-Poll session81969 to terminal completion without changing candidate inputs.
-All 48 native CTest contracts now pass; the WASM regression remains live.
-Require its complete remaining contracts and no warnings. The exact original
-corpus is complete. Closed0119 now supplies visible-window/full-frame
+Continue complete command/class scheduling under 0081 using this accepted shared
+motion owner. The exact production regression and original corpus are complete.
+Closed0119 supplies visible-window/full-frame
 acknowledgement with a normal five-second deadline and explicit profiling budget.
 The exact actual production client passes the entire graphical Memcheck/input gate,
 session87132, terminal0: zero errors/lost blocks/suppressions, thirteen accepted
@@ -89,14 +92,15 @@ The normal default gate also passes, session9117, terminal0. Evidence is
 native-publication-deadline.json; earlier failed diagnostic attempts remain
 failure evidence, not acceptance substitutes. All508 candidate inputs are unchanged.
 Keep frozen refs/original assets and unaccepted root parent prototypes pinned.
-Publish only the accepted target-motion implementation, API and registered tests;
-continue complete command/class scheduling under 0081 afterward.
+Only the accepted target-motion implementation, API and registered tests are
+published. Complete ground-parent prototypes and their dynamic text/probe changes
+remain excluded. This does not install full living-class or mission scheduling.
 
 ## Accept
 
-The exact integration passes full production native/WASM build/regression, strict
+Delivered: the exact integration passes full production native/WASM build/regression, strict
 LLVM 19.1 style, complete original/domain/retained/canonical motion comparisons,
 all lifetime/atomicity cases, fresh instrumented memory checks and actual scene
 controls/presentation. Retain compact reproduction evidence and retire obsolete
-owned logs. Commit/push the bounded success separately from parent-command and
-class/mission work. Full battle/PCM and ten complete-game WASM runs remain open.
+owned logs. The bounded success is committed/pushed separately from parent-command
+and class/mission work. Full battle/PCM and ten complete-game WASM runs remain open.

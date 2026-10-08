@@ -90,6 +90,14 @@ if(EMSCRIPTEN)
     set_target_properties(fist_target_discovery_probe PROPERTIES SUFFIX ".js")
     target_link_options(fist_target_discovery_probe PRIVATE -sNODERAWFS=1 -sEXIT_RUNTIME=1 -sALLOW_MEMORY_GROWTH=1)
 endif()
+add_executable(fist_ground_target_motion_lifetime_probe tests/ground_target_motion_lifetime_probe.c)
+target_link_libraries(fist_ground_target_motion_lifetime_probe PRIVATE fist_sim fist_probe_io fist_build_options)
+target_compile_options(fist_ground_target_motion_lifetime_probe PRIVATE -Werror)
+if(EMSCRIPTEN)
+    set_target_properties(fist_ground_target_motion_lifetime_probe PROPERTIES SUFFIX ".js")
+    target_link_options(fist_ground_target_motion_lifetime_probe PRIVATE
+        -sEXIT_RUNTIME=1 -sENVIRONMENT=node -sALLOW_MEMORY_GROWTH=1)
+endif()
 add_executable(fist_mission_combat_probe tests/mission_combat_probe.c)
 target_link_libraries(fist_mission_combat_probe PRIVATE fist_sim fist_probe_io fist_build_options)
 target_compile_options(fist_mission_combat_probe PRIVATE -Werror)
@@ -361,6 +369,12 @@ if(BUILD_TESTING AND NOT EMSCRIPTEN)
     add_test(NAME mission_world_contract COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_SOURCE_DIR}/tests/test_mission_world.py
         --target native --native-probe $<TARGET_FILE:fist_mission_world_probe>)
+    add_test(NAME ground_target_motion_contract COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_SOURCE_DIR}/tests/test_ground_target_motion.py
+        --target native --native-probe $<TARGET_FILE:fist_target_discovery_probe>)
+    add_test(NAME ground_target_motion_lifetime_contract COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_SOURCE_DIR}/tests/test_ground_target_motion_lifetime.py
+        --target native --native-probe $<TARGET_FILE:fist_ground_target_motion_lifetime_probe>)
     add_test(NAME ground_command_contract COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_SOURCE_DIR}/tests/test_ground_command.py
         --target native --native-probe $<TARGET_FILE:fist_ground_command_probe>)

@@ -6,12 +6,14 @@
 #include "sim/ground.h"
 #include "sim/object_pool.h"
 #include "sim/random.h"
+#include "sim/vehicle_motion.h"
 #include "sim/vehicle_state.h"
 #include "sim/voice.h"
 #include "sim/world.h"
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdlib.h>
 
 enum {
     TARGET = 26,
@@ -177,11 +179,8 @@ int fist_mission_world_acquire_target(fist_mission_world *world, const fist_klc_
     return 0;
 }
 
-int fist_mission_world_aim_target(fist_mission_world *world, uint16_t slot, bool coarse) {
-    fist_vehicle_state *actor = actor_state(world, slot);
-    if (actor == NULL) {
-        return -1;
-    }
+static int aim_target(fist_mission_world *world, uint16_t slot, bool coarse) {
+    fist_vehicle_state *actor = &world->objects[slot].vehicle;
     const fist_object_reference target = live_reference(&world->pool, actor->command.target);
     if (target.lifetime == 0) {
         actor->command.target = target;
@@ -200,4 +199,53 @@ int fist_mission_world_aim_target(fist_mission_world *world, uint16_t slot, bool
                                   : -1 - (int32_t)(UINT16_MAX - aim.elevation);
     actor->turret.elevation = (int16_t)elevation;
     return 0;
+}
+
+int fist_mission_world_aim_target(fist_mission_world *world, uint16_t slot, bool coarse) {
+    return actor_state(world, slot) == NULL ? -1 : aim_target(world, slot, coarse);
+}
+
+int fist_mission_world_ground_motion(fist_mission_world *world, uint16_t slot, bool coarse,
+                                     fist_vehicle_motion_events *out) {
+    if (out == NULL || fist_mission_world_object(world, slot) == NULL ||
+        world->preparation.prepared != 1 ||
+        world->pool.slots[slot].type >= FIST_UNIT_GROUND_VEHICLE_COUNT) {
+        return -1;
+    }
+    const fist_vehicle_state *original = &world->objects[slot].vehicle;
+    if (original->type != world->pool.slots[slot].type ||
+        original->component_size != fist_vehicle_component_size(original->type) ||
+        !fist_object_reference_is_valid(original->command.target)) {
+        return -1;
+    }
+    fist_mission_world *next = malloc(sizeof(*next));
+    if (next == NULL) {
+        return -1;
+    }
+    *next = *world;
+    fist_vehicle_state *actor = &next->objects[slot].vehicle;
+    actor->command.target = live_reference(&next->pool, actor->command.target);
+    fist_vehicle_motion_events events = {0};
+    int status = fist_vehicle_motion_drive_step(actor, coarse, &events);
+    if (status == 0 && actor->command.target.lifetime != 0) {
+        /* Actual M1/M3 wrappers retain +9b; T80/BMP refresh it after motion. */
+        if (actor->type >= 2) {
+            status = aim_target(next, slot, coarse);
+        }
+        if (status == 0) {
+            actor->turret.requested_offset =
+                (uint16_t)(actor->command.target_heading - actor->drive.heading);
+        }
+    }
+    bool changed = false;
+    if (status == 0) {
+        status = fist_vehicle_motion_turret_step(actor, &changed);
+    }
+    if (status == 0) {
+        events.turret_changed = (uint8_t)changed;
+        *world = *next;
+        *out = events;
+    }
+    free(next);
+    return status;
 }
