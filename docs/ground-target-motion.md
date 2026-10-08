@@ -64,3 +64,12 @@ The compact receipt is /tmp/wasm-fist-0114-review/target-motion.json. A separate
 acceptance receipt retains exact source/reference pins, terminal results and log
 hashes. Full living-class callbacks, collision, engine PCM, canonical C integration
 and actual playable-mission acceptance remain open under0081/0065/0041.
+
+Closed0115 strengthens this command to require five groups and311,800 complete
+returns. The original four digests are retained. The fifth group adds31,920
+ordered returns across angle selectors0/1/255, self/other and absent/present targets,
+heading/speed/direction edges and signed32-bit coordinate extrema. Coarse movement
+uses the existing rotation owner. A self target resolves the already moved actor,
+including its class-specific source/target heights. The new group's digest is
+8c52b41d4db3f40d89cd34c42fbcaa2f27ccff9adf3ba2b7ea5121d917320561;
+its full receipt is /tmp/wasm-fist-0115-review/target-motion.json.

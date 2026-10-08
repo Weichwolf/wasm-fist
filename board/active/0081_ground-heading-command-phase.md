@@ -95,7 +95,9 @@ Command runs after motion/phase/reload/history/maintenance and before ground con
 This is reference/model evidence; the shared canonical class caller remains unaccepted.
 The local consuming probe and regular test integration now pass seven complete
 native/WASM default groups without skips and96-unit LLVM19.1 style. Their strict
-full production regression is live under session57204. The local required
+full production regression is terminal0 under session57204:47 native CTests and
+the entire WASM suite. Its compact receipt is
+owned-parent-production-all-development.json. The local required
 corpus verifier is terminal0 under session79517 against fully instrumented
 simulation/assets/probe libraries with production fast-math: all47 missions,
 188 prepared worlds,3,840 actors and122,880 complete native parent returns.
@@ -105,8 +107,8 @@ matches the earlier complete native/WASM corpus. Required coverage is complete,
 sanitizer stderr is empty and there are no skips. The receipt is
 /tmp/wasm-fist-0081-review/sanitized-parent-corpus/corpus.json.
 Both completed raw logs were removed after retaining their hashes, counters and
-terminal results in the compact receipts. The production regression remains live;
-keep its inputs unchanged. The eight local C/configuration/test files are still
+terminal results in the compact receipts. The completed production raw log was
+also removed after archival. The eight parent C/configuration/test files are still
 unaccepted and excluded from this evidence checkpoint.
 No complete shared parent/class/battle/PCM acceptance follows from these checkpoints.
 
@@ -119,6 +121,15 @@ docs/ground-target-motion.md. Consume this complete order with the existing moti
 aim and captured-reference owners; do not apply fresh target aim before all-class
 motion or let saved near pointers bind reused allocations. Remaining phase/behavior
 callbacks, inter-object contacts and actual PM/device callers still require proof.
+
+Closed0115 strengthens that same original gate to five required groups and311,800
+complete returns, preserving all earlier digests and adding both angle modes,
+self targets and signed coordinate wrap. The local C implementation now separates
+drive and turret stages in the existing movement owner and composes class-specific
+aiming after movement through the existing aim owner. Its first native development
+comparison passes10,032 complete results. These new C/probe changes remain local
+until their own full both-target/canonical/lifetime/failure/style/build/memory gates;
+the earlier production receipt applies to the preceding sources only.
 
 Continue those C gates using this complete original reference; no partial bank or
 complete living-class/battle/PCM claim follows from the reference checkpoint.

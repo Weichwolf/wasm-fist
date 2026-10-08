@@ -37,7 +37,7 @@ def prepare(owner, kind, target_kind=26):
 def check(owner, machine, actor, raw, *, move=False, coarse=0):
     pointer = word(raw, 0x97)
     objects = {pointer: owner.raw(machine, pointer)} if pointer else {}
-    predicted, events = (motion(owner, raw, objects) if move else
+    predicted, events = (motion(owner, raw, objects, coarse, actor) if move else
                          turret(owner, raw, objects, coarse))
     machine.mem_write(DGROUP + actor, raw)
     actual, dirty = owner.step(machine, actor, move=move, coarse=coarse)
@@ -171,6 +171,37 @@ def branch_domains_and_lifetimes(owner):
     return {'counts': dict(counts), 'output_sha256': digest.hexdigest(), 'witnesses': witnesses}
 
 
+def both_angle_modes(owner):
+    counts = collections.Counter()
+    digest = hashlib.sha256()
+    angles = (0, 1, 31, 32, 33, 63, 64, 8192, 16351, 16352, 16383, 16384,
+              16385, 32767, 32768, 49151, 49152, 49153, 65535)
+    for kind in range(4):
+        machine, actor, target, initial = prepare(owner, kind)
+        for coarse, self_target, present, heading, speed, direction in itertools.product(
+                (0, 1, 255), (False, True), (False, True), angles,
+                (-32768, -32767, -1, 0, 1, 321, 32767), (0, 2, 4, 6, 16)):
+            raw = bytearray(initial)
+            store(raw, 0x97, (actor if self_target else target) if present else 0)
+            store(raw, 0x26, heading)
+            store(raw, 0x30, heading)
+            store(raw, 0x55, speed)
+            raw[0x19] = direction
+            raw[0x3d] = 1  # Retain this supplied speed at the motion boundary.
+            struct.pack_into('<i', raw, 4, 2147483647)
+            struct.pack_into('<i', raw, 8, -2147483648)
+            output = check(owner, machine, actor, bytes(raw), move=True, coarse=coarse)
+            digest.update(output)
+            counts['complete_ordered_motion_returns'] += 1
+            counts['coarse_%d' % coarse] += 1
+            counts['self_target_returns'] += bool(self_target and present)
+        print('Complete both-mode/self/wrap motion:', kind, dict(counts), flush=True)
+    assert counts['complete_ordered_motion_returns'] == 31920
+    assert counts['self_target_returns'] == 7980
+    assert all(counts['coarse_%d' % mode] == 10640 for mode in (0, 1, 255))
+    return {'counts': dict(counts), 'output_sha256': digest.hexdigest()}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--originals', action='store_true', required=True)
@@ -188,14 +219,15 @@ def main():
     owner = OriginalGroundTargetMotionOracle()
     groups = {}
     for name, verify in (('types_and_presence', types_and_presence), ('domains', domains),
-                         ('retained', retained), ('branch_domains_and_lifetimes', branch_domains_and_lifetimes)):
+                         ('retained', retained), ('branch_domains_and_lifetimes', branch_domains_and_lifetimes),
+                         ('both_angle_modes', both_angle_modes)):
         print('Required target-motion group:', name, flush=True)
         groups[name] = verify(owner)
-    assert len(groups) == 4
+    assert len(groups) == 5
     for name, expected in pins.items():
         assert hashlib.sha256((ROOT / 'tests' / name).read_bytes()).hexdigest() == expected
     result = {'success': True, 'groups': groups, 'skips': 0, 'source_sha256': pins,
-              'scope': 'Complete class turret and normal-detail ordered motion; C/full class remains open',
+              'scope': 'Complete class turret and ordered motion in both angle modes; C/full class remains open',
               'complete_game_wasm_streak': 0}
     receipt.write_text(json.dumps(result, indent=2) + '\n')
     print(json.dumps({key: value for key, value in result.items() if key != 'groups'}, sort_keys=True))

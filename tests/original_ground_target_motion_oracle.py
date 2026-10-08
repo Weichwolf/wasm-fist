@@ -10,8 +10,8 @@ class OriginalGroundTargetMotionOracle(OriginalTargetAcquisitionOracle):
     def step(self, machine, actor, *, move=False, coarse=0):
         from unicorn.x86_const import UC_X86_REG_DI
         kind = struct.unpack('<H', machine.mem_read(DGROUP + actor, 2))[0]
-        if kind >= 4 or (move and coarse):
-            raise ValueError('This ordered motion scope requires a ground class and normal detail')
+        if kind >= 4:
+            raise ValueError('This ordered motion scope requires a ground class')
         machine.mem_write(DGROUP + 0x2040, bytes([coarse]))
         machine.mem_write(DGROUP + 0x8e48, b'\0')
         machine.reg_write(UC_X86_REG_DI, actor)
