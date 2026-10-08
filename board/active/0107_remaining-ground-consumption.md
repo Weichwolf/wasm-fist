@@ -73,8 +73,8 @@ See docs/ground-support-consumption.md. Declared prepared fixtures do not prove 
 canonical-world gate or the real preparation-to-consumption lifetime producer chain.
 
 Current verification status and source pins are recorded under
-`/tmp/wasm-fist-0107-review/progress.json`. The production run described in the historical
-checkpoints below has finished; no production run is currently active.
+`/tmp/wasm-fist-0107-review/progress.json`. The production runs described in the historical
+checkpoints below have finished. A fresh corrected full run is active as recorded below.
 The C implementation remains uncommitted until a verified bounded success is established.
 Compact previous checkpoints remain there; completed obsolete raw logs are removed only after
 recording their results/hashes. Prior accepted runtime evidence does not cover these changes.
@@ -132,6 +132,30 @@ by pending checks remain in `/tmp`; unrelated work and original files were untou
 The checkout remains 348MiB. This published checkpoint updates evidence only; the C/test/build
 candidate stays local until all required acceptance gates pass.
 
+Current memory/coupling checkpoint (2026-10-08): ASan/UBSan with production fast-math passes
+all twelve consuming domain groups, 247147 transitions and zero failures/errors/skips in
+134.108 seconds. The complete output digest matches both production targets. The sanitizer
+canonical replay also passes all188 worlds, 26880 child inputs and the complete resource/
+requester lifetime coverage above in 93.957 seconds, with the same full canonical digest.
+Current source inputs are unchanged from the passed strict style and production canonical
+replay. Both sanitizer probes use LLVM19.1.7 and fail on address/undefined-behavior errors.
+
+The actual sanitized TRAIN1 SDL scene passes complete-frame, held-input, weapon, pause,
+focus-loss and clean-shutdown checks. Its retained after frame was reviewed: textured hills,
+sky, authored tank sprite and weapon2/ammo20 HUD are complete. The additional required
+original producer/consumer ownership proof passes both groups with no skips: sixteen complete
+preparation returns, twenty-four complete support returns, eight actual releases and four
+same-type allocation/saved pairs. These prove the declared resource chain and invalid
+retained lifetimes, not natural battle reachability or the parent scheduler.
+
+Exact commands, candidate/program hashes, complete result digests and compact log evidence
+are in `/tmp/wasm-fist-0107-review/memory-current-receipt.json`. Four completed logs and
+fifteen intermediate sanitizer frames were removed (2536063 bytes); the before/after frames,
+sanitizer build, isolated assets and live production log are retained. The fresh corrected
+`bash tools/build.sh all` run is verified live as session88655 (build PID3219434), currently
+in native CTest. This is pending acceptance, not a complete regression pass. No C/test/build
+candidate is published from this checkpoint; complete-game WASM streak remains zero.
+
 Use closed0104 complete original source/required result pins, closed0105
 consumed audio return and closed0106 full producer/list gates. The additional required original
 producer/consumer proof tests/test_original_support_ownership.py has sixteen
@@ -143,11 +167,12 @@ See docs/remaining-ground-command.md and docs/support-state-boundary.md.
 
 ## Next
 
-Run a fresh complete sequential production build/test gate for the corrected probe; do not
-restart live runs on observation timeouts. Run the current sanitizer behavior and canonical
-resource/requester lifetime checks, and consolidate the required original coupling and actual
-scene evidence against exact candidate source/program pins. The all47 real preparation-to-
-consumption probe now passes both targets. Retain compact results and remove obsolete owned
+Finish the verified-live corrected full sequential production build/test gate88655; do not
+restart it on observation timeouts or change its source/program inputs. Current sanitizer
+domain/canonical/scene and additional original coupling gates pass. Consolidate these with
+both-target canonical and actual scene evidence against exact candidate source/program pins
+once the complete production run finishes successfully. The all47 real preparation-to-
+consumption probe passes both targets. Retain compact results and remove obsolete owned
 artifacts after success. Keep full parent/class integration and later dispatcher/PCM requirements
 visible; no selected diagnostic, battle or complete-game claim from this WI.
 
