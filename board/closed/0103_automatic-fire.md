@@ -49,3 +49,34 @@ complete production build and sanitizer gates pass. Review actual native/browser
 the new constructed missile presentation as reached; retain compact evidence, clean obsolete
 owned artifacts and commit/push the full bounded delivery. Full parent/class/missile flight/
 battle/PCM/outcomes and independent complete-game WASM acceptance remain open; streak zero.
+
+## Verified delivery
+
+Complete shared callbacks, ordered rack service and actual type-15 construction are delivered
+in `src/sim/automatic_fire.c`. Required paired native/WASM verification passes six groups
+without skips: 579544 callbacks per target, 579531 unchanged original returns and 7680
+canonical returns through 47 missions/eight maps/four details, 188 worlds and 3840 actors.
+There are 21119 real missile constructions. Complete output SHA256:
+`6da10bd3a0e3971cca1930f87a75472be53a7e9de084c5ed265c80fe9940e673`.
+Whole-world write guards, source poisoning, 1536 initialization/readiness retention contexts
+per batch and real released/reused/unused target cases verify ownership and atomicity.
+
+The full ASan/UBSan gate passes the same six groups/counts/branches/hash without skips.
+Strict LLVM 19.1.7 format/tidy passes 91 owned translation units. Full production builds pass
+45 native tests, 43 WASM Python suites and both WASM Node renderer checks. Actual TRAIN1
+native/browser and sanitized SDL scenes pass device/input/frame/pause/focus/shutdown checks;
+reviewed after frames are retained. A separate constructor -> canonical mission view -> SHOT
+compositor/softgl inspection passes for both classes on native/WASM/ASan, with actual published
+poses and 2656 changed pixels against each same-camera terrain baseline. Camera/texel settings
+are declared inspection choices; no cross-target pixel identity is required.
+
+See `docs/automatic-fire.md` for exact coverage, required commands and ownership. Compact
+pins/results, sanitizer and scene reproduction, versioned inspection source and reviewed frames
+are retained under `/tmp/wasm-fist-0103-review/receipt.json` and `constructor-scene.json`.
+Obsolete owned builds/logs/captures are cleaned before commit/push. Original oracle/retention
+files, all 419 read-only original files, reference refs and softgl remain unchanged.
+
+Continue complete original ae5c/b0be recovery under open 0104, then selected b152 and full
+heading/counter/RNG parent/class consumption. No partial parent bank, arming-timer or flight
+substitute is installed. Full 0081, live-game entity rendering, playable battle/PCM/outcomes
+and independent complete-game WASM acceptance remain open; the full-game streak is zero.

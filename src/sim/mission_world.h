@@ -4,6 +4,7 @@
 #include "assets/klc.h"
 #include "assets/orders.h"
 #include "assets/units.h"
+#include "sim/automatic_fire.h"
 #include "sim/object_pool.h"
 #include "sim/other_damage.h"
 #include "sim/primary_fire.h"
@@ -50,6 +51,7 @@ typedef union {
     fist_muzzle_smoke muzzle;
     fist_explosion explosion;
     fist_saved_object_base saved_base;
+    fist_surface_air_missile surface_air;
 } fist_mission_object;
 
 typedef struct {
@@ -62,13 +64,21 @@ typedef struct {
     uint8_t prepared;
 } fist_mission_preparation;
 
-/* Selected target message producer: typed class/side/variant, never a guest
- * text address. duration is the original shared display countdown. */
+enum {
+    FIST_NOTICE_TARGET = 0,
+    FIST_NOTICE_SAM_EMPTY = 1,
+    FIST_NOTICE_SAM_TARGET = 2,
+    FIST_NOTICE_SAM_CAPACITY = 3
+};
+
+/* Single original 969e/96a0 display owner. Target class/side/variant or typed
+ * missile failure, never a guest text address. duration is shared. */
 typedef struct {
     uint16_t duration;
     uint16_t type;
     uint8_t variant;
     bool enemy;
+    uint8_t kind;
 } fist_target_notice;
 
 typedef struct {
@@ -87,6 +97,8 @@ typedef struct {
     fist_mission_preparation preparation;
     fist_voice_history voice;
     fist_target_notice target_notice;
+    /* Original c047 selector history 9fdd, separate from bf3c's cooldown. */
+    uint16_t sound_selector;
 } fist_mission_world;
 
 /* Borrowed read-only physical projection shared by collision and target search.
@@ -292,5 +304,21 @@ int fist_mission_world_observe_obstacle(fist_mission_world *world,
  * and only the proved conditional second draw to update requested turret
  * offset. Existing owners clear targets. Used invalid state fails atomically. */
 int fist_mission_world_idle_turret(fist_mission_world *world, uint16_t slot);
+
+/* Complete af97/afa2, including genuine missile readiness/loading/constructor,
+ * selected display and c047 logical request. Use canonical orders and exact
+ * live retained targets only when their payload is used. No parent dispatch,
+ * phase/RNG advancement, missile flight or PCM playback. Invalid used state
+ * preserves the complete world and output; capacity retains reserve consumption. */
+int fist_mission_world_automatic_fire(fist_mission_world *world,
+                                      fist_automatic_fire_request request,
+                                      fist_automatic_fire_result *out);
+
+/* Complete M3/BMP 8711/96c0 without the parent's admission gates. Arming/busy
+ * branches do not use target payloads/orders/RNG; empty reserve fails through
+ * the actual display path. Used invalid target/allocation state is atomic. */
+int fist_mission_world_ready_surface_air(fist_mission_world *world,
+                                         fist_surface_air_request request,
+                                         fist_automatic_fire_result *out);
 
 #endif

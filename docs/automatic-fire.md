@@ -2,8 +2,8 @@
 
 Closed WI 0102 proves complete original af97/afa2, 8711/96c0, type-15 allocation,
 b8d1 construction and c047 request admission. Both required original gates pass without
-skips. Shared C consumption is open 0103; complete parent/class/battle/PCM acceptance
-remains open. Frozen engine SHA256:
+skips. Closed 0103 supplies complete shared C consumption; complete parent/class/battle/PCM
+acceptance remains open. Frozen engine SHA256:
 `d46f480dd2214b2693b4192a42aa79fb7bffb8d692fd67ddc3d746dfdea9c5e5`.
 
 ## Admission and pending fire
@@ -30,7 +30,7 @@ control bit 128 only. It consumes no ammunition and creates no projectile at thi
 Missile branches leave that pending byte and control word unchanged.
 
 Malformed descriptor behavior words are preserved by the decoder. The reference tests cover
-every word when the threshold index is unused. Future shared consumption must validate a
+every word when the threshold index is unused. Shared consumption validates a
 used probability index before publication, without inventing an early clamp on unused choices.
 
 ## Ordered missile racks
@@ -54,8 +54,8 @@ can instead select the second. Sequential original returns verify this differenc
 
 Complete c296 resets both reserves to one while retaining both rack-state bytes, selected/
 loaded station bytes +91/+a5 and pending byte +92. Mission readiness retains those five bytes
-and both reserves. The existing `weapons.cycle[2]` already owns the reserves. Shared C must
-give the newly recovered rack states one typed owner and reuse the existing reserve storage.
+and both reserves. The existing `weapons.cycle[2]` already owns the reserves. Shared C gives
+the newly recovered rack states one typed owner and reuses the existing reserve storage.
 
 ## Complete launch, display and sound request
 
@@ -83,7 +83,7 @@ is consumed after the device call. PCM playback is still required by the full re
 
 The original near target pointer has no lifetime check here. Actual release/reuse tests show
 a deleted airborne target slot can become a missile targeting itself; a reused slot can be
-read as the successor. Shared consumption must resolve the exact live canonical reference
+read as the successor. Shared consumption resolves the exact live canonical reference
 only when its payload is used. Existing acquisition/aim/clearing owners remain responsible;
 release/reuse never grants permission to borrow the successor's payload.
 
@@ -123,4 +123,59 @@ Exact commands, complete corpus/source/program/original/reference pins and termi
 remain in `/tmp/wasm-fist-0102-review/receipt.json`; obsolete owned logs/helpers are cleaned.
 Initial pilots are supporting only, superseded by the complete required run. No C, build
 configuration or dependency changed; accepted production/style gates remain those of 0101.
-Continue the complete shared C consumer under open 0103; full-game WASM streak remains zero.
+Closed 0103 delivers the complete shared C consumer below; full-game WASM streak remains zero.
+
+## Verified shared C delivery
+
+WI 0103 owns complete af97/afa2 and direct M3/BMP readiness in
+`src/sim/automatic_fire.c`. The child consumes the parent's already-drawn phase word;
+it advances neither RNG nor the parent counter. Rack states have one owner beside the
+existing reserve bytes and survive saved restoration, class defaults and preparation.
+
+The transaction publishes only proved actor/component writes, an actual normal-priority
+type-15 allocation, the selected typed notice and admitted c047 logical request. Used
+invalid descriptors or stale/reused target identities preserve the entire world and output.
+Unused malformed fields retain their original early returns. Successful construction owns
+complete pose/velocity/projection/flags/stage state and exact live origin/target references;
+`fist_mission_world_view` borrows that canonical payload. The sound-source slot comparison
+is distinct from selected-display ownership and bf3c voice history. PCM remains pending.
+
+Required paired native/WASM verification passed six groups with no skips in 866.222 seconds:
+579544 complete callbacks per target, 579531 unchanged original returns, 7680 canonical
+returns through all 47 missions, eight height maps/four details, 188 prepared worlds and
+3840 ground actors. Full word/flag admission contributes 410880 callbacks, rack/reserve
+coverage 146432, actual target types/orphans 14392, allocation/wrapping/sequences 141,
+invalid/ignored dependencies 19 and the canonical corpus 7680. There are 21119 actual missile
+constructions. Output SHA256:
+`6da10bd3a0e3971cca1930f87a75472be53a7e9de084c5ed265c80fe9940e673`.
+Source records are poisoned; complete actor/components/pool/results are compared and all
+other world bytes checked. Each fire batch also verifies 1536 initialization/readiness
+retention contexts and real release/reuse atomic failures, including unused stale targets.
+
+The complete ASan/UBSan required gate passed the same six groups/counts/branches/hash
+without skips in 1153.407 seconds. Strict LLVM 19.1.7 format/tidy passed 91 owned translation
+units. The full production build passed 45 native tests, 43 WASM Python suites and both
+WASM Node renderer checks with requested flags and owned-code Werror. Optional corpus
+omissions in default regression suites do not replace the separate required no-skip gate.
+
+Actual TRAIN1 SDL/browser and sanitized SDL scenes pass their complete device/input/frame/
+pause/focus/shutdown checks; native/browser after frames were visually reviewed. A separate
+explicit inspection constructs a real missile from each ready class, borrows its canonical
+mission view and renders the original SHOT model with the existing compositor and softgl.
+All six native/WASM/sanitized fixtures show the actual constructor pose and 2656 changed
+pixels over the same-camera terrain baseline. Inspection camera/texel settings are declared
+visual choices, with source and reproduction preserved. This proves constructor presentation;
+parent scheduling, arming timers, missile flight and live-game entity-renderer integration
+remain separate work. No cross-target pixel identity is required.
+
+    CTEST_PARALLEL_LEVEL=4 bash tools/build.sh all
+    python3 tools/check_style.py
+    PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache /tmp/wasm-fist-decoder-oracle/bin/python tests/test_automatic_fire.py --oracle --originals --review-dir /tmp/wasm-fist-0103-review
+
+Compact source/program/original/reference pins, complete terminal results, sanitizer/scene
+reproduction and reviewed frames remain in `/tmp/wasm-fist-0103-review/receipt.json` and
+`constructor-scene.json`; obsolete owned builds/logs/captures are removed after acceptance.
+The original oracle/retention files and immutable reconstruction remain unchanged. Continue
+complete original ae5c/b0be recovery under WI 0104, then selected b152 and the full parent/
+class contract. Full 0081, living battle/PCM/outcomes and independent complete-game WASM
+acceptance remain open; the full-game streak is zero.

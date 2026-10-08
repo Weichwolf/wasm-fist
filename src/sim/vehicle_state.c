@@ -104,11 +104,15 @@ static void restore_motion(const uint8_t *snapshot, fist_vehicle_state *vehicle)
 }
 
 static void restore_weapon_control(const uint8_t *snapshot, fist_vehicle_state *vehicle) {
-    enum { SELECTED = 145, LOADED = 165, TRIGGER = 146, RECOIL = 60 };
+    enum { SELECTED = 145, LOADED = 165, TRIGGER = 146, RECOIL = 60, RACK_STATES = 183 };
     vehicle->weapons.selected = snapshot[SELECTED];
     vehicle->weapons.loaded = snapshot[LOADED];
     vehicle->weapons.trigger = snapshot[TRIGGER];
     vehicle->weapons.recoil = snapshot[RECOIL];
+    if (vehicle->type == 1 || vehicle->type == 3) {
+        vehicle->weapons.rack_state[0] = snapshot[RACK_STATES];
+        vehicle->weapons.rack_state[1] = snapshot[RACK_STATES + 1];
+    }
 }
 
 int fist_vehicle_restore(const fist_unit_definition *definition, fist_vehicle_state *out) {

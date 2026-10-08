@@ -3,7 +3,9 @@
 #include "assets/orders.h"
 #include "assets/scenario.h"
 #include "assets/units.h"
+#include "object_pool_probe_io.h"
 #include "probe_io.h"
+#include "sim/automatic_fire.h"
 #include "sim/mission_world.h"
 #include "sim/object_pool.h"
 #include "sim/other_damage.h"
@@ -15,6 +17,7 @@
 #include "sim/vehicle_damage.h"
 #include "sim/vehicle_state.h"
 #include "sim/world.h"
+#include "vehicle_probe_io.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -38,6 +41,9 @@ enum {
     MANEUVER = 64,
     IDLE_TURRET = 65,
     MOTION_OBSTACLE = 66,
+    FIRE_COMMON = 67,
+    FIRE_MISSILE = 68,
+    FIRE_READY = 69,
     ACQUISITION_OPERATIONS = 31,
     ROSTER_BYTES = FIST_UNIT_ROSTER_COUNT * 2,
     MAX_PROMOTIONS = 4,
@@ -80,6 +86,8 @@ enum {
     FIXTURE_DISTANCE = 8192,
     OPPOSING_FLAGS = 12,
     ATTEMPT_FLAG = 128,
+    AIRBORNE_TARGET = 16,
+    RETENTION_SEED = 32768,
     TARGET_COMMAND = 6
 };
 
@@ -147,7 +155,7 @@ static int decode_case(uint8_t *data, size_t size, size_t *cursor, query_case *v
         value->candidate = fist_read_u16le(data + position + 3);
         value->requested_candidate = fist_read_u16le(data + position + REQUESTED_CANDIDATE_OFFSET);
         if (value->operation > ACQUISITION_OPERATIONS && value->operation != PROMOTION &&
-            (value->operation < MANEUVER || value->operation > MOTION_OBSTACLE)) {
+            (value->operation < MANEUVER || value->operation > FIRE_READY)) {
             return -1;
         }
         position += ACQUISITION_HEADER;
@@ -244,6 +252,14 @@ static int restore_view(fist_mission_world *world, uint16_t slot, const uint8_t 
         return 0;
     }
     switch (type) {
+    case FIST_SURFACE_AIR_TYPE:
+        object->surface_air = (fist_surface_air_missile){.allocation = allocation,
+                                                         .pose = pose,
+                                                         .projection_scale = scale,
+                                                         .flags = raw[FLAGS],
+                                                         .secondary_flags = raw[SECONDARY],
+                                                         .variant = raw[MODE]};
+        break;
     case RETIRING:
         object->vehicle =
             (fist_vehicle_state){.type = type,
@@ -701,7 +717,8 @@ static int prepare_acquisition(fist_mission_world *world, const fist_klc_image *
     }
     world->combat.selected_slot = fist_read_u16le(value->header + SELECTED);
     world->voice.admitted_at = fist_read_u16le(value->header + LAST);
-    world->target_notice = (fist_target_notice){RETAINED_NOTICE, UINT16_MAX, UINT8_MAX, true};
+    world->target_notice =
+        (fist_target_notice){RETAINED_NOTICE, UINT16_MAX, UINT8_MAX, true, FIST_NOTICE_TARGET};
     fist_vehicle_state *actor = &world->objects[slot].vehicle;
     if (retained_aim_fields(actor) != 0) {
         return -1;
@@ -1649,9 +1666,269 @@ static uint8_t *prepare_probe(fist_mission_world *world, fist_mission_world *bef
     return pixels;
 }
 
+static int check_missile_publication(const fist_mission_world *world, fist_mission_world *before,
+                                     uint16_t source_slot,
+                                     const fist_automatic_fire_result *result) {
+    const uint16_t missile_slot = result->missile.slot;
+    if (missile_slot >= FIST_POOL_SHORT_SLOTS || before->pool.slots[missile_slot].used != 0 ||
+        !fist_object_pool_is_current(&world->pool, result->missile)) {
+        return -1;
+    }
+    for (size_t index = 0; index < FIST_UNIT_REGISTRY_COUNT; ++index) {
+        if (index != missile_slot &&
+            world->pool.lifetimes[index] != before->pool.lifetimes[index]) {
+            return -1;
+        }
+    }
+    const fist_surface_air_missile *missile = &world->objects[missile_slot].surface_air;
+    if (!fist_object_pool_reference_is_live(&world->pool, missile->origin) ||
+        !fist_object_pool_reference_is_live(&world->pool, missile->target) ||
+        missile->origin.slot != source_slot ||
+        missile->target.lifetime != world->objects[source_slot].vehicle.command.target.lifetime) {
+        return -1;
+    }
+    before->pool = world->pool;
+    before->objects[missile_slot] = world->objects[missile_slot];
+    return 0;
+}
+
+static int checked_fire(fist_mission_world *world, fist_mission_world *before,
+                        fist_automatic_fire_request request, bool ready,
+                        fist_automatic_fire_result *result, int *observed) {
+    poison((uint8_t *)result, sizeof(*result));
+    fist_automatic_fire_result initial;
+    fist_probe_capture(result, sizeof(*result), &initial);
+    fist_probe_capture(world, sizeof(*world), before);
+    if (fist_mission_world_automatic_fire(NULL, request, result) != -1 ||
+        fist_mission_world_automatic_fire(world, request, NULL) != -1 ||
+        fist_mission_world_ready_surface_air(NULL, request.source, result) != -1 ||
+        fist_mission_world_ready_surface_air(world, request.source, NULL) != -1 ||
+        !fist_probe_unchanged(world, sizeof(*world), before) ||
+        !fist_probe_unchanged(result, sizeof(*result), &initial)) {
+        return -1;
+    }
+    const uint16_t slot = request.source.slot;
+    *observed = ready ? fist_mission_world_ready_surface_air(world, request.source, result)
+                      : fist_mission_world_automatic_fire(world, request, result);
+    if (*observed == -1) {
+        if (!fist_probe_unchanged(world, sizeof(*world), before) ||
+            !fist_probe_unchanged(result, sizeof(*result), &initial)) {
+            return -1;
+        }
+        *result = (fist_automatic_fire_result){
+            .missile = {FIST_UNIT_TYPE_COUNT, FIST_POOL_NO_SLOT, FIST_UNIT_REGISTRY_COUNT, 0},
+            .rack = FIST_SURFACE_AIR_NO_RACK};
+        return 0;
+    }
+    if (*observed != 0) {
+        return -1;
+    }
+    const fist_vehicle_state *actor = &world->objects[slot].vehicle;
+    fist_vehicle_state *allowed = &before->objects[slot].vehicle;
+    allowed->weapons.trigger = actor->weapons.trigger;
+    allowed->control_flags = actor->control_flags;
+    if (actor->type == 1 || actor->type == 3) {
+        const size_t component = actor->type == 1 ? 36 : 10;
+        for (size_t index = 0; index < 2; ++index) {
+            allowed->weapons.cycle[index] = actor->weapons.cycle[index];
+            allowed->weapons.rack_state[index] = actor->weapons.rack_state[index];
+            allowed->components[component + (index * 2)] =
+                actor->components[component + (index * 2)];
+        }
+    }
+    if (result->launched) {
+        if (check_missile_publication(world, before, slot, result) != 0) {
+            return -1;
+        }
+    }
+    before->target_notice = world->target_notice;
+    before->sound_selector = world->sound_selector;
+    return fist_probe_unchanged(world, sizeof(*world), before) ? 0 : -1;
+}
+
+static void write_missile(const fist_surface_air_missile *missile) {
+    printf("missile %u %u %u %u %d %d %d %u %u %u %u %u %u %u %u %u %d %d %d %d %d %u %u %u\n",
+           (unsigned)missile->allocation.type, (unsigned)missile->allocation.slot,
+           (unsigned)missile->allocation.registry_index, (unsigned)missile->allocation.value,
+           missile->pose.x, missile->pose.y, missile->pose.altitude,
+           (unsigned)missile->pose.heading, reference_slot(missile->origin),
+           reference_slot(missile->target), (unsigned)missile->projection_extent,
+           (unsigned)missile->projection_scale, (unsigned)missile->age, (unsigned)missile->steering,
+           (unsigned)missile->flags, (unsigned)missile->secondary_flags, missile->speed,
+           missile->elevation, missile->velocity.x, missile->velocity.y, missile->velocity.z,
+           (unsigned)missile->ground_height, (unsigned)missile->variant, (unsigned)missile->stage);
+}
+
+static int fire_query(fist_mission_world *world, fist_mission_world *before, query_case *value,
+                      bool canonical) {
+    if ((!canonical && install(world, value) != 0) ||
+        (canonical && canonical_boundary(world, value) != 0)) {
+        return -1;
+    }
+    const uint16_t slot = fist_read_u16le(value->header + ACTOR);
+    fist_vehicle_state *actor = &world->objects[slot].vehicle;
+    if (canonical) {
+        if (world->orders.descriptors[actor->platoon].words[0] != value->behavior) {
+            return -1;
+        }
+    } else {
+        enum { SAVED_TARGET = 151 };
+        actor->command.target_reference = fist_read_u16le(value->raw[slot] + SAVED_TARGET);
+        world->orders_loaded = 1;
+        world->orders.descriptors[actor->platoon].words[0] = value->behavior;
+    }
+    world->combat.selected_slot = fist_read_u16le(value->header + SELECTED);
+    world->sound_selector = fist_read_u16le(value->header + LAST);
+    world->target_notice = (fist_target_notice){
+        .duration = RETAINED_NOTICE, .type = UINT16_MAX, .variant = UINT8_MAX, .enemy = true};
+    for (size_t index = 0; index < FIST_UNIT_REGISTRY_COUNT; ++index) {
+        if (value->raw[index] != NULL) {
+            poison(value->raw[index], fist_unit_state_size(world->pool.slots[index].type));
+        }
+    }
+    const fist_automatic_fire_request request = {
+        .source = {slot, fist_read_u16le(value->header + GATE)},
+        .phase_random = fist_read_u16le(value->header + TICK),
+        .missile_only = value->operation == FIRE_MISSILE};
+    fist_automatic_fire_result result = {0};
+    int status = 0;
+    if (checked_fire(world, before, request, value->operation == FIRE_READY, &result, &status) !=
+        0) {
+        return -1;
+    }
+    printf("fire %d %u %u %u %u %u %u %u %u %u %u %u %u %u %u %u %u %lu\n", status,
+           (unsigned)result.requested, (unsigned)result.armed, (unsigned)result.launched,
+           (unsigned)result.message, (unsigned)result.rack, (unsigned)actor->weapons.rack_state[0],
+           (unsigned)actor->weapons.rack_state[1], (unsigned)world->target_notice.duration,
+           (unsigned)world->target_notice.type, (unsigned)world->target_notice.variant,
+           (unsigned)world->target_notice.enemy, (unsigned)world->target_notice.kind,
+           (unsigned)world->sound_selector, (unsigned)result.sound.emitted,
+           (unsigned)result.sound.ax, (unsigned)result.sound.dx, (unsigned long)result.sound.ecx);
+    fist_probe_write_vehicle_state(actor);
+    if (result.launched) {
+        write_missile(&world->objects[result.missile.slot].surface_air);
+    }
+    fist_probe_write_object_pool(&world->pool);
+    return ferror(stdout) == 0 ? 0 : -1;
+}
+
+static int rack_retention_contracts(void) {
+    enum { RACKS = 183, SELECTED_STATION = 145, LOADED_STATION = 165, TRIGGER = 146 };
+    for (uint16_t kind = 1; kind <= 3; kind += 2) {
+        for (uint8_t link = 0; link < 3; ++link) {
+            for (unsigned value = 0; value <= UINT8_MAX; ++value) {
+                uint8_t source[FIST_UNIT_EXTENDED_SIZE] = {0};
+                source[0] = (uint8_t)kind;
+                source[RACKS] = (uint8_t)value;
+                source[RACKS + 1] = (uint8_t)(value ^ UINT8_MAX);
+                source[SELECTED_STATION] = (uint8_t)value;
+                source[LOADED_STATION] = (uint8_t)(value ^ UINT8_MAX);
+                source[TRIGGER] = (uint8_t)value;
+                const fist_unit_definition definition = {.type = kind,
+                                                         .snapshot = {source, sizeof(source)}};
+                fist_random random = {.words = {1, 2, RETENTION_SEED, UINT16_MAX},
+                                      .next_stream = (uint8_t)(value % FIST_RANDOM_STREAMS)};
+                fist_vehicle_state actor = {0};
+                if (fist_vehicle_initialize(&definition, &random, link, &actor) != 0 ||
+                    actor.weapons.cycle[0] != 1 || actor.weapons.cycle[1] != 1) {
+                    return -1;
+                }
+                poison(source, sizeof(source));
+                if (fist_vehicle_prepare(&actor, link) != 0 ||
+                    actor.weapons.rack_state[0] != value ||
+                    actor.weapons.rack_state[1] != (value ^ UINT8_MAX) ||
+                    actor.weapons.cycle[0] != 1 || actor.weapons.cycle[1] != 1 ||
+                    actor.weapons.selected != value ||
+                    actor.weapons.loaded != (value ^ UINT8_MAX) || actor.weapons.trigger != value) {
+                    return -1;
+                }
+            }
+        }
+    }
+    return 0;
+}
+
+static int fire_lifetime_contract(fist_mission_world *world, fist_mission_world *before,
+                                  fist_pool_request source, uint16_t replacement) {
+    const uint16_t kind = source.type;
+    fist_mission_world_reset(world);
+    fist_pool_allocation actor_binding = {0};
+    fist_pool_allocation target_binding = {0};
+    if (fist_object_pool_allocate(&world->pool, source, &actor_binding) != 0 ||
+        fist_object_pool_allocate(&world->pool, (fist_pool_request){FIRST_AIRCRAFT, 0},
+                                  &target_binding) != 0) {
+        return -1;
+    }
+    fist_vehicle_state *actor = &world->objects[actor_binding.slot].vehicle;
+    *actor = (fist_vehicle_state){.type = kind,
+                                  .component_size = fist_vehicle_component_size(kind),
+                                  .weapons = {.cycle = {1, 1}, .rack_state = {4, 4}}};
+    if (fist_object_pool_reference(&world->pool, target_binding.slot, &actor->command.target) !=
+        0) {
+        return -1;
+    }
+    world->orders_loaded = 1;
+    fist_pool_allocation removed = {0};
+    if (fist_object_pool_release(&world->pool, target_binding.registry_index, &removed) != 0) {
+        return -1;
+    }
+    const fist_automatic_fire_request request = {
+        .source = {actor_binding.slot, actor_binding.slot}};
+    fist_automatic_fire_result result = {0};
+    int status = 0;
+    for (unsigned step = 0; step < 2; ++step) {
+        for (unsigned ready = 0; ready < 2; ++ready) {
+            if (checked_fire(world, before, request, ready != 0, &result, &status) != 0 ||
+                status != -1) {
+                return -1;
+            }
+        }
+        if (step == 0) {
+            if (fist_object_pool_allocate(&world->pool, (fist_pool_request){replacement, 0},
+                                          &target_binding) != 0 ||
+                target_binding.slot != actor->command.target.slot) {
+                return -1;
+            }
+            world->objects[target_binding.slot].other =
+                (fist_other_actor){.allocation = target_binding, .flags = AIRBORNE_TARGET};
+        }
+    }
+    /* Readiness's empty/busy branches preserve and ignore the stale target. */
+    actor->weapons.cycle[0] = 0;
+    actor->weapons.cycle[1] = 0;
+    if (checked_fire(world, before, request, true, &result, &status) != 0 || status != 0 ||
+        result.launched) {
+        return -1;
+    }
+    actor->weapons.rack_state[0] = 1;
+    actor->weapons.rack_state[1] = 1;
+    world->orders_loaded = 0;
+    world->random.next_stream = UINT8_MAX;
+    return checked_fire(world, before, request, true, &result, &status) == 0 && status == 0 ? 0
+                                                                                            : -1;
+}
+
+static int fire_contracts(fist_mission_world *world, fist_mission_world *before) {
+    if (rack_retention_contracts() != 0) {
+        return -1;
+    }
+    for (uint16_t kind = 1; kind <= 3; kind += 2) {
+        for (unsigned replacement = FIRST_AIRCRAFT; replacement <= SECOND_AIRCRAFT; ++replacement) {
+            if (fire_lifetime_contract(world, before, (fist_pool_request){kind, 0},
+                                       (uint16_t)replacement) != 0) {
+                return -1;
+            }
+        }
+    }
+    return 0;
+}
+
 static int run_query(fist_mission_world *world, fist_mission_world *before,
                      const fist_klc_image *height, query_case *value, bool canonical,
                      bool acquisition, bool promotion) {
+    if (value->operation >= FIRE_COMMON && value->operation <= FIRE_READY) {
+        return fire_query(world, before, value, canonical);
+    }
     if (value->operation >= MANEUVER && value->operation <= MOTION_OBSTACLE) {
         return maneuver_query(world, before, value, canonical);
     }
@@ -1671,6 +1948,9 @@ static unsigned probe_mode(int argc, char **argv) {
     }
     if (strcmp(argv[1], "--promotion") == 0) {
         return PROMOTION;
+    }
+    if (strcmp(argv[1], "--automatic-fire") == 0) {
+        return FIRE_COMMON;
     }
     return strcmp(argv[1], "--maneuver") == 0 ? MANEUVER : 0;
 }
@@ -1706,6 +1986,9 @@ int main(int argc, char **argv) {
     }
     if (status == 0 && mode == MANEUVER) {
         status = maneuver_contracts(world, before);
+    }
+    if (status == 0 && mode == FIRE_COMMON) {
+        status = fire_contracts(world, before);
     }
     if (status == 0) {
         pixels = prepare_probe(world, before, &height, acquisition, promotion);

@@ -31,9 +31,9 @@ their support. Original observation rejects reserved address-zero/one device sca
 Closed 0100 proves complete obstacle maneuver, predictive collision and idle turret returns,
 including the reaching motion producer and genuine parent entries seven, eleven and fifteen.
 Closed 0101 supplies its complete shared C consumption. Closed 0102 proves complete original
-af97/afa2, missile readiness/launch and genuine parent entries five/ten/fourteen. Continue
-shared fire consumption under open 0103, then ae5c/b0be, selected diagnostics and full parent/
-class consumption. This Contract and Accept remain unchanged.
+af97/afa2, missile readiness/launch and genuine parent entries five/ten/fourteen. Closed 0103
+supplies shared fire consumption. Continue original ae5c/b0be recovery under open 0104,
+selected diagnostics and full parent/class consumption. This Contract and Accept remain unchanged.
 
 Reproduce the complete first difference and recover the nested callback plus caller/global
 contract. Add the required saved heading/counter state and connect the shared RNG transaction
@@ -276,7 +276,7 @@ returns. A nonzero retained target is a presence gate, not a dereference; releas
 consumes no idle RNG. A separate 200-return gate verifies every search exit 0..15 and ordered
 competing bodies through actual allocation. The full b112 half-turn and distinct +46/+51
 owners are proved. See docs/ground-maneuver.md and closed 0100. Production C/programs remain
-unchanged from accepted 0099; shared C consumption is open 0101. This parent's Contract/Accept
+unchanged from accepted 0099; shared C consumption is delivered by closed 0101. This parent's Contract/Accept
 remain unchanged. Complete remaining firing/diagnostic callbacks and full heading/counter/RNG
 parent and living class/battle/PCM/outcomes; independent full-game WASM streak zero.
 
@@ -287,7 +287,7 @@ ownership. Required native/WASM and ASan/UBSan gates pass without skips: 954287 
 search exit, presence-only release/reuse, initialization/readiness retention, atomic failures
 and unchanged unrelated world bytes are proved. Strict style, complete build and current
 SDL/Chromium/sanitized scenes pass. No partial parent bank is installed. Closed 0102 proves
-original af97/afa2 and genuine entries five/ten/fourteen; shared consumption is open 0103.
+original af97/afa2 and genuine entries five/ten/fourteen; shared consumption is delivered by closed 0103.
 Then finish ae5c/b0be, selected b152 and full heading/counter/RNG parent/class consumption.
 This Contract/Accept remain unchanged.
 First playable battle/PCM/outcomes and independent complete-game WASM acceptance remain open;
@@ -303,6 +303,16 @@ selected display, c047 audio request admission and unsafe original target releas
 verified. A separate full-DGROUP retention group proves 3072 complete class-start/readiness
 returns and single-owner requirements for +b7/+b8 beside existing +b5/+b6. Production C/
 programs and original/reference/dependency pins remain unchanged. Complete shared consumption
-is open 0103; then finish ae5c/b0be, selected b152 and full heading/counter/RNG parent/class.
+is delivered by closed 0103; continue open 0104, selected b152 and full heading/counter/RNG parent/class.
 First playable battle/missile flight/PCM/outcomes and independent full-game WASM acceptance
 remain open; final streak zero. This Contract/Accept remain unchanged.
+
+Closed 0103 supplies complete shared automatic fire, ordered M3/BMP rack service, real type-15
+construction and typed selected notices/c047 logical requests. Required native/WASM and
+sanitizer gates verify 579544 callbacks per target, 579531 unchanged original returns and
+7680 all-47 prepared-world returns without skips. Full production builds/style and actual
+native/browser/sanitized scenes pass; explicit constructor/view/SHOT/softgl inspection passes
+for both classes on all three builds. See docs/automatic-fire.md. This adds no partial parent
+bank, arming timers, missile flight, live-game entity-renderer integration or PCM playback.
+Continue complete original ae5c/b0be under open 0104, then selected b152 and the full parent/
+class contract. This WI's Contract/Accept remain unchanged; full-game WASM streak stays zero.

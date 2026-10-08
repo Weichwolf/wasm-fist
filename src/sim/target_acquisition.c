@@ -121,7 +121,7 @@ static int install_target(const fist_mission_world *world, const fist_klc_image 
         return -1; /* Proved adjacent-text read has no valid typed message. */
     }
     *notice = (fist_target_notice){NOTICE_DURATION, type, type == TARGET ? view.mode : 0,
-                                   (view.flags & SIDE) != 0};
+                                   (view.flags & SIDE) != 0, FIST_NOTICE_TARGET};
     result->message = true;
     enum { FRIENDLY_VOICE = 20 };
     return fist_voice_admit(

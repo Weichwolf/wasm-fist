@@ -1,4 +1,5 @@
 #include "assets/units.h"
+#include "sim/automatic_fire.h"
 #include "sim/mission_world.h"
 #include "sim/object_pool.h"
 #include "sim/vehicle_state.h"
@@ -41,6 +42,12 @@ int fist_mission_world_view(const fist_mission_world *world, uint16_t slot,
         return 0;
     }
     switch (type) {
+    case FIST_SURFACE_AIR_TYPE:
+        allocation = &object->surface_air.allocation;
+        view = (fist_mission_view){&object->surface_air.pose, object->surface_air.projection_scale,
+                                   object->surface_air.flags, object->surface_air.secondary_flags,
+                                   object->surface_air.variant};
+        break;
     case FIRST_AIRCRAFT:
     case SECOND_AIRCRAFT:
     case TARGET:

@@ -53,7 +53,10 @@ typedef struct {
     /* T80's fifth station ammunition is a word. Other classes retain their
      * distinct trailing parameter until its additional weapon rules are owned. */
     uint16_t class_parameter;
+    /* Original M3/BMP +b5/+b6 surface-to-air reserves. */
     uint8_t cycle[2];
+    /* Original +b7/+b8, retained by initialization and readiness. */
+    uint8_t rack_state[2];
     uint8_t ready_stock;
     /* Original station codes are 0, 2, 4, 6; T80 also has station 8. */
     uint8_t selected;
