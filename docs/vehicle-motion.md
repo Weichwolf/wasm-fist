@@ -92,6 +92,11 @@ payload. The full original write-footprint comparison includes every preserved b
 component marker and global scene-refresh notification. Targets are explicitly absent at this
 manual-stage oracle boundary; no target solver is replaced or claimed implemented.
 
+The complete original target-aware extension is now proved by closed0114 and
+[ground target motion](ground-target-motion.md). M1/M3 retain their target heading;
+T80/BMP refresh geometry after motion and before turret slew. Its shared C caller
+remains open; the manual API and this delivered contract are unchanged.
+
 ## Verification
 
 ```sh

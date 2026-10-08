@@ -110,6 +110,16 @@ keep its inputs unchanged. The eight local C/configuration/test files are still
 unaccepted and excluded from this evidence checkpoint.
 No complete shared parent/class/battle/PCM acceptance follows from these checkpoints.
 
+Closed0114 proves the complete target-aware motion/turret stage and a material
+class difference: M1/M3 use retained target heading; T80/BMP refresh geometry after
+motion and before turret slew. Four required original groups pass279,880 full
+returns without skips, including every heading word per class, branch domains,
+independent retained moving-target drives and actual release/reuse. See
+docs/ground-target-motion.md. Consume this complete order with the existing motion,
+aim and captured-reference owners; do not apply fresh target aim before all-class
+motion or let saved near pointers bind reused allocations. Remaining phase/behavior
+callbacks, inter-object contacts and actual PM/device callers still require proof.
+
 Continue those C gates using this complete original reference; no partial bank or
 complete living-class/battle/PCM claim follows from the reference checkpoint.
 

@@ -72,6 +72,7 @@ frozen reconstruction, not rewrite completion.
 | 0111 | Complete original ab03 composition through both full callback banks, independent heading/RNG/diagnostic prefix/tail and actual PM operations proved: seven required groups,409792 parent/405600 child returns and all47/four-detail coverage pass. Shared C/full0081 consumption remains open. |
 | 0112 | Complete exact op-54 signed EBX transport prediction delivered: eight required groups without skips,475328 parent/471136 child returns and65536 velocity-word constructor transfers pass. Shared full0081 acceptance remains open. |
 | 0113 | Independent synthetic full-bank/retained world-event models and reached TRAIN1 M1 command order through update54 proved by three required original groups without skips; full shared C/class acceptance remains open. |
+| 0114 | Complete original target-aware turret order for all four ground classes proved by four required groups and279880 full returns, including heading/branch domains, retained moving targets and actual release/reuse. Shared consumption/full0081 remain open. |
 | 0042 | Menus, settings, campaign/profile progression and persistent save/load. |
 | 0043 | All missions/maps/vehicles, AI, combat, objectives and resolved outcomes. |
 | 0044 | Keyboard/mouse/joystick, devices, audio timing and link behavior on both platforms. |
