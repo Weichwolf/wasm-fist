@@ -303,6 +303,44 @@ under session54164. Root simulation prototypes remain excluded from that candida
 and from this documentation commit. Continue full class/caller/battle/PCM proof;
 no complete-game run or C feature acceptance follows from these development gates.
 
+Read-only reached-class research now configures the already-proved visibility
+mailbox before executing M1; the old update55 stop came from its unconfigured
+caller mailbox, not a missing visibility kernel. Eight original TRAIN1 contexts
+(four constant-height details, saved/constructed stale-goal control variants)
+pass through update128 and all 16 controlled callback entries. Independent actor,
+RNG and unchanged-other-object comparisons pass for 1,024 pre-engine prefixes,
+128 command-parent returns and 144 actual original visibility-kernel returns.
+The digest is 4877d15b764f76afd9eac0266da8b1479cab77911f2c453645bbb076b674ea25.
+No original code is patched and reserved address0/1 returns remain errors.
+
+The same reached contexts now also execute the genuine class tail through its
+near return: 1,024 complete M1 class returns and 1,024 actual op-64 motor-audio
+queue returns pass, retaining the original queue across updates. Catalog offsets,
+packets, signed slope/speed/gear pitch arithmetic and class flag publication are
+predicted before tail execution. Whole DOS memory is checked outside eight bytes
+of proved nested CALL/PUSH stack scratch; kernel bytes/registers, mailbox writes,
+the return slot, actor/segment/stack ABI and read-only original sound banks are
+checked independently. The final coupled digest is
+3a8a04acc99a7af0c7151a38e8e5eeba4a866e7266eafc2bf89e21018c52cdbb.
+
+A separate 1,688-case tail gate covers selection, stopped/blocked/active requests,
+signed speed/slope and gear wrap, marker publication and every flag-byte value:
+588 unselected,392 stopped and708 active tail returns;1,100 genuine kernel returns.
+It verifies retained queued/silence state with the same whole-memory/register guards.
+Its digest is 39777b581accf22b75ff1a657ec297c0b360dd681c076daba6eb3200039e8c52.
+Receipts are reached-m1-cycle128-development.json,
+reached-m1-complete-class128-development.json and m1-engine-tail-cases-development.json
+under /tmp/wasm-fist-0115-review. Reproduction fixtures are
+/tmp/wasm-fist-0116-reached-m1-cycle128.py,
+/tmp/wasm-fist-0116-reached-m1-complete-class128.py,
+/tmp/wasm-fist-0116-m1-engine-tail.py and /tmp/wasm-fist-0116-m1-engine-tail-cases.py;
+their hashes and commands are retained. The strengthened class run is terminal0
+under session4707 and the boundary gate is terminal0 under session77016. These
+declared original-only contexts do not accept shared-C classes, mission scheduling,
+PCM mixing/playback or the complete-game gate. Closed 0116 now supplies the
+verified renderer prerequisite; this documentation checkpoint leaves original
+fixtures and the unaccepted simulation prototypes unchanged.
+
 Continue those C gates using this complete original reference; no partial bank or
 complete living-class/battle/PCM claim follows from the reference checkpoint.
 
@@ -310,7 +348,9 @@ Reproduce the complete first difference and recover the nested callback plus cal
 contract. Add the required saved heading/counter state and connect the shared RNG transaction
 to actual canonical control and any still-delivered standalone boundary. Consume complete
 controlled work and explicitly account for other callback requirements. Advance the original
-living prefix again; keep the engine-audio device boundary declared until fully configured.
+living control/class/world flows using the recovered complete M1 return and retained
+engine queue. Keep PCM mixing/playback and the remaining device/mission integration
+declared until fully configured and verified.
 
 Closed 0082 now owns and canonically installs complete real PATH/PINF platoon orders. Use that
 world owner before accepting any later command callback; do not restore private empty inputs. The original-only boundary verification below
