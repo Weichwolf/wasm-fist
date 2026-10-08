@@ -57,6 +57,17 @@ this producer chain but does not establish a new intended dead-gun policy.
 
 ## Evidence
 
+Implementation checkpoint (2026-10-08, not accepted): the local working tree contains
+typed support configuration/queues, transactional station/support children, canonical
+artillery ammunition/lifetime ownership and type-20 projection. A preliminary native
+compile completed all 69 build steps. Strict style verification failed on missing direct
+includes and inconsistent enum initialization; consuming behavior probes, full production
+build/test gates, memory checks and scene verification have not run for this implementation.
+The implementation remains uncommitted until a verified bounded success is established.
+Compact source pins, failed diagnostics and reproduction commands are retained under
+`/tmp/wasm-fist-0107-review/checkpoint.json`; completed raw logs were removed after recording
+their hashes and results. Prior accepted runtime evidence does not cover these local changes.
+
 Use closed0104 complete original source/required result pins, closed0105
 consumed audio return and closed0106 full producer/list gates. The additional required original
 producer/consumer proof tests/test_original_support_ownership.py has sixteen
@@ -68,9 +79,9 @@ See docs/remaining-ground-command.md and docs/support-state-boundary.md.
 
 ## Next
 
-Finalize the typed state/API and explicit repair documentation,
-implement complete transactional shared children with minimal changed owners, then add
-required consuming production-native/WASM probes. Use existing tests/scene harnesses and
+Fix the direct-include and enum diagnostics without weakening checks, finalize the typed
+state/API and explicit repair documentation, then add required consuming
+production-native/WASM probes for the complete transactional shared children. Use existing tests/scene harnesses and
 /tmp evidence. Keep full parent/class integration and later dispatcher/PCM dependencies
 visible in the board; no selected diagnostic, battle or complete-game claim from this WI.
 
