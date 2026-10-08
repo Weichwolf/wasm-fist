@@ -106,19 +106,41 @@ development evidence; the exact current-policy original/domain gates below are
 still required. Completed published logs have been retired with hashes, counters
 and compact results; live exact-gate logs and failure evidence remain retained.
 
+The exact production native/WASM domains finish under13754, terminal0:
+264,192 complete parent returns per target and original, every heading lane's
+65,536 words and2,048 counter returns, zero skips. Every complete observation
+matches the sanitizer/independent domain digest above. Source and all production
+program hashes are unchanged. Receipt: /tmp/wasm-fist-0120-review/original/domains.json.
+
+The full sequential production command finishes under82768, terminal0, with
+49 native CTests,47 WASM Python suites (45 unittest suites/336 unittest cases plus
+two complete plain-Python suites) and both Node gates. Native compiles in161
+fresh steps; the separately fresh161-step WASM build is reused unchanged by
+the complete script. No compiler warnings occur. The renderer Node gate prints
+the complete320x200 RGBA checksum3fa856ed and asserts the fixed2GiB shared heap;
+the second Node gate checks the full vehicle scene. Receipt: production-all.json
+under the exact review directory. Strict97-unit LLVM19.1.7 style, direct lifetime/
+transaction/constructor gates, both complete instrumented scopes and actual native/
+normal-browser scenes all pass. Normal browser-recheck and native after frames
+are visually reviewed before publication. All516 candidate input files and each
+of the eight publishing overlays match their frozen hashes.
+
 ## Next
 
-Keep all exact-candidate inputs unchanged. Full production regression remains live
-under82768 and exact original/native/WASM heading/counter domains under13754.
-Both complete corpus and both sanitizer scopes have passed. Require the two
-remaining terminal results and unchanged source/program
-pins before publication; no partial coverage or scene-only success accepts C.
-Retain compact results and clean completed artifacts.
+The complete canonical command parent is delivered as one shared C owner.
+Continue0081 with full ground-class consumption, including the proved common
+ammunition/roster/status/refill callbacks and retained saved bytes, class behavior,
+selected/unselected contact, manual input and engine events. Then connect the
+living classes to the mutable world scheduler and first playable battle/PCM/outcome
+under0041/0065. No complete class, mission or full-game acceptance is claimed here.
+Keep compact receipts/fixtures and retire completed owned logs.
 
 ## Accept
 
-All exact-candidate required gates are complete and unchanged source/program pins
-are checked. Every callback is exercised on both targets, required original
-coverage has no filters/skips, memory and failure transactions preserve complete
-state/output, and existing actual controls/presentation pass. Commit/push only
-the accepted parent step; continue complete classes and first playable battle.
+Met: all exact-candidate required gates are complete with unchanged source/program
+pins. Every callback is exercised on both targets; required original coverage has
+no filters/skips. Whole-world/output transactions, captured reference lifetimes,
+real constructors and actual controls/presentation pass. Published code is the
+exact eight-file candidate, with complete owned build/test integration. This
+accepts the command parent only; full0081/class/battle/PCM and complete-game WASM
+streak remain open/zero.

@@ -2,7 +2,8 @@
 
 `tests/test_original_ground_phase.py` executes unchanged `ab03` through its genuine
 final return. This is the reference gate for consuming the complete parent in shared
-C. It does not accept the current C candidate or the complete living-class scheduler.
+C. Closed WI0120 now accepts the complete canonical C parent; complete living-class
+scheduling remains separate.
 
 The frozen engine image is provisioned by `tests/reference_images.py` under `/tmp`.
 Its SHA-256 is `d46f480dd2214b2693b4192a42aa79fb7bffb8d692fd67ddc3d746dfdea9c5e5`.
@@ -168,3 +169,51 @@ The three-group terminal0 receipt, source pins and compact acceptance history ar
 under `/tmp/wasm-fist-0113-review`. No filtered or skipped model gate passes. The
 consuming C implementation, its probe/build integration and full0081 acceptance
 remain open; this model checkpoint publishes no runtime or presentation change.
+
+## Shared canonical command parent
+
+Closed0120 delivers fist_mission_world_ground_command in src/sim/ground_phase.c.
+It consumes both complete sixteen-entry banks through existing child owners,
+draws canonical RNG before inhibition, wraps the existing command counter and
+samples signed heading history with the original logical shift. Controlled
+return entries preserve their genuine empty-return behavior. A complete outer
+transaction publishes world/output only after child and selected diagnostic
+success, including failures after allocations or the first random draw.
+
+Diagnostics own typed values and captured actor/candidate allocation lifetimes;
+they retain no guest addresses or borrowed views. Invalid used caller/descriptor/
+caption/reference state fails atomically. Unused suppressed inputs remain unused.
+The explicit caller display value97ee is retained without an invented producer.
+The command API does not advance class phase or configure devices/audio.
+
+Exact current-policy acceptance uses the isolated a9888c4 base plus eight frozen
+overlays and516 source-file hashes. Full native/WASM corpus compares122,880
+complete returns each through all47 missions/eight heights/four details/188
+prepared worlds/3,840 actors and all32 bank entries. Full heading/counter domains
+compare264,192 returns each; every word in each heading lane is exercised.
+Independent corpus/domain digests are respectively:
+cebbaa021e196a2360df991b6a111bd78cac2377a9504daf8df48f413abe485f and
+8f9bc24073cc968045fe2f684b1ade58a7c079c59e25f823d528f0c8809788a5.
+
+All seven default synthetic groups pass on both targets with12686 cases each.
+Separate native/WASM/instrumented gates pass2042 atomic rejections,156 captured
+lifetime cases and70 complete real-constructor observations each. The full
+ASan/UBSan simulation/assets/probe build passes both original corpus/domain scopes
+and defaults with production fast-math. Full sequential production validation
+passes49 native CTests,47 WASM Python suites and two Node gates, warning-free.
+Strict LLVM19.1.7 format/tidy passes all97 owned translation units. Actual native
+and normal-browser controls/reload/selection/cycle/focus/shutdown/failure scenes
+pass, with reviewed complete after frames. The initial browser wrapper timeout
+remains failure evidence; only the subsequent unchanged complete run is accepted.
+
+Exact source/program/command/result pins and compact receipts are under
+/tmp/wasm-fist-0120-review. Reproduce with FIST_REWRITE_BUILD_ROOT set to a dedicated
+/tmp build directory, bash tools/build.sh all and python3 tools/check_style.py;
+run tests/verify_ground_phase_original.py --originals --scope corpus and domains
+with --target all and the matching --build-root/--review-dir using the pinned
+oracle environment. tests/test_ground_phase.py provides the ordinary both-target
+behavior/failure/retained regression. No filtered/partial required scope passes.
+
+Full0081 still requires consuming original class timing/state and reached TRAIN1
+integration. Living battle/world scheduling, other weapons/flight, UI/devices,
+PCM/playback, outcomes and complete-game WASM acceptance remain open.

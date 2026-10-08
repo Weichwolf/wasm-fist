@@ -18,6 +18,7 @@ if [[ $target == wasm || $target == all ]]; then
     cmake --build "$output/wasm"
     timeout 30s node "$root/tests/check_wasm.cjs" "$output/wasm/fist_renderer_probe.js" 2147483648
     python3 "$root/tests/test_scenario.py" --target wasm --build-root "$output"
+    python3 "$root/tests/test_ground_phase.py" --target wasm --build-root "$output"
     python3 "$root/tests/test_ground_target_motion.py" --target wasm --build-root "$output"
     python3 "$root/tests/test_ground_target_motion_lifetime.py" --target wasm --build-root "$output"
     python3 "$root/tests/test_ground_command.py" --target wasm --build-root "$output"

@@ -382,4 +382,72 @@ int fist_mission_world_ready_surface_air(fist_mission_world *world,
                                          fist_surface_air_request request,
                                          fist_automatic_fire_result *out);
 
+/* Original command-caller values, distinct from normal player/UI selection.
+ * Diagnostic selection captures a physical lifetime and never binds a reused
+ * successor. diagnostic_saved retains the original displayed97ee word; its
+ * producer/device configuration is not inferred from a zero-filled image. */
+typedef struct {
+    uint16_t slot;
+    uint16_t tick;
+    uint16_t clock;
+    uint16_t voice_gate;
+    uint16_t sound_source;
+    uint16_t diagnostic_saved;
+    fist_object_reference diagnostic_actor;
+    uint8_t inhibition;
+    uint8_t notice_context;
+    uint8_t link_mode;
+    bool coarse;
+} fist_ground_phase_request;
+
+/* Complete semantic b152 observation. Portable presentation uses the platoon
+ * identity in place of a guest descriptor address and a captured candidate
+ * identity in place of a near word. It owns every value and borrows no state.
+ */
+typedef struct {
+    fist_object_reference actor;
+    fist_object_reference candidate;
+    uint16_t throttle_bits;
+    uint16_t platoon_speed;
+    uint16_t route_points;
+    uint16_t saved;
+    uint16_t navigation_range;
+    uint8_t mode;
+    uint8_t discovery_count;
+    uint8_t maneuver;
+    uint8_t platoon;
+    uint8_t member;
+    bool inhibited;
+    bool candidate_live;
+} fist_ground_diagnostic;
+
+enum { FIST_GROUND_COMMAND_CALLBACKS = 16, FIST_GROUND_COMMAND_NO_CALLBACK = UINT8_MAX };
+
+typedef struct {
+    fist_drive_control_events drive;
+    fist_target_discovery_result discovery;
+    fist_target_acquisition_result acquisition;
+    fist_automatic_fire_result fire;
+    fist_ground_station_result station;
+    fist_ground_support_result support;
+    fist_ground_diagnostic diagnostic;
+    uint16_t phase_random;
+    uint8_t callback;
+    bool automatic;
+    bool heading_sampled;
+    bool diagnostic_emitted;
+} fist_ground_phase_result;
+
+/* Complete canonical ab03: draw before inhibition, wrap the existing +42
+ * counter, sample signed heading history, dispatch both complete original
+ * sixteen-entry banks through their existing owners, then produce selected
+ * semantic diagnostics. Genuine controlled b111 entries are explicit returns.
+ * Height/configuration/caller fields are required only when their path uses
+ * them. Errors preserve the entire world/output, including the initial draw.
+ * This does not advance class phase, configure devices or complete living
+ * class/battle/PCM dispatch. */
+int fist_mission_world_ground_command(fist_mission_world *world, const fist_klc_image *height,
+                                      fist_ground_phase_request request,
+                                      fist_ground_phase_result *out);
+
 #endif

@@ -28,6 +28,14 @@ their support. Original observation rejects reserved address-zero/one device sca
 
 ## Next
 
+Closed0120 now publishes the complete canonical command parent with both full
+banks and semantic diagnostics, after exact native/WASM/original corpus/domains,
+all production/style/memory/transaction/lifetime/constructor and actual scene
+gates. See docs/ground-command-parent.md. Continue full class timing/consumption
+and reached TRAIN1 behavior, using the original callback/retention proofs below.
+The remaining class/common collision/input/engine/global contracts must be
+proved and consumed before complete class/world/battle/PCM acceptance.
+
 The shared a9a0 status callback now passes149,504 complete original returns,
 including every flag/counter byte pair for both counters and all phase bytes.
 Independent whole-memory/return predictions prove wrapping, ordered flag clearing
@@ -71,9 +79,9 @@ not global/class acceptance. Diagnose failures under distinct receipt filenames;
 the original T80 missing-provider failure has been explicitly reproduced and
 retained in class-first-unconfigured-service-reproduction.json.
 
-Closed0117 now publishes the exact canonical target-motion owner after its full
-production/original/style/memory/presentation gates. Active0120 isolates complete
-parent integration at that published base; fresh current-policy gates are required.
+Closed0117 publishes the exact canonical target-motion owner after its full
+production/original/style/memory/presentation gates. Closed0120 completes exact
+parent integration at that published base with all fresh current-policy gates.
 The widened original class fixture now passes32 actual AZER7 class/detail/caller
 contexts through update128:4,096 complete instruction returns,512 parents across
 all16 controlled entries,4,096 retained engine queue returns and448 real visibility

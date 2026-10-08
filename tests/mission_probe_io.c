@@ -4,6 +4,8 @@
 #include "combat_probe_io.h"
 #include "object_pool_probe_io.h"
 #include "probe_io.h"
+#include "sim/automatic_fire.h"
+#include "sim/ground_support.h"
 #include "sim/mission_world.h"
 #include "sim/object_pool.h"
 #include "sim/random.h"
@@ -29,6 +31,8 @@ enum {
     COUNTED_STATIC = 16,
     HEIGHT_STATIC = 25,
     TARGET = 26,
+    SURFACE_AIR = FIST_SURFACE_AIR_TYPE,
+    SUPPORT_MARKER = FIST_SUPPORT_SMOKE_TYPE,
     ARTILLERY = 27
 };
 
@@ -122,6 +126,39 @@ int fist_probe_write_mission_world(const fist_mission_world *world) {
         case ARTILLERY:
             fist_probe_write_other_actor(&object->other);
             break;
+        case SURFACE_AIR: {
+            const fist_surface_air_missile *missile = &object->surface_air;
+            printf(
+                "surface_air %u %u %u %u %ld %ld %ld %u %u %u %u %u %u %u %u %u %u %u %u %u %d %d "
+                "%d %d %d %u %u %u\n",
+                (unsigned)missile->allocation.type, (unsigned)missile->allocation.slot,
+                (unsigned)missile->allocation.registry_index, (unsigned)missile->allocation.value,
+                (long)missile->pose.x, (long)missile->pose.y, (long)missile->pose.altitude,
+                (unsigned)missile->pose.heading, (unsigned)missile->origin.slot,
+                (unsigned)(missile->origin.lifetime != 0),
+                (unsigned)(fist_object_pool_reference_is_live(&world->pool, missile->origin) != 0),
+                (unsigned)missile->target.slot, (unsigned)(missile->target.lifetime != 0),
+                (unsigned)(fist_object_pool_reference_is_live(&world->pool, missile->target) != 0),
+                (unsigned)missile->projection_extent, (unsigned)missile->projection_scale,
+                (unsigned)missile->age, (unsigned)missile->steering, (unsigned)missile->flags,
+                (unsigned)missile->secondary_flags, missile->speed, missile->velocity.x,
+                missile->velocity.y, missile->velocity.z, missile->elevation,
+                (unsigned)missile->ground_height, (unsigned)missile->variant,
+                (unsigned)missile->stage);
+            break;
+        }
+        case SUPPORT_MARKER: {
+            const fist_support_marker *marker = &object->support_marker;
+            printf("support_marker %u %u %u %u %ld %ld %ld %u %u %u %u %u %u %u\n",
+                   (unsigned)marker->allocation.type, (unsigned)marker->allocation.slot,
+                   (unsigned)marker->allocation.registry_index, (unsigned)marker->allocation.value,
+                   (long)marker->pose.x, (long)marker->pose.y, (long)marker->pose.altitude,
+                   (unsigned)marker->pose.heading, (unsigned)marker->projection_extent,
+                   (unsigned)marker->projection_scale, (unsigned)marker->flags,
+                   (unsigned)marker->secondary_flags, (unsigned)marker->ground_height,
+                   (unsigned)marker->variant);
+            break;
+        }
         case SMOKE:
             fist_probe_write_smoke(&object->smoke);
             break;
