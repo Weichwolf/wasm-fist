@@ -2,7 +2,9 @@
 
 Closed WI 0103 supplies complete shared [automatic fire and SAM construction](automatic-fire.md),
 with required both-target original/canonical, strict build/style, sanitizer and actual scene
-gates. Open 0104 recovers the remaining ae5c/b0be callbacks. Full parent/class/battle and PCM
+gates. Active 0104 recovers the remaining ae5c/b0be callbacks. Closed 0105 proves the
+[consumed audio return and support dependency](audio-request-boundary.md), including the
+authored sample-15 sentinel overread. Full parent/class/battle and PCM
 acceptance remain pending under 0081.
 
 Closed WI 0100 proves complete [obstacle maneuvers and idle turret](ground-maneuver.md),
@@ -221,6 +223,6 @@ allocation/construction and selected display/c047 request admission. Required wh
 allocated/all-47 tests verify 608968 complete original returns, including 29439 genuine ab03
 returns at entries five/ten/fourteen in both banks. Separate full-DGROUP retention verifies
 3072 class-start/readiness returns and both new rack-state fields. See automatic-fire.md.
-Closed 0103 delivers complete shared child fire/rack/constructor consumption. Open 0104
+Closed 0103 delivers complete shared child fire/rack/constructor consumption. Active 0104
 recovers ae5c/b0be; selected b152 and full parent/class/missile flight/
 battle/PCM/outcomes still prevent full 0081 acceptance. No partial C bank is installed.

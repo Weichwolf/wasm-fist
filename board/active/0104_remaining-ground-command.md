@@ -45,5 +45,7 @@ Unchanged b0be calls the real per-class smoke service in retreat mode, then cons
 Sound-disabled/source-unmatched/stock/capacity paths return different AX values; an admitted
 c047 request reaches PM op-64, whose enabled handler returns a sample address. Complete
 acceptance therefore needs the actual consumed response, not an unconsumed-request adapter.
-Active 0105 must prove this prerequisite and heap-placement coupling before this unchanged full
-Contract/Accept can pass. No inferred support repair or incomplete parent bank is installed.
+Closed 0105 proves actual queue/return and heap-placement coupling, including the authored
+sample-15 sentinel overread. See docs/audio-request-boundary.md. This supplies the prerequisite
+for this unchanged full Contract/Accept; all-47 and genuine-parent recovery remain required.
+No inferred support repair or incomplete parent bank is installed.
