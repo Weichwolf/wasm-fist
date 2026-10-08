@@ -253,3 +253,36 @@ PYTHONPATH=tests PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
   /tmp/wasm-fist-decoder-oracle/bin/python \
   tests/fixtures/ground_class_callbacks/secondary_rack.py
 ```
+
+## Smoke phase admission and status decay
+
+All four pinned class tables select a46e at byte index28. It invokes the existing
+19caa smoke creator with extent base768 when phase byte+3d has no bits0x60 set
+and operating byte+1a has bit0x40 set. Phase0x80 therefore admits this callback;
+the0xe0 inhibition used by the other common timers does not apply here. After
+the conditional call, every return shifts unsigned status byte+96 right by one.
+The constructor belongs to fist_drifting_smoke_create, not a new damage owner.
+
+Independent whole0x60000 memory predictions pass69,632 complete unchanged
+original returns:65,536 phase/operating-flag pairs and4,096 status-byte/class/phase
+combinations. The explicit smoke setting is0. All11,264 admitted paths execute
+the actual producer's disabled-setting comparison and far return. Actor state,
+AX and DI/DS/SS/SP/CS, near/far return scratch, unchanged RNG/pool and all other
+memory are checked. No instruction replacement or substituted return is used.
+
+This proves admission and decay with smoke explicitly disabled. Enabled
+constructor coupling, pool exhaustion, source lifetimes, shared class C and
+world scheduling remain required; this fixture accepts none of those scopes.
+
+Output digest:
+dcd343dedaf9b8a9951e68b01f70bee48354fba6d8bc50e2157cfb619ef3010c.
+Fixture digest:
+491b5792c7dcb1fba42ca92bc7631ae63792a04babeab5f1d7c6a7dd83468825.
+Receipt: /tmp/wasm-fist-0119-class-research/smoke-phase-disabled.json. Reproduce
+with the same review directory and pinned oracle environment:
+
+```sh
+PYTHONPATH=tests PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
+  /tmp/wasm-fist-decoder-oracle/bin/python \
+  tests/fixtures/ground_class_callbacks/smoke_phase_disabled.py
+```
