@@ -188,8 +188,13 @@ WASM byte comparison exposed unspecified padding in the legitimately assigned
 target reference. Both lifetime and slot are checked explicitly before adopting
 only that reference representation into the expected byte guard; every other
 world byte remains checked, and rejection guards normalize nothing. The receipt
-is motion-lifetime-development.json. Corrected source, isolated binaries and
-strict LLVM19.1 draft checks remain under /tmp; owned registration is still open.
+is motion-lifetime-development.json. Corrected source and strict LLVM19.1 draft
+checks remain under /tmp; owned registration is still open. The four completed
+isolated native/WASM/sanitized binaries were removed after verifying their hashes
+and terminal results, reclaiming 2,653,477 bytes. File hashes and reproduction
+commands are retained in /tmp/wasm-fist-0115-review/lifetime-binary-cleanup.json.
+Current worktree inputs, production libraries, the live regression log and frozen
+reference assets were retained. This cleanup does not accept or publish the local C.
 
 All three complete target-motion memory gates are terminal0 under sessions7632,
 64559 and3410 against current fully instrumented simulation/assets/probe libraries
