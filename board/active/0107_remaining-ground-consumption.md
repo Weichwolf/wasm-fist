@@ -156,6 +156,28 @@ sanitizer build, isolated assets and live production log are retained. The fresh
 in native CTest. This is pending acceptance, not a complete regression pass. No C/test/build
 candidate is published from this checkpoint; complete-game WASM streak remains zero.
 
+Corrected production-domain/reference audit checkpoint (2026-10-08): the current native
+CTest consuming suite passes all twelve groups and 247147 transitions in 90.100 seconds.
+A separate complete current WASM consuming run passes the same groups/transitions in
+173.307 seconds, with zero skips/errors/failures and the identical complete digest
+`d1ead219bf39febfce22281102ca10c63c2c3a6247d5f4403fc9039cd8f75c04`.
+The current candidate source pins still match the passed strict style, canonical production
+and sanitizer results. Exact observations, commands and hashes are retained in
+`/tmp/wasm-fist-0107-review/corrected-domain-receipt.json`; its completed WASM raw log was
+removed after preserving the result. The complete production gate88655 remains live in
+native automatic-fire regression; this individual suite success does not close the WI.
+
+The current reference audit verifies the full419 original file set, every file hash and
+read-only permissions; frozen refs, engine/kernel image hashes and softgl are unchanged.
+All40 original source pins for closed0104 and all41 for closed0106 match. The older0105
+support model is explicitly superseded by the proved index2/3 cooldown correction in
+commit d65e0f7 and the accepted0106 six audio-request/two audio-tail regression groups.
+Those current-source result files and digests were checked before carrying their evidence
+forward. See original-evidence-current-audit.json. The requirement-to-evidence audit in
+acceptance-current-audit.json maps all twelve behavior methods and the canonical/resource/
+requester/source/atomicity/style/memory/visual contracts, retaining pending full production,
+runtime publication and full-game gates explicitly. No completion claim follows from the audit.
+
 Use closed0104 complete original source/required result pins, closed0105
 consumed audio return and closed0106 full producer/list gates. The additional required original
 producer/consumer proof tests/test_original_support_ownership.py has sixteen
