@@ -33,8 +33,15 @@ including the reaching motion producer and genuine parent entries seven, eleven 
 Closed 0101 supplies its complete shared C consumption. Closed 0102 proves complete original
 af97/afa2, missile readiness/launch and genuine parent entries five/ten/fourteen. Closed 0103
 supplies shared fire consumption. Closed0104 now proves complete original ae5c/b0be;
-closed0107 supplies its verified shared consumption; continue selected diagnostics and full
-parent/class consumption. This Contract and Accept remain unchanged.
+closed0107 supplies its verified shared consumption; consume closed0110 diagnostics and full
+parent/class behavior in shared C. This Contract and Accept remain unchanged.
+
+Closed0110 proves the complete selected diagnostic using genuine near relocation,
+frame/title/label setup and cursor/string/hexadecimal services. Full source-value domains,
+all47 prepared worlds and declared genuine selected/unselected parent tails pass; invalid
+caption/platoon prefixes remain separate negative evidence. Consume complete heading/RNG,
+all nested child owners and semantic diagnostics together in shared canonical C. Recover
+remaining caller globals/device setup explicitly; no partial parent/class acceptance.
 
 Reproduce the complete first difference and recover the nested callback plus caller/global
 contract. Add the required saved heading/counter state and connect the shared RNG transaction

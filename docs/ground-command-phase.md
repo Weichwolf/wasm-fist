@@ -224,7 +224,7 @@ allocated/all-47 tests verify 608968 complete original returns, including 29439 
 returns at entries five/ten/fourteen in both banks. Separate full-DGROUP retention verifies
 3072 class-start/readiness returns and both new rack-state fields. See automatic-fire.md.
 Closed 0103 delivers complete shared child fire/rack/constructor consumption. Closed 0104
-proves ae5c/b0be; shared consumption is open 0107. Selected b152 and full parent/class/missile flight/
+proves ae5c/b0be; closed0107 delivers shared consumption. Selected b152 and full parent/class/missile flight/
 battle/PCM/outcomes still prevent full 0081 acceptance. No partial C bank is installed.
 
 ## Complete original remaining-command handoff
@@ -234,5 +234,14 @@ banks, with real allocator/constructor/height/audio returns. All eight required 
 2238296 complete DOS callbacks, including 57600 returns across all 47 prepared missions/eight
 maps/four details. Closed 0106 supplies complete support producers/ordered resources and
 ammunition/lifetime evidence. See [remaining commands](remaining-ground-command.md).
-Open 0107 consumes both complete children using existing weapon/resource/reference owners and
-explicit repairs; selected b152/full parent/class scheduling, battle and PCM remain open.
+Closed0107 consumes both complete children using existing weapon/resource/reference owners and
+explicit repairs; closed0110 proves complete selected b152 and frame setup with genuine text services.
+Full parent/class scheduling, battle and PCM remain open.
+
+Closed0110 completes the original selected diagnostic prerequisite. Both required gates
+pass without skips:364288 full diagnostic/parent returns plus608 actual frame/title/label
+setups and96 coupled selected-parent returns. The whole original text surface/memory is
+compared; invalid caption/platoon fetch prefixes are separate negative evidence. See
+[selected diagnostic](selected-ground-diagnostic.md). Implement the complete canonical
+heading/RNG/nested command phase next, with these semantic diagnostics and all existing
+child owners. Remaining caller/device setup, full class/battle and PCM remain explicit.
