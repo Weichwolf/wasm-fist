@@ -65,7 +65,15 @@ check is weakened. The exact failing/passing input/output and source/program pin
 are retained in malformed-wreck-repair.json. The failed production run is not
 accepted. Full production is restarted as session51758; inspect its terminal
 result before publishing C. Final style after this fixture-only fix passes.
-Actual browser acceptance and complete production acceptance remain pending.
+Actual browser acceptance is now terminal0; complete production acceptance remains pending.
+
+
+The exact normal30-second real browser helper is terminal0 under33734, with all
+driving/weapon/reload/pause/focus/shutdown/failed-start assertions and six captures.
+browser-after.png was visually reviewed: complete terrain/vehicle/HUD. All50 native
+CTests in the corrected full production recheck pass. WASM regression is still
+live under51758; no candidate C file is accepted before its terminal result.
+Receipt: /tmp/wasm-fist-0122-review/browser-scene.json.
 
 ## Next
 

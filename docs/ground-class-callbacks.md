@@ -389,3 +389,61 @@ Fixture digest:
 Receipt: /tmp/wasm-fist-0122-review/elevation-shared-original.json. Reproduce with
 the same pinned environment and PYTHONPATH using
 tests/fixtures/ground_class_callbacks/elevation_shared.py.
+
+
+## Complete decoded analog drive consumer
+
+The complete far f69:aae4 body consumes signed bytes+a1 (steering) and+a2
+(throttle). Steering values>=24 or<=-24 set requested hull heading+30 to
+current heading+26 plus the signed axis, with16-bit wrap; the dead zone retains
+the requested heading. Throttle values>=24 or<-24 are admitted, while -24
+belongs to its dead zone. The demand is the negated axis multiplied by2 and
+clamped to[-240,284]. Positive284 is unreachable from signed-byte input but
+remains an original bound; there is no normalization or inferred physical unit.
+
+After setting throttle+57, negative current speed+55 unconditionally calls the
+existing complete a19e profile owner with3. Otherwise mode+90>1 calls it with0;
+modes0/1 are retained. Each setter updates its class component and the four
+display bytes at8e58/8e5a/8e5c/8e5e. No clock, allocation, RNG, device read or
+target dereference occurs in this consumer.
+
+The exact analog_drive_contract.py model and required analog_drive.py fixture
+pass528,384 complete unchanged returns using four actual allocated actors:
+262,144 complete signed axis pairs,262,144 heading-word contexts and4,096 full
+profile-byte/sign-boundary contexts. Independent predictions guard the complete
+0x60000 memory, exact nested call scratch, AX/BX/DI and return segments/stack.
+The profile model reuses the separately proved complete ground-throttle owner.
+
+The separate analog_drive_shared.py fixture passes384 retained calls across the
+four actual actors and the three complete manual callbacks a5eb/a624/a62a.
+Actor/profile/display/pool/RNG state is retained between calls; only decoded
+input and the current-speed caller boundary are explicitly supplied. Every
+whole-memory/ABI observation matches. The pinned manual tables and genuine
+inactive returns are checked. This accepts these callers, not the complete
+a57a manual dispatch/device producers.
+
+analog_drive_retention.py passes4,096 complete original class-start/readiness
+returns, all four classes, both declared link inputs and every byte value of
+each axis. The full251-byte actor results, return ABI and RNG match independent
+initialization/readiness predictions; both axes are retained. The separate
+analog_input_copy.py passes4,096 complete original a55d decoded-record transfers:
+source bytes3..6 copy unchanged to actor+a1..a4. Every byte value of each channel,
+whole memory, AX/BX/DI/segments/stack and other allocated actors are checked.
+This does not identify the remaining channels as new gameplay controls or accept
+the platform/PM producer.
+
+Output digests: analog5f4ed9f5aa91329a1614ed7fa9e88a5f5a3019cfe0fd5d9dbbb461ce5dab7e16;
+retention7cf70edbb7fa4cca3ffe1456fc12fe4303e24c7551808146a39781653620f9fa;
+retained callers a562dec2df556d2610d80e8a24f223115ec60ab41430134f1e399ec0804c5c27;
+record copy17534bf3b525409c4668c56fd300b1d5f1f00883a1baca1996300d34a268778f.
+Exact receipts/source/model/image pins are under/tmp/wasm-fist-0119-class-research.
+Run all four exact fixtures with the pinned Unicorn environment and PYTHONPATH=tests:
+
+    PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache PYTHONPATH=tests /tmp/wasm-fist-decoder-oracle/bin/python tests/fixtures/ground_class_callbacks/analog_drive.py
+    PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache PYTHONPATH=tests /tmp/wasm-fist-decoder-oracle/bin/python tests/fixtures/ground_class_callbacks/analog_drive_retention.py
+    PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache PYTHONPATH=tests /tmp/wasm-fist-decoder-oracle/bin/python tests/fixtures/ground_class_callbacks/analog_drive_shared.py
+    PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache PYTHONPATH=tests /tmp/wasm-fist-decoder-oracle/bin/python tests/fixtures/ground_class_callbacks/analog_input_copy.py
+
+These are complete original subcontracts. Shared native/WASM axis consumption,
+full manual bank, class/world integration and playable battle/PCM remain required
+under0121; no partial class callback bank is installed.

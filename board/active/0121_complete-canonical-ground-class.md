@@ -73,6 +73,16 @@ isolated candidate until both-target/style/production/memory gates pass. Reuse
 this single weapon owner during complete class consumption; device producers
 and clock-source integration still require full-caller evidence.
 
+
+The exact analog_drive.py original fixture/model now proves528,384 complete
+f69:aae4 signed-axis/profile returns with actual allocated actors, whole memory
+and exact ABI/scratch. All signed-axis pairs, heading-word contexts and profile
+bytes/sign branches match. Three genuine manual callers add384 retained returns;
+all4,096 class-start/readiness axis-retention returns and4,096 decoded-record
+transfers pass. docs/ground-class-callbacks.md versions source/digests/reproduction.
+Reuse the existing drive-profile owner when implementing this consumer. Full
+manual/device producers, shared C and complete class/world acceptance remain open.
+
 ## Next
 
 Recover and independently predict the remaining complete common/class/behavior/
