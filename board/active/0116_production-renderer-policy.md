@@ -66,6 +66,25 @@ result and program/checker pins. All 419 original files still match their pinned
 hashes and remain read-only. The full session54164 regression and current-candidate
 browser/corpus gates remain open.
 
+The same candidate rejects all 12 independently executed native failed starts:
+missing arguments, invalid mode, missing/empty/truncated scenario, missing assets,
+truncated model palette and five malformed height values. Each exits with status 1,
+empty stdout and the expected usage diagnostic before scene publication. The fixture
+and exact program/source pins are retained in native_start_failures.py and
+renderer-integration-native-start-failures.json under the review directory.
+
+All ten native terrain-scene groups with --originals pass without skips under
+session88523, terminal0. renderer-integration-native-terrain.json retains the command,
+program pin and complete compact result; the redundant completed raw log is retired.
+The production regression has passed its first 14 native tests and remains live;
+this partial count does not accept the full integration or the WASM target.
+
+After the repaired softgl suite completed all 737 tests and its image comparison,
+the 1,185 regenerable PPM/RGBA outputs were retired, reclaiming another 928,297,953
+bytes. dot3-native-output-cleanup.json preserves every file hash and the reproduction
+command. The changed-scene before/after images, source, libraries and executables
+remain available. Active regression logs and inputs are retained.
+
 ## Next
 
 Poll session54164 to terminal completion without mutating its inputs. Require both
