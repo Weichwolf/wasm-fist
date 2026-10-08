@@ -28,6 +28,17 @@ their support. Original observation rejects reserved address-zero/one device sca
 
 ## Next
 
+The next all-class first difference is now localized: original T80/BMP phase12
+assigns ammunition that the previous composed class model omitted. All four
+unchanged assignment callbacks pass8,192 complete returns, all256 flag bytes
+and eight boundary ammunition words;1,024 original dispatch prefixes cover every
+phase byte. Whole original memory and return ABI are checked. See
+docs/ground-class-callbacks.md and
+/tmp/wasm-fist-0119-class-research/ammunition-refill.json. This reference checkpoint
+does not publish C or accept complete classes. Integrate the proved callbacks
+through the existing weapon owner after exact target-motion acceptance under0117;
+recover all other callbacks/globals before full class/world scheduling acceptance.
+
 Closed 0100 proves complete obstacle maneuver, predictive collision and idle turret returns,
 including the reaching motion producer and genuine parent entries seven, eleven and fifteen.
 Closed 0101 supplies its complete shared C consumption. Closed 0102 proves complete original
