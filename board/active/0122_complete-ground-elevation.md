@@ -36,6 +36,15 @@ Used malformed targets/invalid/truncated/late records fail without writes/output
 Shared WASM, strict style, complete production build and memory acceptance remain
 required. No candidate C/configuration file has been published to master yet.
 
+The separate exact elevation_shared.py fixture proves a nine-call original
+sequence across all four actual allocated actors without resetting controls.
+Complete memory/ABI predictions pass. Phase calls retain the shared manual step;
+manual raise, quick lower, clock wrap and target cancellation observe updates
+from previous actors. The C probe repeats this exact sequence through one shared
+controls pointer. Receipt: /tmp/wasm-fist-0122-review/elevation-shared-original.json.
+The final end state is controls(0,728,18), elevations(37,0,-585,-709). This is
+cross-caller control evidence, not a complete canonical class/clock-device gate.
+
 ## Next
 
 Finish exact-candidate native/WASM/style/production and production-fast-math memory

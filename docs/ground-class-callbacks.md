@@ -373,3 +373,19 @@ PYTHONPATH=tests PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
   /tmp/wasm-fist-decoder-oracle/bin/python \
   tests/fixtures/ground_class_callbacks/elevation.py
 ```
+
+The separate elevation_shared.py fixture runs nine actual original calls across
+the four allocated actors with one retained controls owner. It never resets the
+shared controls between calls, and predicts all memory and every return ABI.
+Phase/manual/quick-lower/center calls, unsigned clock wrap and target cancellation
+produce shared controls(0,728,18) and elevations(37,0,-585,-709). The C probe repeats
+the same sequence through one shared controls pointer. This does not accept the
+complete class or the device-clock producer.
+
+Output digest:
+4edda9f63c35cc2093bc77b82aba21f66dfe8c2d5edc5beb0d746b9861e037a1.
+Fixture digest:
+7d5147fb75ebb8d4403111d0c3f6472a9ba67c053b15fe889b5ffd12394a7246.
+Receipt: /tmp/wasm-fist-0122-review/elevation-shared-original.json. Reproduce with
+the same pinned environment and PYTHONPATH using
+tests/fixtures/ground_class_callbacks/elevation_shared.py.
