@@ -67,8 +67,11 @@ gates or actual scene/class acceptance. The new probes remain under
 /tmp/wasm-fist-0081-development and are not published.
 Required both-target all47/full-bank development is terminal0 under session35351:
 122,880 original and245,760 shared complete returns,188 prepared worlds and3840
-actors. Its full receipt is canonical-parent-development.json;
-complete heading-word/counter development is live under session7770. All inputs
+actors. Its full receipt is canonical-parent-development.json.
+Complete heading-word/counter development is terminal0 under session7770:
+264,192 original and528,384 shared complete returns, all65,536 values in each
+of the four heading fields and2,048 counter returns without skips. The full
+receipt is parent-domains-development.json. All inputs
 and outputs are checked; no filtered success or missing coverage accepts this
 prototype. Direct evidence is preserved in direct-parent-development.json.
 The draft CLI count check was corrected to use quotient/remainder on32-bit WASM;
@@ -92,11 +95,19 @@ Command runs after motion/phase/reload/history/maintenance and before ground con
 This is reference/model evidence; the shared canonical class caller remains unaccepted.
 The local consuming probe and regular test integration now pass seven complete
 native/WASM default groups without skips and96-unit LLVM19.1 style. Their strict
-full production regression is live under session57204. The newly versioned required
-corpus verifier is running the entire188-world/122880-return corpus against fully
-instrumented simulation/assets/probe libraries under session79517; its success
-receipt requires complete coverage, empty sanitizer stderr and no skips. Keep those
-inputs unchanged while running. Full heading domains are still live under7770.
+full production regression is live under session57204. The local required
+corpus verifier is terminal0 under session79517 against fully instrumented
+simulation/assets/probe libraries with production fast-math: all47 missions,
+188 prepared worlds,3,840 actors and122,880 complete native parent returns.
+Every one of the32 bank entries has3,840 cases; the full world/event digest
+cebbaa021e196a2360df991b6a111bd78cac2377a9504daf8df48f413abe485f
+matches the earlier complete native/WASM corpus. Required coverage is complete,
+sanitizer stderr is empty and there are no skips. The receipt is
+/tmp/wasm-fist-0081-review/sanitized-parent-corpus/corpus.json.
+Both completed raw logs were removed after retaining their hashes, counters and
+terminal results in the compact receipts. The production regression remains live;
+keep its inputs unchanged. The eight local C/configuration/test files are still
+unaccepted and excluded from this evidence checkpoint.
 No complete shared parent/class/battle/PCM acceptance follows from these checkpoints.
 
 Continue those C gates using this complete original reference; no partial bank or
