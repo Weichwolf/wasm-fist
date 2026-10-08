@@ -90,6 +90,15 @@ remain unchanged. Receipt: /tmp/wasm-fist-0120-review/original/corpus.json;
 terminal command/session/pins are recorded in candidate.json. Both production
 corpus targets and the instrumented native corpus now agree completely.
 
+Exact native ASan/UBSan heading/counter domains also complete under84842,
+terminal0:264,192 complete original/native parent and separate child returns,
+all65,536 values in each of four heading fields and2,048 counter cases without
+skips. Whole-world/event results match the independent prior domain digest:
+8f9bc24073cc968045fe2f684b1ade58a7c079c59e25f823d528f0c8809788a5.
+The instrumented program hash remains unchanged; both complete sanitizer scopes
+now pass. Receipt: /tmp/wasm-fist-0120-review/sanitized/domains.json;
+terminal command/session/program pins are recorded in candidate.json.
+
 The old retained development domain gate also completes,47755, terminal0:
 264,192 original/native/WASM parent returns each, all65,536 values in each of four
 heading fields and2,048 counter cases, no skips. Its prior-policy programs remain
@@ -101,8 +110,8 @@ and compact results; live exact-gate logs and failure evidence remain retained.
 
 Keep all exact-candidate inputs unchanged. Full production regression remains live
 under82768 and exact original/native/WASM heading/counter domains under13754.
-Exact native sanitizer domains remain live under84842. Both complete corpus
-gates have passed. Require all three remaining terminal results and unchanged source/program
+Both complete corpus and both sanitizer scopes have passed. Require the two
+remaining terminal results and unchanged source/program
 pins before publication; no partial coverage or scene-only success accepts C.
 Retain compact results and clean completed artifacts.
 

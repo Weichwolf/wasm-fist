@@ -61,6 +61,15 @@ inventory is discovery, not independently predicted global acceptance. Receipt:
 /tmp/wasm-fist-0119-class-research/reached-ground-class-global-observer.json.
 Classify and predict these writes through their existing semantic owners before
 complete class consumption; no copied scratch fields are added to shared C.
+A complete observational writer pass now accounts for all106 bytes with their
+unchanged original instruction addresses, while preserving the same4,096-return
+digest. Receipt: reached-ground-class-global-writers.json in the class research
+directory. The first arithmetic writes come from existing distance/squared-distance
+helpers; command, target-search, predictive collision and PM scratch writes are
+identified. This is provenance for the next independent whole-state prediction,
+not global/class acceptance. Diagnose failures under distinct receipt filenames;
+the original T80 missing-provider failure has been explicitly reproduced and
+retained in class-first-unconfigured-service-reproduction.json.
 
 Closed0117 now publishes the exact canonical target-motion owner after its full
 production/original/style/memory/presentation gates. Active0120 isolates complete
