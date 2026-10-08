@@ -178,6 +178,24 @@ acceptance-current-audit.json maps all twelve behavior methods and the canonical
 requester/source/atomicity/style/memory/visual contracts, retaining pending full production,
 runtime publication and full-game gates explicitly. No completion claim follows from the audit.
 
+Complete current native/regression checkpoint (2026-10-08): the corrected sequential
+production native build and all46 CTests pass in 1095.280 seconds. The same gate88655
+has completed the WASM build and renderer Node probe, and continues through its WASM suites.
+Default optional original checks are not inferred from these default suite passes; required
+original/canonical checks have their separate complete evidence. The native full receipt is
+`/tmp/wasm-fist-0107-review/native-production-current-receipt.json` with all46 result hashes.
+
+Additional existing preparation and controlled-driving regressions were rerun on both current
+production targets with `--originals --oracle`, because this WI extends canonical world storage.
+Both seven-group gates pass without skips. Preparation covers 847 fixtures, 11124 saved
+records, 1168 complete passes and twelve atomic rejections per target, with 656 complete
+original DGROUP returns. Driving covers 123 fixtures, 1368 complete boundaries, 4449 installed
+objects and twenty-three explicit unsupported/input rejections per target. These are complete
+declared preparation/control boundaries, not a living-battle or complete-game proof. Source
+pins still match the passed style/domain/canonical/memory gates. Exact commands, results and
+log hashes are in canonical-regressions-current-receipt.json; both completed raw logs were
+removed after retaining compact evidence. The live full production log is retained.
+
 Use closed0104 complete original source/required result pins, closed0105
 consumed audio return and closed0106 full producer/list gates. The additional required original
 producer/consumer proof tests/test_original_support_ownership.py has sixteen
@@ -189,9 +207,10 @@ See docs/remaining-ground-command.md and docs/support-state-boundary.md.
 
 ## Next
 
-Finish the verified-live corrected full sequential production build/test gate88655; do not
-restart it on observation timeouts or change its source/program inputs. Current sanitizer
-domain/canonical/scene and additional original coupling gates pass. Consolidate these with
+Finish the WASM portion of verified-live corrected full sequential production gate88655;
+the native build/all46 CTests pass. Do not restart it on observation timeouts or change its
+source/program inputs. Current sanitizer domain/canonical/scene, original coupling and existing
+both-target original preparation/driving gates pass. Consolidate these with
 both-target canonical and actual scene evidence against exact candidate source/program pins
 once the complete production run finishes successfully. The all47 real preparation-to-
 consumption probe passes both targets. Retain compact results and remove obsolete owned
