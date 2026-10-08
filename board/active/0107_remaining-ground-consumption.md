@@ -78,6 +78,18 @@ The C implementation remains uncommitted until a verified bounded success is est
 Compact previous checkpoints remain there; completed obsolete raw logs are removed only after
 recording their results/hashes. Prior accepted runtime evidence does not cover these changes.
 
+Cleanup/push checkpoint (2026-10-08): the current production native build and all46 CTest
+tests pass, including twelve station/support groups and 247147 transitions; the complete
+output digest is `d1ead219bf39febfce22281102ca10c63c2c3a6247d5f4403fc9039cd8f75c04`.
+The WASM build completed; its sequential behavior suites are still running. Neither these
+partial production results nor the unregistered canonical-contract draft close this WI.
+All pinned runtime/test/build inputs match the running gate. The checkout occupies 348MiB;
+sixteen ignored Python bytecode files and the superseded probe-only compile log were removed
+(207702 bytes), with hashes and compile output preserved in
+`/tmp/wasm-fist-0107-review/cleanup-push-receipt.json`. Live logs, the current required style
+result, compact reference evidence and unfinished implementation are retained. The build
+script already directs Python caches and disposable build output to `/tmp`.
+
 Closed0108 now supplies `tests/remaining_ground_corpus.py`: all47 real-height/four-detail
 original preparations and current native producer observations pass for 188 worlds, 3840
 ground actors and 944 ordered five-round artillery resources (both authored variants).
