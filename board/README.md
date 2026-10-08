@@ -74,6 +74,7 @@ frozen reconstruction, not rewrite completion.
 | 0113 | Independent synthetic full-bank/retained world-event models and reached TRAIN1 M1 command order through update54 proved by three required original groups without skips; full shared C/class acceptance remains open. |
 | 0114 | Complete original target-aware turret order for all four ground classes proved by four required groups and279880 full returns, including heading/branch domains, retained moving targets and actual release/reuse. Shared consumption/full0081 remain open. |
 | 0115 | Target-motion original gate strengthened to five required groups and311800 full returns, preserving prior digests and adding both angle modes, self aliases and signed coordinate wrap. Shared C gates/full0081 remain open. |
+| 0116 | Active production renderer numerical/shared-heap repair: dependency contracts pass on both targets and all 737 native renderer tests pass; exact owning-project integration gates remain open. |
 | 0042 | Menus, settings, campaign/profile progression and persistent save/load. |
 | 0043 | All missions/maps/vehicles, AI, combat, objectives and resolved outcomes. |
 | 0044 | Keyboard/mouse/joystick, devices, audio timing and link behavior on both platforms. |

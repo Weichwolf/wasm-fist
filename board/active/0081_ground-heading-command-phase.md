@@ -287,6 +287,22 @@ artifacts stay under /tmp. This documentation checkpoint publishes no unfinished
 root C, test, build-policy or dependency-pin changes. Full 0081 and the independent
 complete-game WASM streak remain open.
 
+The integrated development regression is now terminal0 under session74828:
+49 native CTests, 46 WASM Python invocations (45 unittest runs plus the complete
+240-case lifetime wrapper) and both Node presentation probes finish. This compiler
+phase was incremental; it does not prove a fresh warning-free production build.
+Exact source pins, complete suite summaries and the retired raw-log hash are in
+/tmp/wasm-fist-0115-review/owned-integrated-production-all-development.json.
+
+The remaining pinned renderer DOT3 failure is repaired on the separately published
+softgl branch by f93dbe9e744b48fa01d7f8eb8a44d2ff510b2d18. Native/WASM production
+DOT3/clamp contracts and the full 737-test native renderer suite pass. Active0116
+owns the separate dependency/shared-heap integration, with exact published-base
+source pins, strict style already passed and a fresh full project regression live
+under session54164. Root simulation prototypes remain excluded from that candidate
+and from this documentation commit. Continue full class/caller/battle/PCM proof;
+no complete-game run or C feature acceptance follows from these development gates.
+
 Continue those C gates using this complete original reference; no partial bank or
 complete living-class/battle/PCM claim follows from the reference checkpoint.
 
