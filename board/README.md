@@ -62,7 +62,8 @@ frozen reconstruction, not rewrite completion.
 | 0101 | Complete shared obstacle maneuvers, idle turret and predictive collision delivered; both-target required original/domain/all-47, full-build/style/memory and actual scene gates pass. Full 0081 and living battle/PCM remain open. |
 | 0102 | Complete original af97/afa2, missile readiness/launch and genuine parent entries five/ten/fourteen delivered; required full domains/allocations/all-47/retention gates pass. Shared C is delivered by 0103 and full 0081 remains open. |
 | 0103 | Complete shared automatic fire, ordered M3/BMP rack service, real type-15 constructor and logical notifications delivered; required both-target original/canonical, full-build/style/memory and scene gates pass. Full 0081 remains open. |
-| 0104 | Open complete original ae5c/b0be and genuine parent-entry nine/twelve recovery; remaining selected diagnostics and full 0081 stay open. |
+| 0104 | Active complete original ae5c/b0be and genuine parent-entry nine/twelve recovery; consumed audio return evidence is required from 0105. Full 0081 stays open. |
+| 0105 | Active original op-64 queue/return and consuming retreat/support coupling proof using real sound banks; PCM and complete 0104 remain open. |
 | 0042 | Menus, settings, campaign/profile progression and persistent save/load. |
 | 0043 | All missions/maps/vehicles, AI, combat, objectives and resolved outcomes. |
 | 0044 | Keyboard/mouse/joystick, devices, audio timing and link behavior on both platforms. |

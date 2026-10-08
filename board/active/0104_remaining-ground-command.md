@@ -1,6 +1,6 @@
 Type: Work item
 Title: Recover complete remaining ground command entries nine and twelve
-Depends: 0103
+Depends: 0103, 0105
 
 ## Contract
 
@@ -38,3 +38,12 @@ retain exact coverage, source/reference/original pins and reproduction in compac
 Existing consuming regressions remain valid. Clean obsolete owned artifacts and commit/push
 this complete recovery checkpoint. Shared consumption, selected b152, complete 0081/class/
 battle/missile flight/PCM/outcomes and independent complete-game WASM acceptance stay open.
+
+## Reached audio return prerequisite
+
+Unchanged b0be calls the real per-class smoke service in retreat mode, then consumes AL.
+Sound-disabled/source-unmatched/stock/capacity paths return different AX values; an admitted
+c047 request reaches PM op-64, whose enabled handler returns a sample address. Complete
+acceptance therefore needs the actual consumed response, not an unconsumed-request adapter.
+Active 0105 must prove this prerequisite and heap-placement coupling before this unchanged full
+Contract/Accept can pass. No inferred support repair or incomplete parent bank is installed.
