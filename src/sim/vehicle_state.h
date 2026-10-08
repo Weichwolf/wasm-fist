@@ -50,8 +50,8 @@ typedef struct {
     /* Original class weapon-slot order; identities and fire/reload behavior
      * are decoded with the firing rules, not inferred from ammunition size. */
     uint16_t rounds[FIST_VEHICLE_WEAPON_SLOTS];
-    /* T80's fifth station ammunition is a word. Other classes retain their
-     * distinct trailing parameter until its additional weapon rules are owned. */
+    /* Smoke stock: T80's fifth station is a word; M1/M3 use a byte.
+     * BMP retains its trailing byte without spending it for smoke. */
     uint16_t class_parameter;
     /* Original M3/BMP +b5/+b6 surface-to-air reserves. */
     uint8_t cycle[2];

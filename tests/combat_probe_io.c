@@ -61,7 +61,7 @@ void fist_probe_write_other_actor(const fist_other_actor *actor) {
     } else if (allocation.type == LAST_TYPE) {
         const fist_type27_state *state = &actor->state.type27;
         printf("type27 %u %u %u %u\n", (unsigned)state->damage, (unsigned)state->debris_parameter,
-               (unsigned)state->animation_counter, (unsigned)state->emission_counter);
+               (unsigned)state->rounds, (unsigned)state->emission_counter);
     }
 }
 

@@ -63,7 +63,7 @@ int fist_probe_write_mission_world(const fist_mission_world *world) {
         for (size_t side = 0; side < FIST_DAMAGE_SIDES; ++side) {
             printf("artillery %zu", side);
             for (size_t entry = 0; entry < FIST_MISSION_ARTILLERY_SIDE_SLOTS; ++entry) {
-                const fist_pool_allocation allocation = state->artillery[side][entry];
+                const fist_pool_allocation allocation = state->artillery[side][entry].allocation;
                 printf(" %u %u %u %u", (unsigned)allocation.type, (unsigned)allocation.slot,
                        (unsigned)allocation.registry_index, (unsigned)allocation.value);
             }

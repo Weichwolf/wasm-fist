@@ -5,6 +5,7 @@
 #include "assets/orders.h"
 #include "assets/units.h"
 #include "sim/automatic_fire.h"
+#include "sim/ground_support.h"
 #include "sim/object_pool.h"
 #include "sim/other_damage.h"
 #include "sim/primary_fire.h"
@@ -52,6 +53,7 @@ typedef union {
     fist_explosion explosion;
     fist_saved_object_base saved_base;
     fist_surface_air_missile surface_air;
+    fist_support_marker support_marker;
 } fist_mission_object;
 
 typedef struct {
@@ -60,7 +62,7 @@ typedef struct {
     uint16_t artillery_count[FIST_DAMAGE_SIDES];
     /* Actual runtime identities, in original registry order; no saved near
      * pointer translation. After preparation, entries beyond each count are NO_SLOT. */
-    fist_pool_allocation artillery[FIST_DAMAGE_SIDES][FIST_MISSION_ARTILLERY_SIDE_SLOTS];
+    fist_artillery_resource artillery[FIST_DAMAGE_SIDES][FIST_MISSION_ARTILLERY_SIDE_SLOTS];
     uint8_t prepared;
 } fist_mission_preparation;
 
@@ -68,7 +70,12 @@ enum {
     FIST_NOTICE_TARGET = 0,
     FIST_NOTICE_SAM_EMPTY = 1,
     FIST_NOTICE_SAM_TARGET = 2,
-    FIST_NOTICE_SAM_CAPACITY = 3
+    FIST_NOTICE_SAM_CAPACITY = 3,
+    FIST_NOTICE_SMOKE_EMPTY = 4,
+    FIST_NOTICE_AIR_CONFIRMED = 5,
+    FIST_NOTICE_AIR_UNAVAILABLE = 6,
+    FIST_NOTICE_ARTILLERY_CONFIRMED = 7,
+    FIST_NOTICE_ARTILLERY_UNAVAILABLE = 8
 };
 
 /* Single original 969e/96a0 display owner. Target class/side/variant or typed
@@ -99,7 +106,38 @@ typedef struct {
     fist_target_notice target_notice;
     /* Original c047 selector history 9fdd, separate from bf3c's cooldown. */
     uint16_t sound_selector;
+    fist_mission_support support;
+    fist_timed_advisory advisory;
+    /* Original fixed artillery text at 7a52 with duration 7a50 and refresh 87c2.
+     * Typed message presence, without storing a guest text buffer. */
+    uint16_t artillery_message_ticks;
 } fist_mission_world;
+
+/* Complete original support reset/configuration. Resets queue admission and
+ * side cooldowns to clock-480; retains global request age and queue tails.
+ * Canonical artillery resource counts belong to mission preparation. Null or
+ * invalid input preserves world; configuration may alias its existing owner. */
+int fist_mission_world_configure_support(fist_mission_world *world,
+                                         const fist_support_configuration *configuration,
+                                         uint16_t clock);
+
+/* Complete ae5c station child using canonical target lifetimes, original
+ * literal preferences and the existing mechanical/voice owners. Invalid used
+ * variants fail atomically; released targets cannot bind successors. No RNG,
+ * parent dispatch or PCM. All failures preserve world/output. */
+int fist_mission_world_select_station(fist_mission_world *world,
+                                      fist_ground_station_request request,
+                                      fist_ground_station_result *out);
+
+/* Complete b0be child and queued support request producers. Explicit config is
+ * required only on admitted support paths. Typed clocks repair the third/fourth
+ * gun defect; retained references prevent successor binding. Smoke attempts use
+ * the proved source-unmatched support branch independently of emitted sound or
+ * device/bank responses. Dispatch/flight/PCM remain separate; invalid used
+ * inputs preserve world/output atomically. */
+int fist_mission_world_request_support(fist_mission_world *world, const fist_klc_image *height,
+                                       fist_ground_support_request request,
+                                       fist_ground_support_result *out);
 
 /* Borrowed read-only physical projection shared by collision and target search.
  * Ground pose uses caller storage; other poses refer to canonical payloads. */

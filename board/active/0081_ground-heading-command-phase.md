@@ -33,7 +33,7 @@ including the reaching motion producer and genuine parent entries seven, eleven 
 Closed 0101 supplies its complete shared C consumption. Closed 0102 proves complete original
 af97/afa2, missile readiness/launch and genuine parent entries five/ten/fourteen. Closed 0103
 supplies shared fire consumption. Closed0104 now proves complete original ae5c/b0be;
-finish its shared consumption under active0107, then selected diagnostics and full
+closed0107 supplies its verified shared consumption; continue selected diagnostics and full
 parent/class consumption. This Contract and Accept remain unchanged.
 
 Reproduce the complete first difference and recover the nested callback plus caller/global

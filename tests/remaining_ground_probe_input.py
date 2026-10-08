@@ -25,6 +25,7 @@ def encode(f):
     h[28:32] = bytes((f['count'], f['air_used'], f['artillery_used'], f['full']))
     struct.pack_into('<4H4H', h, 32, *f['guns'], *f['seeds'])
     h[48], h[49], h[51] = f['cursor'], f['retained'], f['invalid']
+    h[50] = f.get('post_requester', 0)
     struct.pack_into('<2i', h, 52, *f['target_pose'])
     store(h, 60, f['display_ticks'])
     h[62], h[63] = f['display_kind'], f['advisory']

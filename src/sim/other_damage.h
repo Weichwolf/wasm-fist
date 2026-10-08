@@ -33,7 +33,8 @@ typedef struct {
 typedef struct {
     uint8_t damage;
     uint16_t debris_parameter;
-    uint16_t animation_counter;
+    /* Original +1f: five prepared rounds, spent by support and cleared on death. */
+    uint16_t rounds;
     uint16_t emission_counter;
 } fist_type27_state;
 

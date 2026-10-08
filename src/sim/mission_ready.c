@@ -1,5 +1,7 @@
 #include "sim/mission_world.h"
 
+#include "sim/ground_support.h"
+
 #include "assets/klc.h"
 #include "assets/units.h"
 #include "sim/ground.h"
@@ -46,7 +48,7 @@ enum {
     TARGET_SECONDARY_CLEAR = 8,
     ARTILLERY_SECONDARY_CLEAR = 24,
     ARTILLERY_FLAGS = 70,
-    ARTILLERY_COUNTER = 5
+    ARTILLERY_ROUNDS = 5
 };
 
 static int sample_pose(const fist_klc_image *height, fist_object_pose *pose) {
@@ -108,8 +110,13 @@ static int prepare_artillery(fist_mission_world *world, fist_other_actor *actor,
         return -1;
     }
     actor->projection_extent = extents[actor->mode];
-    actor->state.type27.animation_counter = ARTILLERY_COUNTER;
-    world->preparation.artillery[side][count] = actor->allocation;
+    actor->state.type27.rounds = ARTILLERY_ROUNDS;
+    fist_object_reference reference = {0};
+    if (fist_object_pool_reference(&world->pool, actor->allocation.slot, &reference) != 0) {
+        return -1;
+    }
+    world->preparation.artillery[side][count] =
+        (fist_artillery_resource){actor->allocation, reference};
     world->preparation.artillery_count[side] = (uint16_t)(count + 1);
     if (side != 0) {
         if (actor->mode != 1) {
@@ -228,7 +235,7 @@ int fist_mission_world_prepare(fist_mission_world *world, const fist_klc_image *
     prepared->preparation = (fist_mission_preparation){0};
     for (size_t side = 0; side < FIST_DAMAGE_SIDES; ++side) {
         for (size_t entry = 0; entry < FIST_MISSION_ARTILLERY_SIDE_SLOTS; ++entry) {
-            prepared->preparation.artillery[side][entry].slot = FIST_POOL_NO_SLOT;
+            prepared->preparation.artillery[side][entry].allocation.slot = FIST_POOL_NO_SLOT;
         }
     }
     int status = 0;

@@ -230,7 +230,7 @@ static int last_damage(fist_other_actor *actor, const fist_damage_environment *e
     }
     actor->mode = 1;
     state->debris_parameter = LAST_DEATH_PARAMETER;
-    state->animation_counter = 0;
+    state->rounds = 0;
     actor->projection_extent = LAST_DEATH_EXTENT;
     actor->flags = (uint8_t)((actor->flags & (uint8_t)~MOTION_FLAGS) | DELETED_FLAG);
     actor->secondary_flags &= (uint8_t)~LAST_SECONDARY_CLEAR;
