@@ -96,6 +96,15 @@ ground actors and 944 ordered five-round artillery resources (both authored vari
 This proves the prepared producer observations; consuming children and captured-lifetime
 acceptance are still pending. Compact pins/results are in prepared-corpus-receipt.json.
 
+Closed0109 supplies independent canonical child inputs and typed predictions for all47
+prepared missions/four details: 26880 stimuli, 42240 actual DOS returns, 23040 real
+constructor-height returns and 19200 matched-source audio contexts pass. The reference
+verifier has no dependency on the unfinished consuming test or shared-C program.
+These proved inputs now support the pending C producer-to-consumer/lifetime gate.
+The current production consuming fixture gate also passed on WASM: twelve groups,
+247147 transitions and the same complete digest as native. The remaining default
+WASM production suites are still running; neither result closes this WI.
+
 Use closed0104 complete original source/required result pins, closed0105
 consumed audio return and closed0106 full producer/list gates. The additional required original
 producer/consumer proof tests/test_original_support_ownership.py has sixteen
