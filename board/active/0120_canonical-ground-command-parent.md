@@ -50,14 +50,41 @@ e8da6e3e6b0c2e8c7404fddcc8419577d287a0b7a4017016745909c564792133.
 Exact source/program/command/results are in
 /tmp/wasm-fist-0120-review/candidate.json and default.json.
 
+Fresh ASan/UBSan default verification is terminal0 under64833, matching every
+production result/digest with empty sanitizer stderr. The instrumented simulation,
+asset and probe libraries compile in58 steps with production fast-math enabled.
+Three additional exact-program gates pass on native, WASM and sanitizer builds:
+70 complete missile/smoke constructor world/event returns,2,042 complete atomic
+rejections (including12 post-constructor and2 post-missile failures), and156 captured
+allocation-lifetime checks. Full streams/output canaries and stderr are checked;
+all prior independent expected digests match. Direct fixture/source/program/command
+pins and results are under /tmp/wasm-fist-0120-review/direct and candidate.json.
+
+Actual native TRAIN1 full input/weapon/pause/focus/shutdown checks pass,46998,
+terminal0, with thirteen accepted full frames. The first browser attempt is
+terminal1 after the wrapper's total30-second timeout; four earlier valid captures
+do not accept that attempt. A milestone-only temporary checker completes the same
+unchanged scene assertions in24.91seconds. The unchanged normal30-second browser
+helper then completes in15.20seconds,96887, terminal0: all input/reload/selection/
+cycle/fifth-station/focus/shutdown/failed-start assertions pass with six captures.
+Actual native and browser after-frames are visually reviewed. The failed attempt
+remains explicitly recorded; no timeout, scene assertion or game input was changed.
+
+The old retained development domain gate also completes,47755, terminal0:
+264,192 original/native/WASM parent returns each, all65,536 values in each of four
+heading fields and2,048 counter cases, no skips. Its prior-policy programs remain
+development evidence; the exact current-policy original/domain gates below are
+still required. Completed published logs have been retired with hashes, counters
+and compact results; live exact-gate logs and failure evidence remain retained.
+
 ## Next
 
 Keep all exact-candidate inputs unchanged. Full production regression remains live
 under82768, exact original/native/WASM corpus under66293 and exact heading/counter
-domains under13754. Fresh production-fast-math sanitizer build/default checks are
-under64833. Require their complete terminal results, full sanitizer corpus/domain
-coverage, remaining lifetime/world/event/failure evidence and actual native/browser
-presentation before publication. Retain compact results and clean completed artifacts.
+domains under13754. Exact native sanitizer corpus/domain gates are live under22810
+and84842. Require all five complete terminal results and unchanged source/program
+pins before publication; no partial coverage or scene-only success accepts C.
+Retain compact results and clean completed artifacts.
 
 ## Accept
 
