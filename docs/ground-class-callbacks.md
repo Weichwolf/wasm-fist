@@ -138,5 +138,44 @@ PYTHONPATH=tests PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
 ```
 
 This original-only checkpoint accepts neither shared class C nor world scheduling.
-The complete roster-visibility domain and remaining secondary rack callbacks are
-still required alongside every pre-engine global write.
+The remaining secondary rack callbacks and every pre-engine global write still
+need independent proof.
+
+## Complete physical-roster visibility
+
+The complete a904 domain now passes81,120 unchanged original returns with actual
+normal allocations:65,536 phase/flag pairs,12,288 counter/cursor/candidate
+combinations,1,024 self candidates,224 all-type/range combinations and2,048
+type-26 variant/range combinations. A live candidate in the upper half of the
+physical roster proves those slots are not consulted. Null and wreck candidates,
+byte-counter wrap and every actor class are checked. Genuine visibility returns
+include5,228 visible and4,204 non-visible results using the existing height owner.
+
+The predictor checks all DOS/image/other-object memory outside the PM mailbox;
+the original child provider independently checks every mailbox/external/code
+write and the real numerical kernel result. Near-call scratch words and the
+return ABI are exact. The initial failed test predicted an extra stack write at
+8ffa. Actual e21c/e25c/e286 pushes reuse8ffc; the declared PM provider stops before
+CALL e339. Correcting that independent expectation preserves the whole-memory
+guard. Failure evidence is retained in roster-stack-expectation-failure.json.
+
+Output digest:
+201149198fa6eae42a89901bdd5cf15f1a78cbee073e06948ee87f8d89dfaa85.
+Fixture digest:
+b549acf72cf830511454e0d64a46736c8fc677763ad8003def444c05633f4541.
+Receipt: /tmp/wasm-fist-0119-class-research/roster-visibility.json. This complete
+callback proof does not accept shared class C, full scheduling or the game.
+
+The exact verified status/roster fixtures are versioned under
+tests/fixtures/ground_class_callbacks. They deliberately execute every required
+group without filters and write receipts under /tmp. With the pinned oracle
+environment, reproduce directly from the repository:
+
+```sh
+PYTHONPATH=tests PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
+  /tmp/wasm-fist-decoder-oracle/bin/python \
+  tests/fixtures/ground_class_callbacks/status_timers.py
+PYTHONPATH=tests PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
+  /tmp/wasm-fist-decoder-oracle/bin/python \
+  tests/fixtures/ground_class_callbacks/roster_visibility.py
+```

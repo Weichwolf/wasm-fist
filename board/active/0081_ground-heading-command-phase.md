@@ -34,8 +34,15 @@ Independent whole-memory/return predictions prove wrapping, ordered flag clearin
 and43,392 logical voice27 plus52,000 voice35 entries in explicitly muted contexts.
 See docs/ground-class-callbacks.md and status-timers.json under the class research
 directory. This is original-only evidence; shared class/world/PCM acceptance stays
-open. The complete a904 roster domain and M3/BMP secondary rack callbacks remain
-required. Active0120 production inputs remain frozen while its five gates run.
+open. The complete a904 domain also passes81,120 unchanged original returns:
+all phase/flag pairs, byte-counter/cursor edges, self candidates, all28 target
+types and every type-26 variant, with actual allocations and9,432 genuine
+visibility returns. Whole DOS memory, PM/provider writes and exact return scratch
+are guarded; the initial incorrect stack expectation remains failure evidence.
+Exact verified status/roster fixtures are versioned under
+tests/fixtures/ground_class_callbacks with unchanged receipt hashes. M3/BMP
+secondary rack callbacks remain required. Active0120 production inputs stay frozen
+while its five gates run.
 
 Closed0117 now publishes the exact canonical target-motion owner after its full
 production/original/style/memory/presentation gates. Active0120 isolates complete
