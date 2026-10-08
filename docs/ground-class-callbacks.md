@@ -447,3 +447,46 @@ Run all four exact fixtures with the pinned Unicorn environment and PYTHONPATH=t
 These are complete original subcontracts. Shared native/WASM axis consumption,
 full manual bank, class/world integration and playable battle/PCM remain required
 under0121; no partial class callback bank is installed.
+
+
+## Complete curved manual turret helpers
+
+Complete a376/a3a8 first call the existing aae8 driver-control refresh, then the
+same a2a8 target cancellation used by elevation. A nonzero opaque saved target
+is cleared and gun elevation becomes0; no target dereference or requested-offset
+reset occurs. The shared selector word9746 remains unchanged by these helpers.
+
+Left uses(((160-selector)&65535)>>2)&30, right uses(((selector-160)&65535)>>2)&30,
+as a byte index into the original16-word curve at9748:
+30,30,30,30,36,45,60,91,182,122,212,242,364,364,364,364.
+This original curve is not monotonic; no smoothing or inferred physical unit is
+accepted here. View byte+86 equal1 keeps the step; other views halve it with a
+logical shift and views>3 halve it again. Subtract/add the resulting step from
+requested relative turret offset+8b with16-bit wrap, without a clamp.
+
+The exact manual_turret_contract.py model and manual_turret.py fixture pass393,216
+complete unchanged actual allocated returns:131,072 view/curve/target/control
+contexts,131,072 selector-word and131,072 requested-offset-word cases. All four
+driver-refresh class methods execute unchanged. Independent whole0x60000 memory,
+AX/BX/DI/segments/return-stack and exact nested scratch predictions match, including
+the saved AX/DI and class return address when control refresh is admitted.
+
+The separate manual_turret_shared.py fixture proves2,048 retained calls through
+both complete a59c/a5a6 wrappers, all four allocated actors, both directions and
+every view byte. These genuine wrappers set9746 to88/232 respectively, selecting
+curve value212 before view scaling. Only explicit current view/control/target
+boundaries are supplied; all other actor/world/display/pool/RNG state is retained.
+The complete memory/ABI predictions match without hooks or substituted returns.
+
+Output digests: helper1fa94c96e5f5708bee26f871d82dd367f2d48de3b786fb7afa2fededb15b7bfe;
+retained wrappers9c69baaa03ffb24e96fc54b0cf94691e8335df55bea8ee26be7f04899f15c902.
+Exact fixture/model/image pins and compact receipts are under
+/tmp/wasm-fist-0119-class-research/manual-turret-original.json and
+manual-turret-shared.json. Reproduce both complete gates:
+
+    PYTHONPATH=tests PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache /tmp/wasm-fist-decoder-oracle/bin/python tests/fixtures/ground_class_callbacks/manual_turret.py
+    PYTHONPATH=tests PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache /tmp/wasm-fist-decoder-oracle/bin/python tests/fixtures/ground_class_callbacks/manual_turret_shared.py
+
+This accepts original helper/wrapper behavior only. Shared C must reuse the
+existing driver refresh and target-cancellation owner, preserving semantic runtime
+references. Complete a57a/device/class/world/PCM acceptance remains under0121.

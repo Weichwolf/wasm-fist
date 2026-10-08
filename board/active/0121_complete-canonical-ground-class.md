@@ -83,6 +83,15 @@ transfers pass. docs/ground-class-callbacks.md versions source/digests/reproduct
 Reuse the existing drive-profile owner when implementing this consumer. Full
 manual/device producers, shared C and complete class/world acceptance remain open.
 
+
+The versioned manual_turret.py model/fixture adds393,216 complete original
+a376/a3a8 returns: all selector/requested-word domains and complete view/curve/
+target/control contexts. Whole memory and exact refresh/target-clear scratch/ABI
+match on actual allocated actors. Both genuine a59c/a5a6 wrappers add2,048 retained
+returns across all four actors/views/directions. The curve and logical view
+scaling are recovered explicitly; shared C must reuse driver refresh and the
+existing target-cancellation owner. Full a57a/class/device acceptance remains open.
+
 ## Next
 
 Recover and independently predict the remaining complete common/class/behavior/
