@@ -274,7 +274,12 @@ static int bearing_target(fist_mission_world *world, const goal_case *input, uin
             return -1;
         }
         if (action == TARGET_BAD_PAYLOAD) {
-            world->objects[leader].vehicle.type = UINT16_MAX;
+            /* Corrupt the active payload's tag, independent of union layout. */
+            if (world->pool.slots[leader].type == WRECK) {
+                world->objects[leader].wreck.allocation.type = UINT16_MAX;
+            } else {
+                world->objects[leader].vehicle.type = UINT16_MAX;
+            }
         }
         return 0;
     }

@@ -110,31 +110,31 @@ typedef struct {
 } fist_vehicle_command;
 
 typedef struct {
-    uint16_t type;
-    uint16_t registry_index;
-    uint16_t generation;
+    size_t component_size;
+    fist_vehicle_command command;
     int32_t map_x;
     int32_t map_y;
     int32_t altitude;
-    uint8_t ground_height;
-    uint8_t platoon;
-    uint8_t member;
-    fist_vehicle_drive drive;
-    fist_vehicle_turret turret;
-    fist_vehicle_weapons weapons;
-    fist_vehicle_command command;
+    uint16_t type;
+    uint16_t registry_index;
+    uint16_t generation;
     uint16_t projection_extent;
     uint16_t projection_scale;
     uint16_t camera_height;
     uint16_t control_flags;
+    fist_vehicle_turret turret;
+    fist_vehicle_weapons weapons;
+    fist_vehicle_drive drive;
+    /* Newest first; +6d in random_phases[0] is the shared sampling counter. */
+    fist_vehicle_position_sample position_history[FIST_VEHICLE_POSITION_SAMPLES];
+    uint8_t ground_height;
+    uint8_t platoon;
+    uint8_t member;
     uint8_t object_flags;
     uint8_t secondary_flags;
     uint8_t operating_flags;
     /* Saved +36 byte; readiness clears it. Later class meaning is separate. */
     uint8_t reset_state;
-    uint8_t random_phases[2];
-    /* Newest first; +6d in random_phases[0] is the shared sampling counter. */
-    fist_vehicle_position_sample position_history[FIST_VEHICLE_POSITION_SAMPLES];
     uint8_t control_mode;
     uint8_t turret_view_mode;
     uint8_t hull_view_mode;
@@ -144,11 +144,11 @@ typedef struct {
     uint8_t reload_countdown;
     uint8_t damage;
     uint8_t damage_alarm_countdown;
+    uint8_t random_phases[2];
     /* Original +a9/+aa part selectors and +ab companion animation byte. */
     uint8_t animation_selectors[FIST_VEHICLE_ANIMATION_SELECTORS];
     /* Complete original initialized component payload. Owned format data;
      * individual component damage/animation semantics remain to be decoded. */
-    size_t component_size;
     uint8_t components[FIST_VEHICLE_COMPONENT_BYTES];
 } fist_vehicle_state;
 

@@ -1,6 +1,7 @@
 #include "sim/weapon_control.h"
 
 #include "assets/units.h"
+#include "sim/object_pool.h"
 #include "sim/vehicle_state.h"
 
 #include <stddef.h>
@@ -72,6 +73,83 @@ static const weapon_profile profiles[FIST_UNIT_GROUND_VEHICLE_COUNT] = {
 static int valid_vehicle(const fist_vehicle_state *vehicle) {
     return vehicle != NULL && vehicle->type < FIST_UNIT_GROUND_VEHICLE_COUNT &&
            vehicle->component_size == fist_vehicle_component_size(vehicle->type);
+}
+
+static void accelerate_elevation(fist_weapon_elevation_controls *controls, uint16_t clock) {
+    enum { ACCELERATION_WINDOW = 20, INITIAL_STEP = 18, MAXIMUM_STEP = 364 };
+    const uint16_t elapsed = (uint16_t)(clock - controls->previous_clock);
+    controls->previous_clock = clock;
+    if (elapsed >= ACCELERATION_WINDOW) {
+        controls->step = INITIAL_STEP;
+    } else if (controls->step < MAXIMUM_STEP) {
+        ++controls->step;
+    }
+}
+
+static void clear_elevation_target(fist_vehicle_state *vehicle) {
+    if (vehicle->command.target_reference != 0 || vehicle->command.target.lifetime != 0) {
+        vehicle->command.target_reference = 0;
+        vehicle->command.target = (fist_object_reference){0};
+        vehicle->turret.elevation = 0;
+    }
+}
+
+int fist_weapon_adjust_elevation(fist_vehicle_state *vehicle, fist_weapon_elevation_action action,
+                                 fist_weapon_elevation_controls *controls, uint16_t clock) {
+    enum {
+        RAISE_FLAG = 32,
+        LOWER_FLAG = 64,
+        QUICK_STEP = 728,
+        UPPER_LIMIT = 9100,
+        LOWER_LIMIT = -5460,
+        WORD_RANGE = 65536
+    };
+    if (!valid_vehicle(vehicle) || controls == NULL || action < FIST_WEAPON_ELEVATION_PHASE ||
+        action > FIST_WEAPON_ELEVATION_CENTER) {
+        return -1;
+    }
+    const uint8_t flags = vehicle->drive.motion_flags;
+    if (action == FIST_WEAPON_ELEVATION_PHASE && (flags & (RAISE_FLAG | LOWER_FLAG)) == 0) {
+        return 0;
+    }
+    if (!fist_object_reference_is_valid(vehicle->command.target)) {
+        return -1;
+    }
+    fist_weapon_elevation_controls next = *controls;
+    const uint16_t saved_step = next.step;
+    if (action == FIST_WEAPON_ELEVATION_PHASE) {
+        next.step = next.held_step;
+    }
+    if (action == FIST_WEAPON_ELEVATION_PHASE || action == FIST_WEAPON_ELEVATION_RAISE ||
+        action == FIST_WEAPON_ELEVATION_LOWER) {
+        accelerate_elevation(&next, clock);
+    } else if (action == FIST_WEAPON_ELEVATION_QUICK_LOWER) {
+        next.step = QUICK_STEP;
+    }
+    clear_elevation_target(vehicle);
+    if (action == FIST_WEAPON_ELEVATION_CENTER) {
+        vehicle->turret.requested_offset = 0;
+    } else {
+        const int32_t direction =
+            action == FIST_WEAPON_ELEVATION_RAISE ||
+                    (action == FIST_WEAPON_ELEVATION_PHASE && (flags & RAISE_FLAG) != 0)
+                ? 1
+                : -1;
+        const uint16_t bits =
+            (uint16_t)((int32_t)vehicle->turret.elevation + (direction * next.step));
+        int32_t elevation = bits <= INT16_MAX ? bits : (int32_t)bits - WORD_RANGE;
+        if (direction > 0 && elevation > UPPER_LIMIT) {
+            elevation = UPPER_LIMIT;
+        } else if (direction < 0 && elevation < LOWER_LIMIT) {
+            elevation = LOWER_LIMIT;
+        }
+        vehicle->turret.elevation = (int16_t)elevation;
+    }
+    if (action == FIST_WEAPON_ELEVATION_PHASE) {
+        next.step = saved_step;
+    }
+    *controls = next;
+    return 0;
 }
 
 static fist_weapon_events no_events(void) {

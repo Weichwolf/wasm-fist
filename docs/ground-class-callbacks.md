@@ -490,3 +490,18 @@ manual-turret-shared.json. Reproduce both complete gates:
 This accepts original helper/wrapper behavior only. Shared C must reuse the
 existing driver refresh and target-cancellation owner, preserving semantic runtime
 references. Complete a57a/device/class/world/PCM acceptance remains under0121.
+
+
+## Shared elevation C acceptance
+
+The complete elevation C owner is delivered by closed0122 in weapon_control.c/h.
+All five operations and the exact nine-call shared-control sequence pass on both
+production targets. Native/WASM/production-fast-math ASan/UBSan each verify503,628
+complete observations without skips, including all47 saved sources and960 ground
+actors, retained calls and used/unused malformed target transactions. The exact
+typed write footprint is guarded. Strict98-unit LLVM19.1.7 style and complete
+50-native/48-WASM-suite/two-Node production gates pass, along with actual native/
+normal-browser scenes and visual review. Compact exact source/program/terminal/
+capture pins are under/tmp/wasm-fist-0122-review. Full class/device/world/PCM
+acceptance remains under0121; the canonical world already distinguishes the
+borrowed original device_timer(0452) from simulation_tick.

@@ -27,6 +27,34 @@ typedef struct {
     uint8_t has_reserve;
 } fist_weapon_status;
 
+typedef struct {
+    /* Shared original 9600/9602/9604 controls, not per-actor counters.
+     * The canonical caller supplies the wrapping original 0452 clock word. */
+    uint16_t previous_clock;
+    uint16_t step;
+    uint16_t held_step;
+} fist_weapon_elevation_controls;
+
+typedef enum {
+    FIST_WEAPON_ELEVATION_PHASE,
+    FIST_WEAPON_ELEVATION_RAISE,
+    FIST_WEAPON_ELEVATION_LOWER,
+    FIST_WEAPON_ELEVATION_QUICK_LOWER,
+    FIST_WEAPON_ELEVATION_CENTER
+} fist_weapon_elevation_action;
+
+/* Complete a202/a1e9/a26d/a265/a25b. Phase admission uses motion bits 20/40,
+ * with raise taking precedence, and restores the shared adaptive step after
+ * temporarily using held_step. Manual raise/lower retain step acceleration;
+ * quick lower sets 728 without updating the clock; center clears the requested
+ * relative turret offset. An existing target is cleared before adjustment,
+ * resetting elevation only when a target was present. Word wrap precedes the
+ * directional signed clamp. No phase advancement, allocation, RNG or devices.
+ * Malformed used runtime targets fail; an inhibited phase does not use them.
+ * Failure preserves the complete actor and shared controls. */
+int fist_weapon_adjust_elevation(fist_vehicle_state *vehicle, fist_weapon_elevation_action action,
+                                 fist_weapon_elevation_controls *controls, uint16_t clock);
+
 /* Read the selected store and mechanical timer, not firing eligibility. */
 int fist_weapon_inspect(const fist_vehicle_state *vehicle, fist_weapon_status *out);
 

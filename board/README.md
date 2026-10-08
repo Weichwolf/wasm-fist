@@ -80,7 +80,8 @@ frozen reconstruction, not rewrite completion.
 | 0119 | Native visible-window/full-frame acknowledgement delivered; normal five-second and explicit instrumented deadlines pass complete actual SDL gates. Memcheck reports no errors/lost blocks; SDK reachable memory remains recorded. |
 | 0120 | Complete canonical ground command banks, heading/RNG transactions, captured-lifetime semantic diagnostics and owned probe/build integration delivered; all exact current-policy original/native/WASM/style/memory/presentation gates pass. |
 | 0121 | Active complete canonical living ground-class consumption: compose all class phases/behaviors/manual/contact/engine paths through existing owners; full both-target original/state/lifetime and actual scene gates required. |
-| 0122 | Active complete phase/manual ground elevation owner: original whole-memory domains proved; shared C/native/WASM/style/production/memory acceptance pending. |
+| 0122 | Complete shared phase/manual elevation owner delivered: required original/native/WASM/corpus/retained/style/full-production/memory and actual scene gates pass; full0121 remains open. |
+| 0123 | Active complete decoded ground-axis consumption: restore retained signed inputs and reuse the drive-profile owner; full both-target/corpus/memory/style/production/scene gates required. |
 | 0042 | Menus, settings, campaign/profile progression and persistent save/load. |
 | 0043 | All missions/maps/vehicles, AI, combat, objectives and resolved outcomes. |
 | 0044 | Keyboard/mouse/joystick, devices, audio timing and link behavior on both platforms. |

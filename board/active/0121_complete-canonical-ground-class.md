@@ -65,13 +65,13 @@ An unsupported extended source is correctly rejected by the existing short-sourc
 C destruction probe; retain the guard/failure evidence. Shared native/WASM class
 consumption and full constructor scratch prediction remain open.
 
-Active0122 proves the complete original elevation family at365,056 whole-memory
-returns, including phase priority, temporary held-step use/restoration, shared
-wrapping-clock/step acceleration, target cancellation and signed clamps after
-word wrap. Its exact required fixture/model are versioned; shared C remains an
-isolated candidate until both-target/style/production/memory gates pass. Reuse
-this single weapon owner during complete class consumption; device producers
-and clock-source integration still require full-caller evidence.
+Closed0122 publishes the complete shared elevation family after all original,
+503,628-observation native/WASM/production-fast-math sanitizer, strict98-unit style,
+full production and actual native/browser gates. The exact five operations reuse
+one weapon owner with retained cross-actor controls, target cancellation and
+whole typed write-footprint/late-failure checks. Reuse this owner during complete
+class consumption. The canonical world exposes device_timer(0452) separately
+from simulation_tick; full device/caller ordering still needs evidence.
 
 
 The exact analog_drive.py original fixture/model now proves528,384 complete
@@ -91,6 +91,11 @@ match on actual allocated actors. Both genuine a59c/a5a6 wrappers add2,048 retai
 returns across all four actors/views/directions. The curve and logical view
 scaling are recovered explicitly; shared C must reuse driver refresh and the
 existing target-cancellation owner. Full a57a/class/device acceptance remains open.
+
+Active0123 is the next bounded C step: complete decoded signed-axis consumption
+with canonical saved-field retention, existing drive-profile ownership and both
+production targets. Its full original evidence is already published. Full
+curved turret/manual camera/contact/engine and class-bank composition remain here.
 
 ## Next
 
