@@ -215,6 +215,42 @@ upstream inspection finds softgl master95f1abc49205a145050f16becb5b383bf2368541;
 the pinned checkout remains7963be1d5b5e1bebbe97ece2c655228c8bc0a838, unchanged.
 Keep any justified dependency repair/update separate from target-motion ownership.
 
+The preceding production regression is now terminal 0 under session66424: all 48
+native CTests, 45 default WASM Python suites and both Node rendering probes finish.
+Its 23 existing dependency/link warnings remain recorded; this is not a warning-free
+acceptance result. Exact source pins, suite results and diagnostics are retained in
+/tmp/wasm-fist-0115-review/owned-production-all-development.json; the completed raw
+log was removed after hashing it.
+
+The lifetime probe is now registered in CMake/CTest and the WASM build runner as
+tests/ground_target_motion_lifetime_probe.c and
+tests/test_ground_target_motion_lifetime.py. The wrapper requires the complete
+five-count output, an empty stderr and a successful exit. Missing output, incomplete
+counts, unexpected stderr and a nonzero exit are independently rejected. Production
+native/WASM and the fully instrumented ASan/UBSan executable each pass 240 cases;
+strict LLVM 19.1 format/tidy passes all 97 owned translation units. The receipt is
+/tmp/wasm-fist-0115-review/motion-integrated-development.json. The full integrated
+production regression is running under session74828 with 49 native CTests; incomplete
+runs are not acceptance, and all owned C/configuration/test changes remain local.
+
+An isolated dependency candidate under /tmp/wasm-fist-softgl-hz-fix demonstrates
+the original fast-math sentinel failure: a two-sample cell containing negative
+infinity produces maximum bits 00000000 instead of ff800000. Initializing from a real
+sample and invalidating NaN cells through integer IEEE masks avoids the sentinel and
+floating self-comparison. Native SSE4.1 and WASM SIMD128 each pass 32,080 cases with
+fast-math and warnings as errors: 12,112 maxima, 3,072 NaN invalidations, 3,072 recoveries
+and 13,824 stored float/double finite classifications. The newer upstream version also
+needs stored-bit checks and real first-vertex initialization for its cluster/scene
+caches. Its full native Mesa comparison passes 744 of 748 tests; the four failing DOT3/
+scene-depth contracts also fail with all 21 unmodified upstream runtime units rebuilt
+at the same production optimization. No test expectations were changed. The pinned
+dependency remains unchanged; neither the isolated repair nor the newer upstream
+version is accepted. Compact results, source/program hashes and retired-file hashes
+are in /tmp/wasm-fist-0115-review/softgl-fast-math-development.json. Mesa reference
+packages and all disposable sources/builds remain under /tmp. Continue the owning
+project gates and a separately justified dependency repair without hiding these
+upstream regressions or the pthread/growing-memory diagnostics.
+
 Continue those C gates using this complete original reference; no partial bank or
 complete living-class/battle/PCM claim follows from the reference checkpoint.
 
