@@ -45,6 +45,28 @@ controls pointer. Receipt: /tmp/wasm-fist-0122-review/elevation-shared-original.
 The final end state is controls(0,728,18), elevations(37,0,-585,-709). This is
 cross-caller control evidence, not a complete canonical class/clock-device gate.
 
+The frozen final C candidate passes503,628 complete observations each on native,
+WASM and production-fast-math ASan/UBSan, without skips. Exact output digest:
+aeb33173fc5b769d28a574b4a5e8cb2f96f3da0d17fca184a1946d87d5e4da89.
+The five operations reuse one weapon owner and preserve every unrelated typed
+field; invalid used references and late malformed records fail atomically.
+All98 owned translation units pass strict LLVM19.1.7 format/tidy. The existing
+vehicle fields are reordered to remove the excessive padding exposed by the
+new four-actor test; no saved-file format or field semantics change. Actual
+native TRAIN1 input/full-frame/pause/focus/weapon/shutdown checks pass, and
+native-after.png was visually reviewed. Compact receipts, exact529-file source
+pins, four program pins and captures are under/tmp/wasm-fist-0122-review.
+
+The first full production run fails the existing malformed-wreck bearing fixture:
+it writes vehicle.type for a wreck union member, accidentally relying on field
+overlap. Correcting the fixture to corrupt wreck.allocation.type restores the
+same required -1 and complete unchanged actor/output; no expectation or runtime
+check is weakened. The exact failing/passing input/output and source/program pins
+are retained in malformed-wreck-repair.json. The failed production run is not
+accepted. Full production is restarted as session51758; inspect its terminal
+result before publishing C. Final style after this fixture-only fix passes.
+Actual browser acceptance and complete production acceptance remain pending.
+
 ## Next
 
 Finish exact-candidate native/WASM/style/production and production-fast-math memory
