@@ -51,6 +51,37 @@ groups without skips: 409,792 parent/405,600 child returns. See
 docs/ground-command-parent.md. The shared C prototype has both complete banks and an
 outer transaction but remains unaccepted and unpublished until its own both-target
 world/event/lifetime/failure, reaching TRAIN1, full-build/style/memory and scene gates.
+Unaccepted direct C development on2026-10-08 now passes both-target whole-world/
+owned-event comparison for32 complete bank entries and70 missile/smoke constructors.
+Both targets also pass2,042 complete world/output-canary rejection checks, including
+post-constructor and post-missile diagnostic failures, plus156 captured-lifetime
+cases covering diagnostic actor reuse/release and used/unused stale targets.
+The previous full production regression is terminal0:46 native CTests and the
+existing complete WASM suite. Its compact development receipt and program/source
+hashes are /tmp/wasm-fist-0081-review/production-regression-development.json.
+The corrected draft probe and fully instrumented simulation/assets/probe libraries
+also pass2,300 corresponding complete ASan/UBSan cases with production fast-math;
+all four output digests match and sanitizer stderr is empty. This sample is recorded
+in parent-sanitizer-development.json; it does not replace full canonical/domain memory
+gates or actual scene/class acceptance. The new probes remain under
+/tmp/wasm-fist-0081-development and are not published.
+Required both-target all47/full-bank development is live under session35351;
+complete heading-word/counter development is live under session7770. All inputs
+and outputs are checked; no filtered success or missing coverage accepts this
+prototype. Direct evidence is preserved in direct-parent-development.json.
+The draft CLI count check was corrected to use quotient/remainder on32-bit WASM;
+current jobs retain their unchanged prior binaries. Separately compiled corrected
+ASan/native and WASM probes reject30 malformed count/extent frames each before
+preparation, and corrected WASM preserves102 full valid observations. This is
+recorded in probe-parser-development.json. Use corrected sources for subsequent
+integration of owned probes/required tests and
+complete strict full-build/style/memory/scene/TRAIN1 gates before publication.
+
+Closed0112 proves the exact full EBX constructor-height mailbox transfer after
+nonzero-velocity fixtures exposed the missing prediction. Its required eight-group
+regression passes475,328 parent/471,136 child returns andall65,536 velocity words
+without skips, retaining all previous coverage and immutable inputs. Use this
+strengthened reference for the continuing complete shared parent gates.
 Continue those C gates using this complete original reference; no partial bank or
 complete living-class/battle/PCM claim follows from the reference checkpoint.
 

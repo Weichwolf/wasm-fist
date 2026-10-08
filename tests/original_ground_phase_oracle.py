@@ -93,7 +93,11 @@ class OriginalGroundPhaseOracle(OriginalRemainingGroundOracle):
                 height = contact(self.plane_side, self.plane, (*position, 0))[0]
                 expected, effect = remaining(data, actor, self.image[TEXT_BASE:TEXT_BASE + 65536],
                                              entry=entry, height=height, audio_return=response['eax'])
-                plan['height'] = (effect['allocation'][0] + 4, effect['height_position'], height)
+                # 9a82 feeds the signed velocity-Y word to EBX. e1dc
+                # transports that full value before e1e4 replaces BX with54.
+                height_ebx = struct.unpack_from('<h', raw, 0x5b)[0] & 0xffffffff
+                plan['height'] = (effect['allocation'][0] + 4, effect['height_position'],
+                                  height, height_ebx)
             plan.update(expected_data=expected,
                         requests=[effect['request']] if effect['audio'] else [])
         return plan
@@ -109,8 +113,14 @@ class OriginalGroundPhaseOracle(OriginalRemainingGroundOracle):
         expected_mailbox = bytearray(before[MAILBOX:MAILBOX + 4096])
         transfers, requests = [], []
         if plan['height'] is not None:
-            pointer, position, expected = plan['height']
-            self.execute(machine, start, 0xe1eb)
+            pointer, position, expected, height_ebx = plan['height']
+            self.execute(machine, start, 0xe1d1)
+            if machine.reg_read(UC_X86_REG_EBX) != height_ebx:
+                raise AssertionError('Independent constructor height EBX differs')
+            self.execute(machine, 0xe1d1, 0xe1eb)
+            if struct.unpack('<I', machine.mem_read(MAILBOX + 0x3f2, 4))[0] != height_ebx:
+                raise AssertionError('Actual op-54 EBX transport differs')
+            struct.pack_into('<I', expected_mailbox, 0x3f2, height_ebx)
             if (machine.reg_read(UC_X86_REG_DI) != pointer or
                     bytes(machine.mem_read(DGROUP + pointer, 8)) != position or
                     word(bytes(machine.mem_read(DGROUP, 65536)), 0xea10) != 0x54):

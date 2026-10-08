@@ -66,6 +66,15 @@ mailbox may change only to the complete predicted visibility operands and actual
 pre-thunk EBX transport. `e291/e2cc` store EBX before `e299/e2d4` replace its low word
 with operation `58/64`; sampling EBX after that replacement would test the wrong value.
 
+The op-54 thunk has the same full-register transport: 9a82 sign-extends the
+constructor's velocity-Y word into EBX, e1dc stores its four bytes at mailbox
+03f2, and e1e4 subsequently replaces BX with54. The observer predicts that value
+independently, checks EBX before entering e1d1 and checks the exact mailbox word
+before the genuine e1eb kernel call. Nonzero positive and negative velocities
+exposed this missing prediction during shared-parent fixture development. Closed
+WI0112 proves its complete source-word-domain regression; the earlier0111 run
+below covered zero-velocity constructor transfers only.
+
 Actual op-58 visibility executes the pinned kernel on the real installed height plane
 and must agree with the independent visibility model. Smoke construction executes
 actual op-54 height and its guarded kernel boundary. Admitted op-64 requests execute
@@ -86,7 +95,7 @@ The genuine near relocation and text service setup are supplied by closed WI 011
 ```sh
 PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
   /tmp/wasm-fist-decoder-oracle/bin/python tests/test_original_ground_phase.py \
-  --originals --review-dir /tmp/wasm-fist-0111-review
+  --originals --review-dir /tmp/wasm-fist-0112-review
 ```
 
 Missing original files, wrong image/dependency versions, missing output, incomplete
@@ -117,3 +126,13 @@ logical events and atomic late failures. Keep the existing single actor/orders/R
 owners. `97ee` remains an explicit displayed caller value with an unknown producer;
 do not invent its meaning. Complete living-class scheduling, battle, UI/device/PCM,
 mission outcomes and the final independent ten-run WASM gate remain required.
+
+Closed WI0112 strengthens the op-54 transport guard and passes the current required
+eight-group regression without skips: 475,328 parent/471,136 child returns,
+65,536 velocity-domain constructors,65,568 total height returns and 32,856 kernel
+audio returns in 2,741.627 seconds. Previous heading/counter/admission/retained and
+all47/four-detail coverage is unchanged. The complete output digest is
+`b7e7232c32a1452709b4e1705146d268e492ac8b1b332670efd458147cd2dbdf`;
+its terminal receipt and source/input audit are under /tmp/wasm-fist-0112-review.
+This correction accepts reference observation only. The full shared C parent,
+living-class integration, battle, PCM and complete-game acceptance remain open.

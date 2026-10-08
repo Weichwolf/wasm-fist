@@ -175,6 +175,31 @@ class GroundParentTests(unittest.TestCase):
         self.assertGreater(self.counts['audio_returns'], 0)
         self.assertGreater(self.counts['height_returns'], 0)
 
+    def test_consumed_height_transport_signed_velocity_domain(self):
+        self.owner.install_height(2, bytes([17]) * 4)
+        fixtures = []
+        for kind in range(4):
+            machine, actor = self.fixture(kind, automatic=1, index=12, mode=4,
+                                          flags=8, source=bool(kind & 1), stock=2, draw=0)
+            fixtures.append((machine, actor, bytes(machine.mem_read(DGROUP, 65536))))
+        count, heights = 0, 0
+        for velocity in range(65536):
+            kind = velocity % 4
+            machine, actor, baseline = fixtures[kind]
+            data = bytearray(baseline)
+            store(data, actor + 0x5b, velocity)
+            store(data, actor + 0x59, velocity ^ 0x8000)
+            store(data, actor + 0x26, velocity ^ 0xa55a)
+            machine.mem_write(DGROUP, bytes(data))
+            _, effect = self.check(machine, actor, enabled=int(bool(velocity & 4)),
+                                   missing_effects=bool(velocity & 8), busy=bool(velocity & 16))
+            self.assertEqual(effect['height_returns'], 1)
+            count += 1
+            heights += effect['height_returns']
+        self.assertEqual(count, 65536)
+        self.assertEqual(heights, 65536)
+        self.counts['height_velocity_word_returns'] += count
+
     def test_discovery_acquisition_station_and_fire_device_tails(self):
         self.owner.install_height(2, bytes(4))
         for kind in range(4):
@@ -274,8 +299,8 @@ if __name__ == '__main__':
                 'inhibited_returns': 4080, 'retained_sequence_returns': 4096,
                 'conditional_rng_returns': 56, 'support_device_context_returns': 64,
                 'canonical_parent_returns': 122880, 'prepared_worlds': 188,
-                'target_device_context_returns': 88}
-    success = result.wasSuccessful() and not result.skipped and result.testsRun == 7
+                'target_device_context_returns': 88, 'height_velocity_word_returns': 65536}
+    success = result.wasSuccessful() and not result.skipped and result.testsRun == 8
     success = success and all(counts.get(name) == count for name, count in required.items())
     success = success and set(GroundParentTests.callbacks) == {
         f'{bank}_{index}' for bank in ('automatic', 'controlled') for index in range(16)}

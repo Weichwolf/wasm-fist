@@ -70,6 +70,7 @@ frozen reconstruction, not rewrite completion.
 | 0109 | Complete all47 canonical station/support child inputs and independent predictions verified against 42240 actual DOS returns, real constructor heights and matched-source audio contexts; shared-C consuming/lifetime acceptance is delivered by0107. |
 | 0110 | Complete original selected-ground diagnostic, genuine text relocation/frame/label setup and selected/unselected parent tails proved: eight required groups,364288 diagnostic/parent returns and608 setup/96 coupled returns pass. Shared full0081 consumption remains open. |
 | 0111 | Complete original ab03 composition through both full callback banks, independent heading/RNG/diagnostic prefix/tail and actual PM operations proved: seven required groups,409792 parent/405600 child returns and all47/four-detail coverage pass. Shared C/full0081 consumption remains open. |
+| 0112 | Complete exact op-54 signed EBX transport prediction delivered: eight required groups without skips,475328 parent/471136 child returns and65536 velocity-word constructor transfers pass. Shared full0081 acceptance remains open. |
 | 0042 | Menus, settings, campaign/profile progression and persistent save/load. |
 | 0043 | All missions/maps/vehicles, AI, combat, objectives and resolved outcomes. |
 | 0044 | Keyboard/mouse/joystick, devices, audio timing and link behavior on both platforms. |
