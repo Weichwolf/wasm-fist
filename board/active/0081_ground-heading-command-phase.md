@@ -251,6 +251,42 @@ packages and all disposable sources/builds remain under /tmp. Continue the ownin
 project gates and a separately justified dependency repair without hiding these
 upstream regressions or the pthread/growing-memory diagnostics.
 
+The minimal HZ repair has now been verified separately against the existing pinned
+renderer and published as softgl commit b79353d69fe701eaac2bca3ac6b4146777d0b49c
+on refs/heads/fist/hz-fast-math. Native SSE4.1 and WASM SIMD128 each pass 24,400
+cache maxima, NaN invalidation, recovery and stored-bit classification cases with
+production fast-math and warnings as errors. The complete native library builds
+without warnings and passes 735 of 736 tests. The remaining DOT3 mismatch also
+occurs with the unmodified pinned library; it is not waived. This dependency
+branch is a bounded HZ repair, not a complete renderer-suite acceptance or a new
+root dependency pin. The receipt is
+/tmp/wasm-fist-0115-review/pinned-hz-repair-development.json.
+
+An isolated presentation configuration reserves the existing 2 GiB WASM maximum
+up front instead of growing shared memory, preserving allocation-failure returns.
+Together with the HZ repair, all three presentation executables build without
+warnings. Browser triangle, terrain and original TRAIN1 input/shutdown/failure
+checks pass, as do all ten original-backed terrain test groups. A paired production
+comparison across all 47 missions and four height details verifies 188 worlds,
+376 complete frames per target and matching initial/driven state observations.
+Its digest is 849e71ca6422b3f18ae61b4e77e8f709d0d3b5059028041be4d754bdec6e6175.
+Peak process RSS with both comparison modules is 261,500,928 bytes; reserved WASM
+capacity is not resident physical memory. Source snapshots, executable pins and
+complete comparison observations remain in /tmp/wasm-fist-0115-review/
+renderer-policy-snapshot.json and renderer-policy-corpus.json. This configuration
+remains isolated: exact published-tree integration and full owning-project gates
+are still required, and all sixteen active root source pins remain unchanged.
+
+Cleanup removes nine completed owned logs, large WASM text dumps and reproducible
+debug binaries, reclaiming 11,713,811 bytes after recording hashes, terminal
+summaries and memory imports in /tmp/wasm-fist-0115-review/renderer-cleanup.json.
+Current sources, build trees, executable fixtures, compact evidence and the live
+session74828 regression log are retained. The checkout occupies approximately
+379 MiB including Git history, softgl and ignored original assets; disposable
+artifacts stay under /tmp. This documentation checkpoint publishes no unfinished
+root C, test, build-policy or dependency-pin changes. Full 0081 and the independent
+complete-game WASM streak remain open.
+
 Continue those C gates using this complete original reference; no partial bank or
 complete living-class/battle/PCM claim follows from the reference checkpoint.
 
