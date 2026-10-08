@@ -64,3 +64,36 @@ Remaining class tables, secondary gun/rack callbacks, phase admission, contacts,
 fire/input and engine queue composition still need complete class/world proof
 before shared C acceptance. In particular M3/BMP callbacks8886/987b inspect
 simulation tick6cde with mask0x0ff0; that global is not a device-input word.
+
+## Reached complete instruction cycles
+
+The widened real AZER7 class test now executes all four allocated classes through
+128 consecutive updates at four constant-height details, with saved and explicitly
+constructed caller states: 32 contexts, 4,096 complete original class returns,
+512 command parents, every controlled entry in every context, and 4,096 retained
+actual motor-audio kernel returns. Actor/RNG predictions, unchanged other saved
+payloads, genuine contacts and visibility operations all pass. The motor tail
+uses each actual class callsite and the existing independent queue predictor.
+
+The first widened T80 attempt stops at update 6, phase 22, on an unconfigured
+op-58 visibility call. Observational tracing identifies common callback a904.
+When the phase's high bits are zero and actor byte+16 bit0x08 is set, this callback
+decrements nonzero byte+36, increments byte+37 modulo 256, then reads physical
+roster slot (new byte+37)&15. Null and type-23 candidates return immediately.
+Otherwise the existing source/target-height visibility owner is called; a visible
+result sets byte+36 to255. The independent prediction and genuine PM return now
+cover this reached branch alongside existing parent visibility: 448 transfers total.
+The original missing-provider attempt remains failure evidence; address-zero/one
+returns are still forbidden, and no original instruction is replaced.
+
+Combined digest:
+d1ce72f85ad453f37d291f9ff355bbbae793e65899cf77b19717cd5b92d4ff77.
+Receipt: /tmp/wasm-fist-0119-class-research/reached-ground-class-cycle128-development.json.
+Reproduce with PYTHONPATH=tests:/tmp and the pinned oracle environment using
+/tmp/wasm-fist-ground-class-cycle128.py; the bootstrap/engine adapters and their
+hashes are recorded in the receipt.
+
+These complete instruction returns check the declared actor/RNG/payload and PM
+contracts, not every pre-engine DOS global or every possible class branch.
+Independently predict remaining global writes and full callback domains before
+class C acceptance. No shared-class scheduling or PCM playback is accepted here.

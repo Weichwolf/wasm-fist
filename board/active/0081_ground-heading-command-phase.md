@@ -28,6 +28,16 @@ their support. Original observation rejects reserved address-zero/one device sca
 
 ## Next
 
+Closed0117 now publishes the exact canonical target-motion owner after its full
+production/original/style/memory/presentation gates. Active0120 isolates complete
+parent integration at that published base; fresh current-policy gates are required.
+The widened original class fixture now passes32 actual AZER7 class/detail/caller
+contexts through update128:4,096 complete instruction returns,512 parents across
+all16 controlled entries,4,096 retained engine queue returns and448 real visibility
+transfers. The first T80 failure proves a904 consumes physical-roster visibility;
+its reached prediction is now included. See docs/ground-class-callbacks.md. These
+actor/RNG/PM checks do not prove every pre-engine DOS global or class branch.
+
 The next all-class first difference is now localized: original T80/BMP phase12
 assigns ammunition that the previous composed class model omitted. All four
 unchanged assignment callbacks pass8,192 complete returns, all256 flag bytes

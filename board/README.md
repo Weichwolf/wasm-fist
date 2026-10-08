@@ -78,6 +78,7 @@ frozen reconstruction, not rewrite completion.
 | 0117 | Canonical target-aware motion delivered; required original/native/WASM corpus, lifetime, sanitizer, strict style, complete production regression and actual presentation/Memcheck gates pass. Full class/world scheduling remains open. |
 | 0118 | Private Xvfb reset race repaired; 32 fresh real native starts and complete SDL input/scene/shutdown checks pass without changing game code or assertions. |
 | 0119 | Native visible-window/full-frame acknowledgement delivered; normal five-second and explicit instrumented deadlines pass complete actual SDL gates. Memcheck reports no errors/lost blocks; SDK reachable memory remains recorded. |
+| 0120 | Active exact integration of both complete canonical ground command banks, heading/RNG transactions and semantic diagnostics; prior complete corpus development passes, fresh current-policy acceptance remains required. |
 | 0042 | Menus, settings, campaign/profile progression and persistent save/load. |
 | 0043 | All missions/maps/vehicles, AI, combat, objectives and resolved outcomes. |
 | 0044 | Keyboard/mouse/joystick, devices, audio timing and link behavior on both platforms. |
