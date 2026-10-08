@@ -28,6 +28,15 @@ their support. Original observation rejects reserved address-zero/one device sca
 
 ## Next
 
+The shared a9a0 status callback now passes149,504 complete original returns,
+including every flag/counter byte pair for both counters and all phase bytes.
+Independent whole-memory/return predictions prove wrapping, ordered flag clearing
+and43,392 logical voice27 plus52,000 voice35 entries in explicitly muted contexts.
+See docs/ground-class-callbacks.md and status-timers.json under the class research
+directory. This is original-only evidence; shared class/world/PCM acceptance stays
+open. The complete a904 roster domain and M3/BMP secondary rack callbacks remain
+required. Active0120 production inputs remain frozen while its five gates run.
+
 Closed0117 now publishes the exact canonical target-motion owner after its full
 production/original/style/memory/presentation gates. Active0120 isolates complete
 parent integration at that published base; fresh current-policy gates are required.

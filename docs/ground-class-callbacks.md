@@ -97,3 +97,46 @@ These complete instruction returns check the declared actor/RNG/payload and PM
 contracts, not every pre-engine DOS global or every possible class branch.
 Independently predict remaining global writes and full callback domains before
 class C acceptance. No shared-class scheduling or PCM playback is accepted here.
+
+## Shared status timers
+
+All four pinned class tables select a9a0 at byte index24. The complete callback
+returns unchanged when actor phase byte+3d has any high bit0xe0 set. Otherwise it
+processes byte+19 and two distinct byte counters in this order:
+
+1. If flags&0x06 is nonzero, increment counter+a6 modulo256. When the new value
+   is at least64, clear that counter and flag bits0x06. Request logical voice27
+   through bf3c only when the resulting flags do not contain0x10.
+2. If the resulting flags contain0x10, increment counter+52 modulo256. When the
+   new value is at least112, clear that counter and flag0x10, then request voice35.
+
+The comparisons follow the byte increment:255 wraps to0 without expiring. The
+second branch observes the first branch's flag changes. At most one logical
+voice is requested in a complete return. These offsets are separate state owners;
+do not infer timer units or gameplay names from the constants alone.
+
+Independent predictions match149,504 complete unchanged original returns:
+18,432 phase/flag/counter-edge combinations,65,536 complete flag/turn-counter
+combinations and65,536 complete flag/immobile-counter combinations. The fixture
+observes43,392 voice27 and52,000 voice35 entries. It predicts all0x60000 memory,
+including the near/far call scratch words, and checks DI/DS/SS/SP/CS and the voice
+input/stack. Each actual bf3c admission branch executes its real far return in an
+explicitly muted device context; no instruction replacement, PC skip or fabricated
+return is used. These logical requests do not prove admitted PCM playback.
+
+Output digest:
+87c867141d5fe3ecd618fafa2cfc6e28772dfe9f76233715ad65ec9d2b5262f1.
+Fixture digest:
+74d72e1b49db472b3782181d669b1b1b6fa936775bc534a10f2f1283e14f475a.
+The original image digest is the same as the ammunition proof above. Receipt:
+/tmp/wasm-fist-0119-class-research/status-timers.json. Reproduce with:
+
+```sh
+PYTHONPATH=tests PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
+  /tmp/wasm-fist-decoder-oracle/bin/python \
+  /tmp/wasm-fist-original-ground-status-timers.py
+```
+
+This original-only checkpoint accepts neither shared class C nor world scheduling.
+The complete roster-visibility domain and remaining secondary rack callbacks are
+still required alongside every pre-engine global write.
