@@ -77,10 +77,13 @@ under /tmp; original assets remain ignored/read-only.
 ## Next
 
 Poll session81969 to terminal completion without changing candidate inputs.
-Require all native/WASM contracts and no warnings. The exact original corpus
-is now complete. Separately, session97569 investigates the graphical Valgrind
-windowfocus failure; no full SDL memory acceptance follows from zero Memcheck
-errors after that aborted scene.
+All 48 native CTest contracts now pass; the WASM regression remains live.
+Require its complete remaining contracts and no warnings. The exact original
+corpus is complete. Separately, diagnostic session97569 is terminal1: its
+first screenshot precedes complete textured-frame publication; the client exits
+cleanly on externally requested SDL_QUIT. Full graphical Memcheck/input acceptance
+remains open and needs explicit first-frame acknowledgement in the profiling
+fixture. Normal real-client scene assertions remain unchanged and pass under0118.
 Keep frozen refs/original assets and unaccepted root parent prototypes pinned.
 Publish only the accepted target-motion implementation, API and registered tests;
 continue complete command/class scheduling under 0081 afterward.
