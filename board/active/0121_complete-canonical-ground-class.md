@@ -46,6 +46,14 @@ domains/ordering/lifetimes remain required. a46e's far a61a is actual smoke crea
 The first actual missing T80 visibility provider remains a reproduced negative
 failure; no address-zero/one or stand-in return is accepted.
 
+The exact versioned smoke_phase_disabled.py fixture now proves a46e admission
+and byte+96 decay through69,632 complete unchanged original returns, including
+11,264 real explicitly disabled19caa producer returns. Whole-memory/ABI/RNG/pool
+predictions pass. Phase0x80 admits smoke (mask0x60), unlike the other common
+timers. docs/ground-class-callbacks.md records counts, pins and reproduction.
+Enabled smoke constructor coupling, allocation/lifetime effects and shared C
+remain required; this checkpoint does not complete a46e or this WI.
+
 ## Next
 
 Recover and independently predict the remaining complete common/class/behavior/
