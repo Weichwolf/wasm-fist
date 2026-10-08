@@ -43,10 +43,12 @@ The fresh sanitizer source and libraries are from this exact candidate.
 The retained original/native/WASM gate is terminal0 under session67145: 10,752
 complete returns per target, 10,416 retained updates and all 28 target classes,
 with digest 36a0b11854e27a9939aee9d2280ba634533e0b929bbf50f19d4c2ed776874f65.
-The original/native/WASM canonical corpus remains live under session80057; its
-required complete scope is 47 missions, eight heights, four details, 188 worlds,
-3,840 actors and 92,160 returns per target. Existing earlier development results
-are not substituted for this exact-candidate gate.
+The original/native/WASM canonical corpus is terminal0 under session80057: all
+47 missions, eight heights, four details, 188 worlds, 3,840 actors and 92,160
+returns per target pass without skips. The complete digest is
+c2331281c9229fdb60e4bc9cfb5b54c1b4abd284b95fadd5ff817644d57e47f5, matching
+the exact fresh sanitizer corpus. The receipt is original/corpus.json; earlier
+development results are not substituted for this exact-candidate gate.
 
 Valgrind 3.24.0 passes the actual production lifetime program: 91 allocations and
 91 frees, 5,331,376 allocated bytes, zero remaining blocks/errors/suppressions,
@@ -67,14 +69,18 @@ repaired actual native gate is terminal0 under session75368, with 17 captures.
 Compact commands, source/program/capture pins and results are under
 /tmp/wasm-fist-0117-review: candidate.json, original/retained.json,
 sanitized/retained.json, sanitized/corpus.json, presentation-corpus.json and
-native-display-lifecycle.json. Full production and canonical-original logs are
-retained while live. All sources, reference images and disposable artifacts remain
+native-display-lifecycle.json. Sixteen completed passed logs were retired after preserving compact results and
+hashes in completed-cleanup.json; the live production and unresolved diagnostic
+logs remain retained. All sources, reference images and disposable artifacts remain
 under /tmp; original assets remain ignored/read-only.
 
 ## Next
 
-Poll sessions81969 and80057 to terminal completion without changing candidate
-inputs. Require all native/WASM contracts, complete original corpus and no warnings.
+Poll session81969 to terminal completion without changing candidate inputs.
+Require all native/WASM contracts and no warnings. The exact original corpus
+is now complete. Separately, session97569 investigates the graphical Valgrind
+windowfocus failure; no full SDL memory acceptance follows from zero Memcheck
+errors after that aborted scene.
 Keep frozen refs/original assets and unaccepted root parent prototypes pinned.
 Publish only the accepted target-motion implementation, API and registered tests;
 continue complete command/class scheduling under 0081 afterward.
