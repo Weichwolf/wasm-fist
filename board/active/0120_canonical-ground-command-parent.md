@@ -32,15 +32,32 @@ Programs and inputs remain pinned in
 development programs precede the accepted renderer/debug policy; require new
 programs from the exact isolated candidate before publishing owned C.
 
+The exact candidate is now frozen at published base a9888c4 under
+/tmp/wasm-fist-ground-parent-integration-source, with eight parent overlays,
+516 source-file hashes and the unchanged pinned softgl. Disposable dependency
+metadata and builds remain under /tmp. Prototype -g0 overrides are removed;
+the accepted source-map/owned-warning policy is preserved.
+
+Fresh native and WASM compiler phases each complete in161 steps without warnings.
+The WASM compiler ran only after the complete script entered native CTest, with
+one actual compiler writer. Strict LLVM19.1 format/tidy is terminal0 under
+session72216 for all97 owned translation units. The complete default synthetic
+parent gate is terminal0 under session50354 on both targets: seven groups,
+no skips, whole-world/output checks,2,028 atomic rejections,28 conditional RNG
+checks,2,048 counter cases,4,080 inhibited cases,22 malformed frames,4,096 retained
+returns and384 signed-heading edges per target. Digest:
+e8da6e3e6b0c2e8c7404fddcc8419577d287a0b7a4017016745909c564792133.
+Exact source/program/command/results are in
+/tmp/wasm-fist-0120-review/candidate.json and default.json.
+
 ## Next
 
-Freeze the parent candidate from published0117 plus only its eight owned
-implementation/API/probe/configuration/test overlays under /tmp. Preserve the
-accepted source-map and warning policy; remove the prototype-only -g0 overrides.
-Run sequential fresh production builds/full regression, strict LLVM19.1 style,
-both-target whole-world/event/lifetime/failure checks, complete original corpus
-and all heading/counter domains, fresh production-fast-math sanitizers and actual
-native/browser presentation. Retain compact results and clean completed artifacts.
+Keep all exact-candidate inputs unchanged. Full production regression remains live
+under82768, exact original/native/WASM corpus under66293 and exact heading/counter
+domains under13754. Fresh production-fast-math sanitizer build/default checks are
+under64833. Require their complete terminal results, full sanitizer corpus/domain
+coverage, remaining lifetime/world/event/failure evidence and actual native/browser
+presentation before publication. Retain compact results and clean completed artifacts.
 
 ## Accept
 
