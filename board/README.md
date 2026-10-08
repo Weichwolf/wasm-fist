@@ -82,7 +82,8 @@ frozen reconstruction, not rewrite completion.
 | 0121 | Active complete canonical living ground-class consumption: compose all class phases/behaviors/manual/contact/engine paths through existing owners; full both-target original/state/lifetime and actual scene gates required. |
 | 0122 | Complete shared phase/manual elevation owner delivered: required original/native/WASM/corpus/retained/style/full-production/memory and actual scene gates pass; full0121 remains open. |
 | 0123 | Complete shared decoded ground axes and saved-state retention delivered; required both-target/original/held/memory/style/full-production and actual scene gates pass. Full0121 remains open. |
-| 0124 | Active complete curved manual turret helpers/callers: reuse control refresh and target cancellation with original curve/view/selector state; full both-target/memory/style/production/scene gates required. |
+| 0124 | Complete shared curved turret helpers/callers delivered; required original/native/WASM/retained-selector/memory/style/production and actual scene gates pass. Full0121 remains open. |
+| 0125 | Active complete original selected manual composition: both complete banks, retained selector/view inputs, full refresh and shared clock/control ordering before shared C. |
 | 0042 | Menus, settings, campaign/profile progression and persistent save/load. |
 | 0043 | All missions/maps/vehicles, AI, combat, objectives and resolved outcomes. |
 | 0044 | Keyboard/mouse/joystick, devices, audio timing and link behavior on both platforms. |

@@ -69,6 +69,13 @@ if(EMSCRIPTEN)
     set_target_properties(fist_weapon_control_probe PROPERTIES SUFFIX ".js")
     target_link_options(fist_weapon_control_probe PRIVATE -sNODERAWFS=1 -sEXIT_RUNTIME=1 -sALLOW_MEMORY_GROWTH=1)
 endif()
+add_executable(fist_manual_turret_probe tests/manual_turret_probe.c)
+target_link_libraries(fist_manual_turret_probe PRIVATE fist_sim fist_probe_io fist_build_options)
+target_compile_options(fist_manual_turret_probe PRIVATE -Werror)
+if(EMSCRIPTEN)
+    set_target_properties(fist_manual_turret_probe PROPERTIES SUFFIX ".js")
+    target_link_options(fist_manual_turret_probe PRIVATE -sNODERAWFS=1 -sEXIT_RUNTIME=1 -sALLOW_MEMORY_GROWTH=1)
+endif()
 add_executable(fist_ground_axes_probe tests/ground_axes_probe.c)
 target_link_libraries(fist_ground_axes_probe PRIVATE fist_sim fist_probe_io fist_build_options)
 target_compile_options(fist_ground_axes_probe PRIVATE -Werror)
@@ -495,6 +502,9 @@ if(BUILD_TESTING AND NOT EMSCRIPTEN)
     add_test(NAME weapon_control_contract COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_SOURCE_DIR}/tests/test_weapon_control.py
         --target native --native-probe $<TARGET_FILE:fist_weapon_control_probe>)
+    add_test(NAME manual_turret_contract COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_SOURCE_DIR}/tests/test_manual_turret.py
+        --target native --native-probe $<TARGET_FILE:fist_manual_turret_probe>)
     add_test(NAME ground_axes_contract COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_SOURCE_DIR}/tests/test_ground_axes.py
         --target native --native-probe $<TARGET_FILE:fist_ground_axes_probe>)

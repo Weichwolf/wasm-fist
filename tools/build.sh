@@ -38,6 +38,7 @@ if [[ $target == wasm || $target == all ]]; then
     python3 "$root/tests/test_units.py" --target wasm --build-root "$output"
     python3 "$root/tests/test_vehicle_start.py" --target wasm --build-root "$output"
     python3 "$root/tests/test_weapon_control.py" --target wasm --build-root "$output"
+    python3 "$root/tests/test_manual_turret.py" --target wasm --build-root "$output"
     python3 "$root/tests/test_ground_axes.py" --target wasm --build-root "$output"
     python3 "$root/tests/test_ground_elevation.py" --target wasm --build-root "$output"
     python3 "$root/tests/test_vehicle_damage.py" --target wasm --build-root "$output"

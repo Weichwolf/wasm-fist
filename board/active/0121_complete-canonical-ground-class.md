@@ -97,8 +97,12 @@ required observations per native/WASM/fast-math-sanitized target, strict 99-unit
 style, complete production and actual canonical native/browser gates. Signed
 saved inputs retain through start/readiness; every call writes the drive-display
 event, including false and repeated reverse-mode refresh. Reuse this driver
-owner. Active 0124 consumes the already-proved curved manual turret helper/caller
-family next; full manual camera/contact/engine and class composition remain here.
+owner. Closed 0124 delivers the complete shared curved turret family after
+935,696 required observations per native/WASM/fast-math-sanitized target, strict
+100-unit style, complete production and actual native/browser gates. Reuse its
+target cancellation and driver refresh. Active 0125 proves the complete original
+selected manual parent, saved selector/view-input retention and full refresh/
+shared clock ordering before complete shared manual/class composition.
 
 ## Next
 

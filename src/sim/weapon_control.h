@@ -43,6 +43,34 @@ typedef enum {
     FIST_WEAPON_ELEVATION_CENTER
 } fist_weapon_elevation_action;
 
+typedef struct {
+    /* Shared original 9746 selector, retained across controlled actors. */
+    uint16_t selector;
+} fist_weapon_turret_controls;
+
+typedef enum {
+    FIST_WEAPON_TURRET_INVALID = -1,
+    FIST_WEAPON_TURRET_LEFT,
+    FIST_WEAPON_TURRET_RIGHT,
+    FIST_WEAPON_TURRET_DIRECTION_COUNT
+} fist_weapon_turret_direction;
+
+/* Complete a376/a3a8. Reuse control refresh before target/elevation cancellation.
+ * The wrapped selector chooses the complete original curve; view 1 uses the
+ * full step, other views halve it and views above 3 halve it again. Adjust the
+ * requested relative turret offset with word wrap and no clamp. The selector
+ * is unchanged. No target resolution, clock, RNG, allocation or phase advance.
+ * Only LEFT/RIGHT are accepted; INVALID/COUNT are rejection markers.
+ * Invalid used actor/direction/control/target preserves the complete actor. */
+int fist_weapon_turn_turret(fist_vehicle_state *vehicle, fist_weapon_turret_direction direction,
+                            const fist_weapon_turret_controls *controls);
+
+/* Complete a59c/a5a6 callers set the shared selector to 88/232 respectively
+ * before the same helper. Failure preserves both actor and shared controls. */
+int fist_weapon_turn_turret_input(fist_vehicle_state *vehicle,
+                                  fist_weapon_turret_direction direction,
+                                  fist_weapon_turret_controls *controls);
+
 /* Complete a202/a1e9/a26d/a265/a25b. Phase admission uses motion bits 20/40,
  * with raise taking precedence, and restores the shared adaptive step after
  * temporarily using held_step. Manual raise/lower retain step acceleration;

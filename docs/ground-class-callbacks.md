@@ -519,3 +519,17 @@ cases and whole typed failure/write-footprint guards. Strict 99-unit LLVM19.1.7
 style, complete 51-native/49-WASM-suite/two-Node production and actual canonical
 native/browser scene gates pass. Exact compact pins are recorded under
 /tmp/wasm-fist-0123-review. Full manual/device/class/world/battle/PCM remains open.
+
+
+## Shared curved manual turret control
+
+Closed 0124 delivers complete a376/a3a8 and genuine a59c/a5a6 in the existing
+weapon owner, reusing driver control refresh and private target cancellation.
+Complete curve, wrapped selector/requested offset, logical view scaling, shared
+fixed-caller selector retention and malformed-used-reference transactions pass
+935,696 required observations per native/WASM/production-fast-math ASan/UBSan
+target without skips, including all 47 sources/960 ground actors and one shared
+control object through retained cross-actor fixed/direct calls. Strict 100-unit
+LLVM19.1.7 style, complete 52-native/50-WASM-suite/two-Node production and actual
+canonical native/browser gates pass. Exact compact pins are recorded under
+/tmp/wasm-fist-0124-review. Full manual/device/class/world/battle/PCM remains open.

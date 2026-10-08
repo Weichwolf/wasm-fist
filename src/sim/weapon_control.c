@@ -1,6 +1,7 @@
 #include "sim/weapon_control.h"
 
 #include "assets/units.h"
+#include "sim/driver.h"
 #include "sim/object_pool.h"
 #include "sim/vehicle_state.h"
 
@@ -86,12 +87,71 @@ static void accelerate_elevation(fist_weapon_elevation_controls *controls, uint1
     }
 }
 
-static void clear_elevation_target(fist_vehicle_state *vehicle) {
+static void clear_manual_target(fist_vehicle_state *vehicle) {
     if (vehicle->command.target_reference != 0 || vehicle->command.target.lifetime != 0) {
         vehicle->command.target_reference = 0;
         vehicle->command.target = (fist_object_reference){0};
         vehicle->turret.elevation = 0;
     }
+}
+
+int fist_weapon_turn_turret(fist_vehicle_state *vehicle, fist_weapon_turret_direction direction,
+                            const fist_weapon_turret_controls *controls) {
+    enum {
+        CENTER = 160,
+        SELECTOR_SHIFT = 2,
+        CURVE_MASK = 30,
+        WORD_BYTES = 2,
+        FULL_VIEW = 1,
+        LAST_HALF_VIEW = 3
+    };
+    /* Original sixteen words at 9748, including the nonmonotonic middle. */
+    static const uint16_t curve[] = {30,  30,  30,  30,  36,  45,  60,  91,
+                                     182, 122, 212, 242, 364, 364, 364, 364};
+    if (!valid_vehicle(vehicle) || controls == NULL || direction < FIST_WEAPON_TURRET_LEFT ||
+        direction > FIST_WEAPON_TURRET_RIGHT ||
+        !fist_object_reference_is_valid(vehicle->command.target)) {
+        return -1;
+    }
+    fist_vehicle_state next = *vehicle;
+    if (fist_driver_take_control(&next) != 0) {
+        return -1;
+    }
+    clear_manual_target(&next);
+    const uint16_t displacement = direction == FIST_WEAPON_TURRET_LEFT
+                                      ? (uint16_t)(CENTER - controls->selector)
+                                      : (uint16_t)(controls->selector - CENTER);
+    const uint16_t index = (uint16_t)((displacement >> SELECTOR_SHIFT) & CURVE_MASK);
+    uint16_t step = curve[index / WORD_BYTES];
+    if (next.turret_view_mode != FULL_VIEW) {
+        step >>= 1;
+        if (next.turret_view_mode > LAST_HALF_VIEW) {
+            step >>= 1;
+        }
+    }
+    const int32_t movement = direction == FIST_WEAPON_TURRET_LEFT ? -(int32_t)step : step;
+    next.turret.requested_offset = (uint16_t)((int32_t)next.turret.requested_offset + movement);
+    *vehicle = next;
+    return 0;
+}
+
+int fist_weapon_turn_turret_input(fist_vehicle_state *vehicle,
+                                  fist_weapon_turret_direction direction,
+                                  fist_weapon_turret_controls *controls) {
+    enum { LEFT_SELECTOR = 88, RIGHT_SELECTOR = 232 };
+    if (!valid_vehicle(vehicle) || controls == NULL || direction < FIST_WEAPON_TURRET_LEFT ||
+        direction > FIST_WEAPON_TURRET_RIGHT) {
+        return -1;
+    }
+    fist_vehicle_state next = *vehicle;
+    fist_weapon_turret_controls selected = {
+        .selector = direction == FIST_WEAPON_TURRET_LEFT ? LEFT_SELECTOR : RIGHT_SELECTOR};
+    if (fist_weapon_turn_turret(&next, direction, &selected) != 0) {
+        return -1;
+    }
+    *vehicle = next;
+    *controls = selected;
+    return 0;
 }
 
 int fist_weapon_adjust_elevation(fist_vehicle_state *vehicle, fist_weapon_elevation_action action,
@@ -126,7 +186,7 @@ int fist_weapon_adjust_elevation(fist_vehicle_state *vehicle, fist_weapon_elevat
     } else if (action == FIST_WEAPON_ELEVATION_QUICK_LOWER) {
         next.step = QUICK_STEP;
     }
-    clear_elevation_target(vehicle);
+    clear_manual_target(vehicle);
     if (action == FIST_WEAPON_ELEVATION_CENTER) {
         vehicle->turret.requested_offset = 0;
     } else {
