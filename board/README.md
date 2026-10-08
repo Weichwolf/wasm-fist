@@ -79,6 +79,7 @@ frozen reconstruction, not rewrite completion.
 | 0118 | Private Xvfb reset race repaired; 32 fresh real native starts and complete SDL input/scene/shutdown checks pass without changing game code or assertions. |
 | 0119 | Native visible-window/full-frame acknowledgement delivered; normal five-second and explicit instrumented deadlines pass complete actual SDL gates. Memcheck reports no errors/lost blocks; SDK reachable memory remains recorded. |
 | 0120 | Complete canonical ground command banks, heading/RNG transactions, captured-lifetime semantic diagnostics and owned probe/build integration delivered; all exact current-policy original/native/WASM/style/memory/presentation gates pass. |
+| 0121 | Active complete canonical living ground-class consumption: compose all class phases/behaviors/manual/contact/engine paths through existing owners; full both-target original/state/lifetime and actual scene gates required. |
 | 0042 | Menus, settings, campaign/profile progression and persistent save/load. |
 | 0043 | All missions/maps/vehicles, AI, combat, objectives and resolved outcomes. |
 | 0044 | Keyboard/mouse/joystick, devices, audio timing and link behavior on both platforms. |

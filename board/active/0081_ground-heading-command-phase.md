@@ -34,7 +34,9 @@ all production/style/memory/transaction/lifetime/constructor and actual scene
 gates. See docs/ground-command-parent.md. Continue full class timing/consumption
 and reached TRAIN1 behavior, using the original callback/retention proofs below.
 The remaining class/common collision/input/engine/global contracts must be
-proved and consumed before complete class/world/battle/PCM acceptance.
+proved and consumed before complete class/world/battle/PCM acceptance. Active0121
+owns the bounded complete canonical class implementation; this umbrella's Accept
+still requires complete phase consumption and reaching TRAIN1 integration.
 
 The shared a9a0 status callback now passes149,504 complete original returns,
 including every flag/counter byte pair for both counters and all phase bytes.
