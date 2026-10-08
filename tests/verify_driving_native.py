@@ -32,9 +32,13 @@ def main():
     parser.add_argument('--output-dir', type=pathlib.Path)
     parser.add_argument('--settle-seconds', type=float, default=.25,
                         help='Allow display publication after input; use 1 for sanitizer builds')
+    parser.add_argument('--timeout-seconds', type=float, default=5,
+                        help='Window/frame/shutdown deadline; use 30 for Valgrind')
     args = parser.parse_args()
     if not 0 < args.settle_seconds <= 5:
         parser.error('Display settlement must be positive and at most five seconds')
+    if not 0 < args.timeout_seconds <= 60:
+        parser.error('Display deadline must be positive and at most sixty seconds')
     with tempfile.TemporaryDirectory(prefix='wasm-fist-driving-display-', dir='/tmp') as temporary:
         output = args.output_dir.resolve() if args.output_dir else pathlib.Path(temporary)
         if not output.is_relative_to(pathlib.Path('/tmp')) or output == pathlib.Path('/tmp'):
@@ -56,11 +60,13 @@ def main():
             game = subprocess.Popen([str(args.native_preview), str(args.scenario), str(args.assets), '2048', *(['mission'] if args.mission else [])],
                                     env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
             window = None
-            for _ in range(100):
+            deadline = time.monotonic() + args.timeout_seconds
+            while time.monotonic() < deadline:
                 if game.poll() is not None:
                     raise RuntimeError(f'Native scene exited early: {game.stderr.read().decode()}')
                 try:
-                    window = xdo('search', '--pid', game.pid, '--name', r'^Armored Fist \| W/S').splitlines()[0]
+                    window = xdo('search', '--onlyvisible', '--pid', game.pid,
+                                 '--name', r'^Armored Fist \| W/S').splitlines()[0]
                     break
                 except subprocess.CalledProcessError:
                     time.sleep(.05)
@@ -77,12 +83,17 @@ def main():
                 if len(pixels) != 640 * 400 * 4 or set(pixels[3::4]) != {255}:
                     raise AssertionError('Missing/incomplete native frame')
                 if len({pixels[i:i + 3] for i in range(0, len(pixels), 4)}) <= 256:
+                    # A mapped SDL window may precede its first rendered frame.
+                    # Await publication only inside the bounded acknowledgement;
+                    # direct/stability captures must already be complete.
+                    if paused is not None:
+                        return None
                     raise AssertionError('Missing textured terrain/vehicle output')
                 if paused is not None and has_paused_label(pixels) != paused:
                     return None
                 return hashlib.sha256(pixels).hexdigest()
             def published_frame(name, paused):
-                deadline = time.monotonic() + 5
+                deadline = time.monotonic() + args.timeout_seconds
                 attempts = 0
                 while time.monotonic() < deadline:
                     waiting = f'{name}-await-{attempts}'
@@ -141,13 +152,13 @@ def main():
             assert capture('native-focus-return') == frozen, 'Focus loss must pause and release controls'
             # Escape closes on keydown; do not send keyup to the destroyed window.
             xdo('keydown', '--window', window, 'Escape')
-            assert game.wait(timeout=5) == 0, game.stderr.read().decode()
+            assert game.wait(timeout=args.timeout_seconds) == 0, game.stderr.read().decode()
             assert game.stderr.read() == b'', 'Native runtime must be clean'
             print(f'Native SDL: complete frames, held input, pause, focus and shutdown pass; before={before} after={after}')
         finally:
             if game is not None and game.poll() is None:
                 game.terminate()
-                game.wait(timeout=5)
+                game.wait(timeout=args.timeout_seconds)
             display.terminate()
             display.wait(timeout=5)
 

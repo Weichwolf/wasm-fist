@@ -79,11 +79,15 @@ under /tmp; original assets remain ignored/read-only.
 Poll session81969 to terminal completion without changing candidate inputs.
 All 48 native CTest contracts now pass; the WASM regression remains live.
 Require its complete remaining contracts and no warnings. The exact original
-corpus is complete. Separately, diagnostic session97569 is terminal1: its
-first screenshot precedes complete textured-frame publication; the client exits
-cleanly on externally requested SDL_QUIT. Full graphical Memcheck/input acceptance
-remains open and needs explicit first-frame acknowledgement in the profiling
-fixture. Normal real-client scene assertions remain unchanged and pass under0118.
+corpus is complete. Closed0119 now supplies visible-window/full-frame
+acknowledgement with a normal five-second deadline and explicit profiling budget.
+The exact actual production client passes the entire graphical Memcheck/input gate,
+session87132, terminal0: zero errors/lost blocks/suppressions, thirteen accepted
+full frames and clean shutdown. All121 remaining SDK allocation records are pinned:
+53,477 bytes remain reachable in X11/D-Bus. No owned allocator stack is present.
+The normal default gate also passes, session9117, terminal0. Evidence is
+native-publication-deadline.json; earlier failed diagnostic attempts remain
+failure evidence, not acceptance substitutes. All508 candidate inputs are unchanged.
 Keep frozen refs/original assets and unaccepted root parent prototypes pinned.
 Publish only the accepted target-motion implementation, API and registered tests;
 continue complete command/class scheduling under 0081 afterward.
