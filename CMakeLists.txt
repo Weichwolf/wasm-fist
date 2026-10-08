@@ -1,6 +1,12 @@
 cmake_minimum_required(VERSION 3.20)
 project(fist_rewrite VERSION 0.1.0 LANGUAGES C)
 
+if(EMSCRIPTEN)
+    # Keep source locations without DWARF restricting Binaryen optimization.
+    string(REGEX REPLACE "(^|[ \t])-g([ \t]|$)" "\\1-gsource-map\\2"
+        CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWITHDEBINFO}")
+endif()
+
 file(REAL_PATH "${CMAKE_SOURCE_DIR}" source_path)
 file(REAL_PATH "${CMAKE_BINARY_DIR}" build_path)
 string(FIND "${build_path}/" "${source_path}/" inside_source)
@@ -24,6 +30,17 @@ target_compile_options(fist_build_options INTERFACE
     -Wno-unused-parameter -Wno-unused-function
     -fno-strict-aliasing -ffast-math)
 target_link_libraries(softgl PRIVATE fist_build_options)
+
+if(EMSCRIPTEN)
+    target_link_options(fist_build_options INTERFACE -Werror)
+endif()
+
+if(EMSCRIPTEN)
+    # Reserve the previous wasm32 maximum up front to keep shared views stable.
+    add_library(fist_wasm_render_options INTERFACE)
+    target_link_options(fist_wasm_render_options INTERFACE
+        -sINITIAL_MEMORY=2147483648 -sALLOW_MEMORY_GROWTH=0 -sABORTING_MALLOC=0)
+endif()
 
 add_library(fist_assets STATIC src/assets/scenario.c src/assets/orders.c src/assets/units.c src/assets/model.c src/assets/vehicle.c src/assets/klc.c
     src/assets/palette.c src/assets/resource.c src/assets/terrain.c src/assets/heightfield.c src/render/model_bitmap.c)
@@ -266,11 +283,12 @@ add_executable(fist_driving_preview tests/driving_preview.c)
 target_link_libraries(fist_driving_preview PRIVATE fist_app fist_probe_io fist_build_options)
 target_compile_options(fist_driving_preview PRIVATE -Werror)
 if(EMSCRIPTEN)
+    target_link_libraries(fist_driving_preview PRIVATE fist_wasm_render_options)
     target_compile_options(fist_driving_preview PRIVATE -msimd128 -pthread)
     target_link_options(fist_driving_preview PRIVATE
         "--js-library=${CMAKE_SOURCE_DIR}/src/platform/wasm/present.js"
         -msimd128 -pthread -sPTHREAD_POOL_SIZE=3 -sEXIT_RUNTIME=0
-        -sALLOW_MEMORY_GROWTH=1 -sMODULARIZE=1 -sINVOKE_RUN=0
+        -sMODULARIZE=1 -sINVOKE_RUN=0
         -sEXPORT_NAME=createFistDrivingPreview -sENVIRONMENT=web,node
         "-sEXPORTED_RUNTIME_METHODS=['FS','callMain','PThread']"
         "-sEXPORTED_FUNCTIONS=['_main','_fist_preview_advance','_fist_preview_key','_fist_preview_freeze','_fist_preview_frame','_fist_preview_pixels','_fist_preview_value','_fist_preview_destroy']")
@@ -288,11 +306,12 @@ add_executable(fist_terrain_preview tests/terrain_preview.c)
 target_link_libraries(fist_terrain_preview PRIVATE fist_render fist_assets fist_probe_io fist_build_options)
 target_compile_options(fist_terrain_preview PRIVATE -Werror)
 if(EMSCRIPTEN)
+    target_link_libraries(fist_terrain_preview PRIVATE fist_wasm_render_options)
     target_compile_options(fist_terrain_preview PRIVATE -msimd128 -pthread)
     target_link_options(fist_terrain_preview PRIVATE
         "--js-library=${CMAKE_SOURCE_DIR}/src/platform/wasm/present.js"
         -msimd128 -pthread -sPTHREAD_POOL_SIZE=3 -sEXIT_RUNTIME=1
-        -sALLOW_MEMORY_GROWTH=1 -sMODULARIZE=1 -sINVOKE_RUN=0
+        -sMODULARIZE=1 -sINVOKE_RUN=0
         -sEXPORT_NAME=createFistTerrainPreview -sENVIRONMENT=web,node
         "-sEXPORTED_RUNTIME_METHODS=['FS','callMain']")
     set_target_properties(fist_terrain_preview PROPERTIES SUFFIX ".js")
@@ -314,13 +333,14 @@ add_executable(fist_renderer_probe tests/renderer_probe.c)
 target_link_libraries(fist_renderer_probe PRIVATE fist_render fist_build_options)
 target_compile_options(fist_renderer_probe PRIVATE -Werror)
 if(EMSCRIPTEN)
+    target_link_libraries(fist_renderer_probe PRIVATE fist_wasm_render_options)
     target_compile_options(softgl PRIVATE -msimd128 -pthread)
     target_compile_options(fist_render PRIVATE -msimd128 -pthread)
     target_compile_options(fist_renderer_probe PRIVATE -msimd128 -pthread)
     target_link_options(fist_renderer_probe PRIVATE
         "--js-library=${CMAKE_SOURCE_DIR}/src/platform/wasm/present.js"
         -msimd128 -pthread -sPTHREAD_POOL_SIZE=3 -sEXIT_RUNTIME=1
-        -sALLOW_MEMORY_GROWTH=1 -sMODULARIZE=1
+        -sMODULARIZE=1
         -sEXPORT_NAME=createFistRewrite -sENVIRONMENT=web,node)
     set_target_properties(fist_renderer_probe PROPERTIES SUFFIX ".js")
     configure_file(src/platform/wasm/index.html index.html COPYONLY)
