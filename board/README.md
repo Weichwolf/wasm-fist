@@ -81,7 +81,8 @@ frozen reconstruction, not rewrite completion.
 | 0120 | Complete canonical ground command banks, heading/RNG transactions, captured-lifetime semantic diagnostics and owned probe/build integration delivered; all exact current-policy original/native/WASM/style/memory/presentation gates pass. |
 | 0121 | Active complete canonical living ground-class consumption: compose all class phases/behaviors/manual/contact/engine paths through existing owners; full both-target original/state/lifetime and actual scene gates required. |
 | 0122 | Complete shared phase/manual elevation owner delivered: required original/native/WASM/corpus/retained/style/full-production/memory and actual scene gates pass; full0121 remains open. |
-| 0123 | Active complete decoded ground-axis consumption: restore retained signed inputs and reuse the drive-profile owner; full both-target/corpus/memory/style/production/scene gates required. |
+| 0123 | Complete shared decoded ground axes and saved-state retention delivered; required both-target/original/held/memory/style/full-production and actual scene gates pass. Full0121 remains open. |
+| 0124 | Active complete curved manual turret helpers/callers: reuse control refresh and target cancellation with original curve/view/selector state; full both-target/memory/style/production/scene gates required. |
 | 0042 | Menus, settings, campaign/profile progression and persistent save/load. |
 | 0043 | All missions/maps/vehicles, AI, combat, objectives and resolved outcomes. |
 | 0044 | Keyboard/mouse/joystick, devices, audio timing and link behavior on both platforms. |

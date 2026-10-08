@@ -155,7 +155,9 @@ int fist_vehicle_restore(const fist_unit_definition *definition, fist_vehicle_st
         OTHER_ROUNDS = 173,
         CYCLES = 181,
         STOCK = 187,
-        CLASS_PARAMETER = 180
+        CLASS_PARAMETER = 180,
+        STEERING_AXIS = 161,
+        THROTTLE_AXIS = 162
     };
     static const size_t component_offsets[] = {191, 188, 190, 188};
     static const size_t parameter_offsets[] = {181, 250, CLASS_PARAMETER, 249};
@@ -181,6 +183,8 @@ int fist_vehicle_restore(const fist_unit_definition *definition, fist_vehicle_st
         .secondary_flags = raw[SECONDARY_FLAGS],
         .operating_flags = raw[OPERATING_FLAGS],
         .reset_state = raw[RESET_STATE],
+        .axes = {.steering = fist_read_i8(raw + STEERING_AXIS),
+                 .throttle = fist_read_i8(raw + THROTTLE_AXIS)},
         .random_phases = {raw[FIRST_PHASE], raw[SECOND_PHASE]},
         .command = {.mode = raw[COMMAND_MODE],
                     .maneuver = raw[MANEUVER],

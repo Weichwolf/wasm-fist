@@ -92,10 +92,13 @@ returns across all four actors/views/directions. The curve and logical view
 scaling are recovered explicitly; shared C must reuse driver refresh and the
 existing target-cancellation owner. Full a57a/class/device acceptance remains open.
 
-Active0123 is the next bounded C step: complete decoded signed-axis consumption
-with canonical saved-field retention, existing drive-profile ownership and both
-production targets. Its full original evidence is already published. Full
-curved turret/manual camera/contact/engine and class-bank composition remain here.
+Closed 0123 delivers the complete shared decoded-axis consumer after 762,368
+required observations per native/WASM/fast-math-sanitized target, strict 99-unit
+style, complete production and actual canonical native/browser gates. Signed
+saved inputs retain through start/readiness; every call writes the drive-display
+event, including false and repeated reverse-mode refresh. Reuse this driver
+owner. Active 0124 consumes the already-proved curved manual turret helper/caller
+family next; full manual camera/contact/engine and class composition remain here.
 
 ## Next
 

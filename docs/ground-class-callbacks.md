@@ -474,8 +474,8 @@ the saved AX/DI and class return address when control refresh is admitted.
 The separate manual_turret_shared.py fixture proves2,048 retained calls through
 both complete a59c/a5a6 wrappers, all four allocated actors, both directions and
 every view byte. These genuine wrappers set9746 to88/232 respectively, selecting
-curve value212 before view scaling. Only explicit current view/control/target
-boundaries are supplied; all other actor/world/display/pool/RNG state is retained.
+curve value 122 (word 9 at byte index 18) before view scaling. Only explicit current
+view/control/target boundaries are supplied; all other actor/world/display/pool/RNG state is retained.
 The complete memory/ABI predictions match without hooks or substituted returns.
 
 Output digests: helper1fa94c96e5f5708bee26f871d82dd367f2d48de3b786fb7afa2fededb15b7bfe;
@@ -505,3 +505,17 @@ normal-browser scenes and visual review. Compact exact source/program/terminal/
 capture pins are under/tmp/wasm-fist-0122-review. Full class/device/world/PCM
 acceptance remains under0121; the canonical world already distinguishes the
 borrowed original device_timer(0452) from simulation_tick.
+
+
+## Shared decoded ground axes
+
+Closed 0123 delivers complete f69:aae4 in driver.c/h using one existing drive-
+profile/component/display owner. Saved signed +a1/+a2 inputs restore and retain
+through start/readiness. Exact asymmetric dead zones, word-wrap heading, demand
+limits, repeated reverse-profile refresh and explicit no-refresh events pass
+required native/WASM/production-fast-math ASan/UBSan 762,368-observation gates
+without skips, including all 47 sources/960 ground actors, 400-call retained
+cases and whole typed failure/write-footprint guards. Strict 99-unit LLVM19.1.7
+style, complete 51-native/49-WASM-suite/two-Node production and actual canonical
+native/browser scene gates pass. Exact compact pins are recorded under
+/tmp/wasm-fist-0123-review. Full manual/device/class/world/battle/PCM remains open.

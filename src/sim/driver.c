@@ -31,6 +31,44 @@ int fist_driver_take_control(fist_vehicle_state *vehicle) {
     return 0;
 }
 
+int fist_driver_apply_axes(fist_vehicle_state *vehicle, fist_drive_control_events *events) {
+    enum {
+        DEAD_ZONE = 24,
+        DEMAND_SCALE = 2,
+        MINIMUM_DEMAND = -240,
+        MAXIMUM_DEMAND = 284,
+        AUTOMATIC_PROFILES = 2,
+        REVERSE_PROFILE = 3
+    };
+    if (vehicle == NULL || events == NULL || vehicle->type >= FIST_UNIT_GROUND_VEHICLE_COUNT ||
+        vehicle->component_size != fist_vehicle_component_size(vehicle->type)) {
+        return -1;
+    }
+    fist_vehicle_state next = *vehicle;
+    const int32_t steering = (int32_t)next.axes.steering;
+    if (steering >= DEAD_ZONE || steering <= -DEAD_ZONE) {
+        next.drive.requested_heading = (uint16_t)((int32_t)next.drive.heading + steering);
+    }
+    const int32_t pedal = (int32_t)next.axes.throttle;
+    int32_t demand = pedal >= DEAD_ZONE || pedal < -DEAD_ZONE ? -(DEMAND_SCALE * pedal) : 0;
+    if (demand < MINIMUM_DEMAND) {
+        demand = MINIMUM_DEMAND;
+    } else if (demand > MAXIMUM_DEMAND) {
+        demand = MAXIMUM_DEMAND;
+    }
+    next.drive.throttle = (int16_t)demand;
+    fist_drive_control_events emitted = {0};
+    if (next.drive.speed < 0 || next.control_mode >= AUTOMATIC_PROFILES) {
+        const uint8_t profile = next.drive.speed < 0 ? REVERSE_PROFILE : 0;
+        if (fist_vehicle_set_drive_profile(&next, profile, &emitted) != 0) {
+            return -1;
+        }
+    }
+    *vehicle = next;
+    *events = emitted;
+    return 0;
+}
+
 static void apply_controls(fist_vehicle_state *vehicle, const fist_driver_controls *controls) {
     if (controls->throttle_change != 0 || controls->steering != 0 || controls->turret_change != 0) {
         take_control(vehicle);

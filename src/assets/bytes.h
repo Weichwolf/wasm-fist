@@ -3,6 +3,15 @@
 
 #include <stdint.h>
 
+/* Signed serialized byte without an implementation-defined unsigned cast. */
+static inline int8_t fist_read_i8(const uint8_t *data) {
+    const uint8_t value = *data;
+    if (value <= INT8_MAX) {
+        return (int8_t)value;
+    }
+    return (int8_t)(-1 - (int)(UINT8_MAX - value));
+}
+
 /* Callers must first prove that the complete word is in their input view. */
 static inline uint16_t fist_read_u16le(const uint8_t *data) {
     enum { BYTE_BITS = 8 };

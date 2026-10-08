@@ -110,6 +110,12 @@ typedef struct {
 } fist_vehicle_command;
 
 typedef struct {
+    /* Original +a1/+a2 decoded input. Start/readiness retain these bytes. */
+    int8_t steering;
+    int8_t throttle;
+} fist_vehicle_axes;
+
+typedef struct {
     size_t component_size;
     fist_vehicle_command command;
     int32_t map_x;
@@ -135,6 +141,7 @@ typedef struct {
     uint8_t operating_flags;
     /* Saved +36 byte; readiness clears it. Later class meaning is separate. */
     uint8_t reset_state;
+    fist_vehicle_axes axes;
     uint8_t control_mode;
     uint8_t turret_view_mode;
     uint8_t hull_view_mode;
