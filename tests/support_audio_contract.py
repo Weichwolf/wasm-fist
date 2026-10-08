@@ -68,7 +68,11 @@ def artillery(data, actor, evidence):
         evidence['support'] = 'artillery_empty' if count else 'artillery_not_in_place'
         return
     store(data, chosen + 0x1f, word(data, chosen + 0x1f) - 1)
-    store(data, 0x9f19, clock)
+    # Original SHL BX,2 before the scan and SHR BX,2 after it lose the
+    # resource-index low bit. Guns two/three write an unaligned cooldown word
+    # one byte later, including the adjacent support-dispatch byte. Preserve
+    # this proved used-domain defect here; typed repair belongs to shared C.
+    store(data, 0x9f19 + index // 2, clock)
     display(data, actor, 0x2f40)
     if word(data, 0x9ce5):
         notice(data, actor, 42)

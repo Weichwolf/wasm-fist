@@ -1,6 +1,6 @@
 Type: Work item
 Title: Recover complete remaining ground command entries nine and twelve
-Depends: 0103, 0105
+Depends: 0103, 0105, 0106
 
 ## Contract
 
@@ -49,3 +49,13 @@ Closed 0105 proves actual queue/return and heap-placement coupling, including th
 sample-15 sentinel overread. See docs/audio-request-boundary.md. This supplies the prerequisite
 for this unchanged full Contract/Accept; all-47 and genuine-parent recovery remain required.
 No inferred support repair or incomplete parent bank is installed.
+
+## Reached support input prerequisite
+
+Closed 0106 proves original air/artillery reset and the already-decoded catalog producer,
+plus complete b0be consumption of an actually allocated four-gun list. A third/fourth
+available gun writes the cooldown one byte late and overwrites an adjacent dispatch byte;
+the common reference model now preserves that proved original defect. All eight 0105
+regression groups pass with unchanged results. See docs/support-state-boundary.md.
+These independently verified inputs do not replace this full Contract/Accept. The complete
+eight-group parent/domain/all-47 run remains pending; shared C repairs remain unimplemented.
