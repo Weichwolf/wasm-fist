@@ -136,3 +136,35 @@ all47/four-detail coverage is unchanged. The complete output digest is
 its terminal receipt and source/input audit are under /tmp/wasm-fist-0112-review.
 This correction accepts reference observation only. The full shared C parent,
 living-class integration, battle, PCM and complete-game acceptance remain open.
+
+
+## Independent consuming models and reached class order
+
+Closed WI0113 provides `tests/ground_phase_model.py` and the portable full world/event
+observer in `tests/ground_phase_probe_contract.py`. The pure model reuses independently
+proved child contracts and pinned frozen tables under `/tmp`; ordinary synthetic
+predictions do not require Unicorn or installed game files. This does not replace
+required complete original mission/domain/device/lifetime comparisons for C acceptance.
+
+`tests/test_original_ground_phase_model.py` requires three complete original groups:
+128 full-bank parent/child returns;4,096 retained parent/3,984 child returns with
+complete world/event observations; and432 TRAIN1 M1 pre-engine prefix returns through
+update54. The latter includes48 actual command calls, untouched/stale-goal inputs on
+four constant-height detail planes and all84 other payloads unchanged on every update.
+Independent actor/RNG predictions remain the next input. The verified order is
+motion, phase/reload/history/maintenance, command, then terrain contact. Complete
+living class and engine PCM remain outside this declared pre-engine boundary.
+
+Reproduce the complete model gate with:
+
+```sh
+PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
+  /tmp/wasm-fist-decoder-oracle/bin/python \
+  tests/test_original_ground_phase_model.py --originals \
+  --review-dir /tmp/wasm-fist-0113-review
+```
+
+The three-group terminal0 receipt, source pins and compact acceptance history are
+under `/tmp/wasm-fist-0113-review`. No filtered or skipped model gate passes. The
+consuming C implementation, its probe/build integration and full0081 acceptance
+remain open; this model checkpoint publishes no runtime or presentation change.

@@ -65,7 +65,9 @@ all four output digests match and sanitizer stderr is empty. This sample is reco
 in parent-sanitizer-development.json; it does not replace full canonical/domain memory
 gates or actual scene/class acceptance. The new probes remain under
 /tmp/wasm-fist-0081-development and are not published.
-Required both-target all47/full-bank development is live under session35351;
+Required both-target all47/full-bank development is terminal0 under session35351:
+122,880 original and245,760 shared complete returns,188 prepared worlds and3840
+actors. Its full receipt is canonical-parent-development.json;
 complete heading-word/counter development is live under session7770. All inputs
 and outputs are checked; no filtered success or missing coverage accepts this
 prototype. Direct evidence is preserved in direct-parent-development.json.
@@ -82,6 +84,21 @@ nonzero-velocity fixtures exposed the missing prediction. Its required eight-gro
 regression passes475,328 parent/471,136 child returns andall65,536 velocity words
 without skips, retaining all previous coverage and immutable inputs. Use this
 strengthened reference for the continuing complete shared parent gates.
+Closed0113 now proves independent synthetic complete-bank and retained world/event
+models against128/4096 full genuine parent returns. Its reached group extends
+actual85-object TRAIN1 M1 pre-engine evidence through update54:432 prefix returns,
+48 composed parents, all84 other payloads unchanged and complete actor/RNG agreement.
+Command runs after motion/phase/reload/history/maintenance and before ground contact.
+This is reference/model evidence; the shared canonical class caller remains unaccepted.
+The local consuming probe and regular test integration now pass seven complete
+native/WASM default groups without skips and96-unit LLVM19.1 style. Their strict
+full production regression is live under session57204. The newly versioned required
+corpus verifier is running the entire188-world/122880-return corpus against fully
+instrumented simulation/assets/probe libraries under session79517; its success
+receipt requires complete coverage, empty sanitizer stderr and no skips. Keep those
+inputs unchanged while running. Full heading domains are still live under7770.
+No complete shared parent/class/battle/PCM acceptance follows from these checkpoints.
+
 Continue those C gates using this complete original reference; no partial bank or
 complete living-class/battle/PCM claim follows from the reference checkpoint.
 
