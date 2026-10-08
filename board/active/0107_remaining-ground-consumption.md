@@ -58,15 +58,31 @@ this producer chain but does not establish a new intended dead-gun policy.
 ## Evidence
 
 Implementation checkpoint (2026-10-08, not accepted): the local working tree contains
-typed support configuration/queues, transactional station/support children, canonical
-artillery ammunition/lifetime ownership and type-20 projection. A preliminary native
-compile completed all 69 build steps. Strict style verification failed on missing direct
-includes and inconsistent enum initialization; consuming behavior probes, full production
-build/test gates, memory checks and scene verification have not run for this implementation.
-The implementation remains uncommitted until a verified bounded success is established.
-Compact source pins, failed diagnostics and reproduction commands are retained under
-`/tmp/wasm-fist-0107-review/checkpoint.json`; completed raw logs were removed after recording
-their hashes and results. Prior accepted runtime evidence does not cover these local changes.
+transactional station/support children, explicit configuration/queues, canonical artillery
+ammunition/lifetime ownership and type-20 projection. The complete strict style gate passed
+after direct-include, enum and probe readability fixes. A development native run passed ten
+groups and 247100 transitions with no skips; subsequent guard/failure additions require the
+fresh full production run. That development run is not final acceptance evidence.
+
+`tests/remaining_ground_probe.c` and `tests/test_remaining_ground.py` compare complete actor,
+RNG, queue, history and constructor observations against the independent original contracts,
+including documented repairs. They cover all authored target-type preferences and ammunition
+masks, complete selected/loaded bytes, voice-gate/RNG words, wrapped admission, queue exits,
+actual release/reuse/orphans, unused-invalid-input ordering and complete transactional failure.
+See docs/ground-support-consumption.md. Declared prepared fixtures do not prove the all47
+canonical-world gate or the real preparation-to-consumption lifetime producer chain.
+
+The full sequential production native/WASM build/test run is in progress; current command,
+source pins and process handle are recorded under `/tmp/wasm-fist-0107-review/progress.json`.
+The C implementation remains uncommitted until a verified bounded success is established.
+Compact previous checkpoints remain there; completed obsolete raw logs are removed only after
+recording their results/hashes. Prior accepted runtime evidence does not cover these changes.
+
+Closed0108 now supplies `tests/remaining_ground_corpus.py`: all47 real-height/four-detail
+original preparations and current native producer observations pass for 188 worlds, 3840
+ground actors and 944 ordered five-round artillery resources (both authored variants).
+This proves the prepared producer observations; consuming children and captured-lifetime
+acceptance are still pending. Compact pins/results are in prepared-corpus-receipt.json.
 
 Use closed0104 complete original source/required result pins, closed0105
 consumed audio return and closed0106 full producer/list gates. The additional required original
@@ -79,11 +95,12 @@ See docs/remaining-ground-command.md and docs/support-state-boundary.md.
 
 ## Next
 
-Fix the direct-include and enum diagnostics without weakening checks, finalize the typed
-state/API and explicit repair documentation, then add required consuming
-production-native/WASM probes for the complete transactional shared children. Use existing tests/scene harnesses and
-/tmp evidence. Keep full parent/class integration and later dispatcher/PCM dependencies
-visible in the board; no selected diagnostic, battle or complete-game claim from this WI.
+Finish the current complete production build/test run without restarting it on observation
+timeouts. Then extend consuming probes to the real preparation-to-consumption resource chain
+and all47 canonical prepared worlds/eight heights/four details. Complete the required original
+coupling, current memory and actual native/browser scene gates; retain exact source/program
+pins and compact results. Keep full parent/class integration and later dispatcher/PCM
+requirements visible; no selected diagnostic, battle or complete-game claim from this WI.
 
 ## Accept
 

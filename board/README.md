@@ -66,6 +66,7 @@ frozen reconstruction, not rewrite completion.
 | 0105 | Complete original op-64 queue/return, consumed retreat/support coupling and authored sentinel-overread evidence delivered; all eight required groups pass. Closed 0104 consumes this evidence; shared support repairs are open 0107 and PCM remains open. |
 | 0106 | Complete original support resets/catalog producer, four-gun consumption and ammunition/lifetime evidence delivered; five support groups and all eight audio regression groups pass. Proved cooldown/stale-resource defects stay reference-only; shared C repairs are open 0107. |
 | 0107 | Active complete shared station-selection/retreat-support consumption using canonical owners, explicit support initialization and proved lifetime/cooldown/audio-dependence repairs; next bounded step within 0081. |
+| 0108 | Streaming all47 prepared-world inputs, eight real heights/four details and complete original/current native producer observations delivered for active0107; consuming/lifetime acceptance remains open. |
 | 0042 | Menus, settings, campaign/profile progression and persistent save/load. |
 | 0043 | All missions/maps/vehicles, AI, combat, objectives and resolved outcomes. |
 | 0044 | Keyboard/mouse/joystick, devices, audio timing and link behavior on both platforms. |
