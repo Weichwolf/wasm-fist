@@ -60,7 +60,7 @@ The first-difference fixture and receipt are
 /tmp/wasm-fist-0119-class-research/first-step-development.json. Its targetless
 contexts must not be substituted for the required targeted-class gate.
 
-Remaining class tables, secondary gun/rack callbacks, phase admission, contacts,
+Remaining complete class composition, phase admission, contacts,
 fire/input and engine queue composition still need complete class/world proof
 before shared C acceptance. In particular M3/BMP callbacks8886/987b inspect
 simulation tick6cde with mask0x0ff0; that global is not a device-input word.
@@ -138,8 +138,8 @@ PYTHONPATH=tests PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
 ```
 
 This original-only checkpoint accepts neither shared class C nor world scheduling.
-The remaining secondary rack callbacks and every pre-engine global write still
-need independent proof.
+Complete class composition and every pre-engine global write still need
+independent proof.
 
 ## Complete physical-roster visibility
 
@@ -210,3 +210,46 @@ and preserve them through initialization/readiness. Use drive.motion_flags for
 +19 and the existing reset_state for+36. M3/BMP+bb already belongs to
 weapons.ready_stock; their secondary rounds are existing weapon slots0/2. A
 second pending-flag or reserve owner would duplicate canonical state.
+
+## M3/BMP phase refill
+
+The pinned M3 table selects8886 at byte index20; BMP selects987b at index16.
+Both complete callbacks return unchanged when simulation tick6cde&0x0ff0 is
+nonzero. The admitted branches use byte+19 bit0x01, word ammunition and byte+bb:
+
+| Class | Ammunition | Capacity | Component refreshed to3 | Canonical rounds slot |
+| --- | --- | --- | --- | --- |
+| M3 | +ad | 2 | +d6 | 0 |
+| BMP | +b1 | 4 | +e4 | 2 |
+
+If the pending bit is clear, nonzero reserve and ammunition unequal to capacity
+set it and return without loading a round. If it is already set, the original
+loop loads until ammunition equals capacity or reserve reaches zero. Each round
+clears the pending bit, increments the word modulo65,536, decrements the byte
+reserve, requests logical voice23 through bf3c and refreshes the listed component.
+The loop continues after clearing the bit. Equal-capacity/empty-reserve exits
+retain a previously set bit; an over-capacity word is not clamped. Tick inhibition
+also applies to an already pending refill. These methods do not service the
+existing surface-to-air rack state/reserves at+b5..b8.
+
+Independent whole0x60000 memory predictions match291,328 complete unchanged
+original returns without filters: every tick word for both classes (131,072),
+every ammunition word (131,072),26,624 full-flag/admission/ammunition/reserve-edge
+combinations and2,560 complete reserve-byte/ammunition-edge combinations. The
+fixture observes210,906 real voice23 near/far return paths in explicitly muted
+device contexts. Exact call scratch, voice inputs, actor/segment/stack return ABI
+and all other memory are guarded. No original instruction or return is replaced;
+PCM playback and complete shared class scheduling remain open.
+
+Output digest:
+ecff15dc4a8b4ce7838011358914890712e3fb5d9f9d8b955a1db655a12bac0a.
+Fixture digest:
+36e4f8e94fd223d0054561569c074d73d96a832ae38c8734eef301fbaf4a357d.
+Receipt: /tmp/wasm-fist-0119-class-research/secondary-rack.json. Reproduce with
+the same review directory and pinned environment:
+
+```sh
+PYTHONPATH=tests PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
+  /tmp/wasm-fist-decoder-oracle/bin/python \
+  tests/fixtures/ground_class_callbacks/secondary_rack.py
+```
