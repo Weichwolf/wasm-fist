@@ -54,6 +54,17 @@ timers. docs/ground-class-callbacks.md records counts, pins and reproduction.
 Enabled smoke constructor coupling, allocation/lifetime effects and shared C
 remain required; this checkpoint does not complete a46e or this WI.
 
+The exact smoke_phase_coupled.py fixture adds3,860 complete a46e returns using
+actual allocated actors across all four classes: all smoke settings/phases/status
+bytes, every short occupancy, RNG/coordinate-wrap and full extended-pool edges.
+Independent constructor payload/pool/RNG predictions pass, including1,948
+creations and124 low-priority refusals. All memory matches paired unchanged
+constructor composition plus predicted caller shift; every other payload is
+unchanged. docs/ground-class-callbacks.md records this precise original-only scope.
+An unsupported extended source is correctly rejected by the existing short-source
+C destruction probe; retain the guard/failure evidence. Shared native/WASM class
+consumption and full constructor scratch prediction remain open.
+
 ## Next
 
 Recover and independently predict the remaining complete common/class/behavior/

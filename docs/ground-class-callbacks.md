@@ -286,3 +286,44 @@ PYTHONPATH=tests PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
   /tmp/wasm-fist-decoder-oracle/bin/python \
   tests/fixtures/ground_class_callbacks/smoke_phase_disabled.py
 ```
+
+## Smoke constructor coupling
+
+A second required original fixture uses actual allocated ground actors in all
+four classes, rather than a standalone payload pointer. It independently predicts
+the complete smoke payload, pool/registry state, RNG and caller status shift.
+It checks3,860 complete a46e returns:1,024 setting-byte cases,1,024 phase-byte
+cases,604 short-pool occupancy cases,1,024 status-byte cases,128 RNG contexts,
+40 coordinate/wrap cases and16 extended-pool occupancy contexts. The exercised
+paths include3,092 actual constructor calls,1,948 creations and124 low-priority
+refusals. Disabled/refused calls preserve RNG; every other actor payload remains
+unchanged. Creator output captures source XYZ, adds768 to altitude with signed
+word-pair wrap, starts heading at0 and retains the existing random-extent owner.
+
+Full0x60000 memory also matches a paired invocation of the unchanged constructor
+from its declared far-child entry snapshot, followed by the independently
+predicted byte+96 shift. This proves caller composition, including exact stack
+scratch, rather than independently predicting every constructor scratch byte.
+Original code/external memory and DI/DS/SS/SP/CS are checked; no original code or
+return is replaced. The existing constructor's semantic predictor remains the
+single test owner; class composition does not invent another smoke algorithm.
+
+An initial attempt to feed the existing destruction C probe fails because that
+probe requires a short-pool source while actual ground actors occupy the extended
+arena. The valid probe guard is retained. The failed input/fixture/log and compact
+failure receipt remain under/tmp; this original-only checkpoint does not claim
+native/WASM class acceptance, complete class scheduling or PCM playback.
+
+Output digest:
+c3834baad51db3cb91bc5234baf69791355b41f6052849d9d461c59c737e9ab7.
+Fixture digest:
+947b486c4a314aae9c21a403ccf94113e6a5b35ffba003216c1966a317a86e60.
+Receipts: /tmp/wasm-fist-0119-class-research/smoke-phase-coupled.json and
+smoke-phase-coupled-short-probe-failure.json. Reproduce with the pinned oracle:
+
+```sh
+mkdir -p /tmp/wasm-fist-0119-class-research
+PYTHONPATH=tests PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
+  /tmp/wasm-fist-decoder-oracle/bin/python \
+  tests/fixtures/ground_class_callbacks/smoke_phase_coupled.py
+```
