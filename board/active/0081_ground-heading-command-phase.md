@@ -148,6 +148,26 @@ trees/logs, reference tools and compact evidence remain available. Disposable
 artifacts stay under /tmp; this checkout occupies approximately349MiB including
 softgl, Git history and ignored original assets.
 
+The new retained target-motion development gate is terminal0 under session44119:
+10,752 complete genuine original returns and10,752 matching returns on each
+production target, without skips. All four classes consume all28 target types
+in32-update episodes and angle modes0/1/255;10,416 updates retain the actual C
+world and every observed update translates the actor. The complete output digest
+is36a0b11854e27a9939aee9d2280ba634533e0b929bbf50f19d4c2ed776874f65.
+The compact receipt is
+/tmp/wasm-fist-0115-review/owned-motion-original/retained.json; terminal status
+and the removed raw-log hash are in owned-motion-retained-development.json.
+The local required verifier is tests/verify_ground_target_motion_original.py.
+Its all47/four-detail canonical gate is still running under session21267;
+incomplete corpus coverage is not acceptance. It retains actual restored C
+worlds across declared target captures and movement updates, preserving authored
+phase/speed/throttle inputs; acquisition and full class scheduling remain separate.
+The allocator/reuse/reset, live orphan/retype/self-reference and atomic-failure
+probe draft is /tmp/wasm-fist-0115-next/ground_target_motion_lifetime_probe.c.
+Only formatting and strict syntax have been checked. Link/run/memory checks wait
+for the current production writer to finish; no runtime claim follows from the
+draft. The verifier and all owned C remain local and unaccepted.
+
 Continue those C gates using this complete original reference; no partial bank or
 complete living-class/battle/PCM claim follows from the reference checkpoint.
 
