@@ -40,7 +40,10 @@ def main():
         if not output.is_relative_to(pathlib.Path('/tmp')) or output == pathlib.Path('/tmp'):
             parser.error('Visual evidence belongs in a dedicated directory under /tmp')
         output.mkdir(parents=True, exist_ok=True)
-        display = subprocess.Popen(['Xvfb', '-displayfd', '1', '-screen', '0', '800x600x24', '-nolisten', 'tcp'],
+        # Keep short-lived xdotool discovery clients from resetting the server
+        # while SDL opens its separate display and request connections.
+        display = subprocess.Popen(['Xvfb', '-displayfd', '1', '-screen', '0', '800x600x24',
+                                    '-nolisten', 'tcp', '-noreset'],
                                    stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
         game = None
         try:

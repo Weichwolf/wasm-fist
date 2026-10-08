@@ -75,6 +75,8 @@ frozen reconstruction, not rewrite completion.
 | 0114 | Complete original target-aware turret order for all four ground classes proved by four required groups and279880 full returns, including heading/branch domains, retained moving targets and actual release/reuse. Shared consumption/full0081 remain open. |
 | 0115 | Target-motion original gate strengthened to five required groups and311800 full returns, preserving prior digests and adding both angle modes, self aliases and signed coordinate wrap. Shared C gates/full0081 remain open. |
 | 0116 | Production renderer numerical repair, fixed WASM shared heap and source-map debug policy delivered; warning-free full native/WASM build, strict style, all 737 dependency tests, actual scenes and all-47/four-detail presentation pass. Full 0081/battle/PCM remain open. |
+| 0117 | Active exact canonical target-motion integration: both-target default/retained/lifetime and fresh sanitizer corpus/style/compiler/presentation gates pass; full production and required original corpus remain live. |
+| 0118 | Private Xvfb reset race repaired; 32 fresh real native starts and complete SDL input/scene/shutdown checks pass without changing game code or assertions. |
 | 0042 | Menus, settings, campaign/profile progression and persistent save/load. |
 | 0043 | All missions/maps/vehicles, AI, combat, objectives and resolved outcomes. |
 | 0044 | Keyboard/mouse/joystick, devices, audio timing and link behavior on both platforms. |
