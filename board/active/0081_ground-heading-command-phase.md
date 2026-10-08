@@ -316,3 +316,14 @@ for both classes on all three builds. See docs/automatic-fire.md. This adds no p
 bank, arming timers, missile flight, live-game entity-renderer integration or PCM playback.
 Continue complete original ae5c/b0be under open 0104, then selected b152 and the full parent/
 class contract. This WI's Contract/Accept remain unchanged; full-game WASM streak stays zero.
+
+Closed 0104 now proves complete original ae5c/b0be and genuine parent entries nine/twelve.
+All eight required groups pass without skips: 2238296 complete DOS callbacks, 874888 actual
+kernel audio returns and 108828 constructor/height returns. All 47 prepared missions/eight
+maps/four details supply 188 worlds, 3840 ground actors and 57600 complete returns. Closed
+0106 supplies complete support initialization, ordered-resource and ammunition/lifetime
+evidence. See docs/remaining-ground-command.md. Shared consumption is open 0107, followed by
+selected b152/full heading/counter/RNG parent and class scheduling. This original-only step
+does not install a partial C bank or change this Contract/Accept. First playable battle,
+later support dispatch/flight, PCM/outcomes and independent complete-game gates remain open;
+complete-game WASM streak zero.

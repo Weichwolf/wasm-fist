@@ -62,9 +62,10 @@ frozen reconstruction, not rewrite completion.
 | 0101 | Complete shared obstacle maneuvers, idle turret and predictive collision delivered; both-target required original/domain/all-47, full-build/style/memory and actual scene gates pass. Full 0081 and living battle/PCM remain open. |
 | 0102 | Complete original af97/afa2, missile readiness/launch and genuine parent entries five/ten/fourteen delivered; required full domains/allocations/all-47/retention gates pass. Shared C is delivered by 0103 and full 0081 remains open. |
 | 0103 | Complete shared automatic fire, ordered M3/BMP rack service, real type-15 constructor and logical notifications delivered; required both-target original/canonical, full-build/style/memory and scene gates pass. Full 0081 remains open. |
-| 0104 | Active complete original ae5c/b0be and genuine parent-entry nine/twelve recovery; 0105 supplies consumed audio returns and 0106 proves support input producers/ordered resources. Full acceptance and 0081 stay open. |
-| 0105 | Complete original op-64 queue/return, consumed retreat/support coupling and authored sentinel-overread evidence delivered; all eight required groups pass. Shared PCM/intended repairs and complete 0104 remain open. |
-| 0106 | Complete original support resets/catalog producer, four-gun consumption and ammunition/lifetime evidence delivered; five support groups and all eight audio regression groups pass. Proved cooldown/stale-resource defects stay reference-only. Full 0104 and shared C repairs remain open. |
+| 0104 | Complete original ae5c/b0be and genuine parent-entry nine/twelve recovery delivered; all eight required groups and all-47/four-detail coverage pass. Shared C is open 0107; full 0081 stays open. |
+| 0105 | Complete original op-64 queue/return, consumed retreat/support coupling and authored sentinel-overread evidence delivered; all eight required groups pass. Closed 0104 consumes this evidence; shared support repairs are open 0107 and PCM remains open. |
+| 0106 | Complete original support resets/catalog producer, four-gun consumption and ammunition/lifetime evidence delivered; five support groups and all eight audio regression groups pass. Proved cooldown/stale-resource defects stay reference-only; shared C repairs are open 0107. |
+| 0107 | Open complete shared station-selection/retreat-support consumption using canonical owners, explicit support initialization and proved lifetime/cooldown/audio-dependence repairs; next bounded step within 0081. |
 | 0042 | Menus, settings, campaign/profile progression and persistent save/load. |
 | 0043 | All missions/maps/vehicles, AI, combat, objectives and resolved outcomes. |
 | 0044 | Keyboard/mouse/joystick, devices, audio timing and link behavior on both platforms. |

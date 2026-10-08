@@ -50,8 +50,8 @@ read-only permissions; ghidra, reference tag and softgl pins are unchanged.
 
 ## Next
 
-Finish the unchanged full 0104 domain/genuine-parent/sequential/all-47 acceptance. Only then
-define the complete bounded shared C consumer using existing canonical resource/weapon/world
+Closed 0104 now supplies its unchanged full domain/genuine-parent/sequential/all-47 acceptance.
+Consume both complete children under open 0107 using existing canonical resource/weapon/world
 owners, explicit support initialization and evidenced intentional repairs. Campaign parsing,
 later dispatch/flight, PCM, full 0081/battle/outcomes and complete-game gates remain open.
 
@@ -61,4 +61,5 @@ All five required support groups complete without skips or missing output; all e
 regression groups pass. Valid four-gun defect evidence and whole-state guards are retained.
 Source/original/reference/program pins and reproduction are recorded in compact evidence;
 obsolete completed owned logs are cleaned before commit/push. Accepted for this prerequisite
-only. Full 0104 and the rewrite goal remain open; complete-game WASM streak is zero.
+only. Shared consumption/full 0081 and the rewrite goal remain open; complete-game WASM streak
+is zero. Closed 0104 separately proves its complete parent/domain/corpus contract.

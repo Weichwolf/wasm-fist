@@ -1,8 +1,8 @@
 # Original support state inputs
 
 Closed WI 0106 proves original support initialization and ordered artillery consumption.
-This reference-only prerequisite leaves full WI 0104 parent/domain/corpus acceptance open.
-Shared support C, campaign parsing, later dispatch/flight and PCM remain unimplemented.
+Closed WI 0104 consumes this prerequisite in its complete parent/domain/corpus acceptance.
+Shared support C is open WI 0107; campaign parsing, later dispatch/flight and PCM remain open.
 
 ## Reset and catalog producer
 
@@ -104,7 +104,8 @@ All four first-available indices are reached. Branch totals are: not in place
 26112, empty 24480, busy 39984, confirmed 37632 and queue full 2352.
 Output digest: `9fec9f211074069e9cb571b2305697d28523f22976afb127310729d4e93192b7`.
 The same fixtures also produced this digest with the separate remaining-parent
-observer; that comparison does not accept its unfinished full WI 0104 suite.
+observer. Closed WI 0104 separately supplies its complete required eight-group run;
+this digest comparison alone never substitutes for that acceptance.
 
 All eight original audio regression groups were rerun after the model correction.
 Their output digests, counts and coverage match closed WI 0105 exactly.
@@ -131,7 +132,7 @@ All five commands are required, with zero skips and complete group counts 2/1/2/
 Initialization/list/audio results were copied from `/tmp/wasm-fist-0104-review`;
 the ownership gate ran directly under `/tmp/wasm-fist-0106-review`. Its compact
 receipt retains exact source/reference/original pins and cleanup inventory.
-The live full 0104 run retains its own inputs and evidence.
+The completed full 0104 run retains its own compact result, pins and reproduction.
 No production C, configuration, softgl or presentation changes occurred: accepted
 426ab57 evidence is carried forward after verifying 261 sources and three programs.
 The complete-game WASM streak remains zero.
