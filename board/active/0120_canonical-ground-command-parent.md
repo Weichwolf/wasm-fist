@@ -81,6 +81,15 @@ Program hashes are unchanged. Receipt: /tmp/wasm-fist-0120-review/sanitized/corp
 terminal session/command/source/program pins are recorded in candidate.json.
 This full memory subgate does not accept C before the other required gates finish.
 
+The fresh exact native/WASM original corpus also finishes under66293, terminal0:
+122,880 complete parent returns on each target and the original, with the same
+188-world/3,840-actor/all32-bank coverage and no skips. Whole-world/event results
+match the independent corpus digest above;140,376 visibility and640 audio returns
+are checked. All three production program hashes and516 candidate source hashes
+remain unchanged. Receipt: /tmp/wasm-fist-0120-review/original/corpus.json;
+terminal command/session/pins are recorded in candidate.json. Both production
+corpus targets and the instrumented native corpus now agree completely.
+
 The old retained development domain gate also completes,47755, terminal0:
 264,192 original/native/WASM parent returns each, all65,536 values in each of four
 heading fields and2,048 counter cases, no skips. Its prior-policy programs remain
@@ -91,9 +100,9 @@ and compact results; live exact-gate logs and failure evidence remain retained.
 ## Next
 
 Keep all exact-candidate inputs unchanged. Full production regression remains live
-under82768, exact original/native/WASM corpus under66293 and exact heading/counter
-domains under13754. Exact native sanitizer domains remain live under84842; its
-corpus has completed under22810. Require all four remaining terminal results and unchanged source/program
+under82768 and exact original/native/WASM heading/counter domains under13754.
+Exact native sanitizer domains remain live under84842. Both complete corpus
+gates have passed. Require all three remaining terminal results and unchanged source/program
 pins before publication; no partial coverage or scene-only success accepts C.
 Retain compact results and clean completed artifacts.
 

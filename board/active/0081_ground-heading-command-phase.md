@@ -46,7 +46,7 @@ ammunition word for both classes, full flag domains and all reserve bytes, with
 210,906 real muted logical voice23 returns. Whole original memory and exact ABI/
 call scratch match independent predictions. See secondary_rack.py, its pinned
 receipt and docs/ground-class-callbacks.md. Complete shared class/PCM acceptance
-remains open. Active0120 inputs stay frozen while its four remaining gates run.
+remains open. Active0120 inputs stay frozen while its remaining gates run.
 The three new byte fields+37/+a6/+52 also pass4,096 complete original payload
 retention returns: all classes, every field byte and link inputs0/2 through
 class start and readiness. The exact versioned callback_retention.py, receipt
