@@ -65,6 +65,14 @@ An unsupported extended source is correctly rejected by the existing short-sourc
 C destruction probe; retain the guard/failure evidence. Shared native/WASM class
 consumption and full constructor scratch prediction remain open.
 
+Active0122 proves the complete original elevation family at365,056 whole-memory
+returns, including phase priority, temporary held-step use/restoration, shared
+wrapping-clock/step acceleration, target cancellation and signed clamps after
+word wrap. Its exact required fixture/model are versioned; shared C remains an
+isolated candidate until both-target/style/production/memory gates pass. Reuse
+this single weapon owner during complete class consumption; device producers
+and clock-source integration still require full-caller evidence.
+
 ## Next
 
 Recover and independently predict the remaining complete common/class/behavior/

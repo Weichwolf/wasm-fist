@@ -327,3 +327,49 @@ PYTHONPATH=tests PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
   /tmp/wasm-fist-decoder-oracle/bin/python \
   tests/fixtures/ground_class_callbacks/smoke_phase_coupled.py
 ```
+
+## Complete phase and manual elevation family
+
+All four phase tables select a202 at slots1/4/9/13 (byte indices2/8/18/26).
+Motion byte+19 bit0x20 raises; otherwise bit0x40 lowers; neither bit returns
+unchanged. Raise takes precedence when both bits are set. The phase callback
+saves shared step word9602, substitutes held-input word9604, executes the complete
+raise/lower helper and restores9602. Shared previous-clock word9600 still updates.
+
+The common acceleration helper first updates9600 from clock word0452. Unsigned
+wrapping elapsed values below20 increment the active step only when it is below364.
+Elapsed values of20 or more reset it to18. Already larger step words are retained
+on rapid input. The phase helper's temporary increment does not persist in9602.
+This recovery does not infer physical units or replace the original clock producer.
+
+Before changing elevation, a2a8 clears nonzero target word+97 and resets elevation
+word+38 to0. With no target, it retains the old elevation. Raise adds the step with
+16-bit wrap, then clamps signed results above9100. Lower subtracts with16-bit wrap,
+then clamps signed results below-5460. The other bound is not clamped. Manual
+a1e9/a26d retain the adaptive step. Quick lower a265 sets9602 to728, skips clock
+acceleration and performs the same lower path. Center a25b clears the target in
+the same manner and always clears requested relative turret offset+8b; it leaves
+clock/steps unchanged. No allocation, voice, RNG or target dereference occurs.
+
+Independent whole0x60000 memory/AX/BX/DI/DS/SS/SP/CS predictions pass365,056
+complete unchanged original returns using actual allocated actors:24,576 complete
+flag/context cases,131,072 elevation-word cases (both directions),131,072 held-step
+cases (both directions),65,536 wrapping elapsed-clock values and12,800 manual
+helper/edge cases. All required groups run without filters or substituted returns.
+Exact original stack scratch, other actor payloads, pool, RNG and input words are
+guarded. This accepts original behavior; shared C/native/WASM/full-class/input
+and canonical clock consumption remain separate gates under0122/0121.
+
+Output digest:
+4121a05727e9831f30d7ac3655987c25fc64c636db9b40d177f88021c4a1aec0.
+Fixture digest:
+e4f1635160926b3174190e10fa7bb8b0aec88c2827d90a8ec63d446dadde5942.
+Contract digest:
+6f9ea76c5847c7ed05496e34d4b5fdf368b9310b4e7476657831f06c5a20cbbe.
+Receipt: /tmp/wasm-fist-0122-review/original-elevation.json. Reproduce with:
+
+```sh
+PYTHONPATH=tests PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
+  /tmp/wasm-fist-decoder-oracle/bin/python \
+  tests/fixtures/ground_class_callbacks/elevation.py
+```
