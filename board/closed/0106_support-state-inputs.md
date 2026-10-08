@@ -8,6 +8,8 @@ Prove complete unchanged 9d3c/b2a2 support resets and 1bf45 producer from an exp
 already-decoded 253-byte catalog record. Prove b0be ordered consumption of zero through
 four actually allocated artillery resources on all four ground classes. Preserve observed
 original defects in the reference model and keep full 0104 parent/corpus acceptance intact.
+Resolve the existing ammunition owner from real preparation/consumption, and prove explicitly
+invalid retained-resource release/reuse without claiming ordinary battle reachability.
 Do not implement a campaign parser, shared support consumer or speculative gameplay repair.
 
 ## Evidence
@@ -30,6 +32,17 @@ request groups and two sentinel groups were rerun; hashes, counts and coverage a
 See docs/support-state-boundary.md for byte ownership, defect, result hashes and reproduction.
 Compact evidence is under /tmp/wasm-fist-0106-review; reference images and tools stay in /tmp.
 
+Two additional required ownership groups pass with zero skips: sixteen complete d755
+preparation returns and twenty-four complete b0be returns, eight actual releases and four
+actual same-type allocation/saved-continuation pairs. Whole-state preparation/support models,
+independent height predictions, immutable DOS buffers and the complete seeded height mailbox
+packet are checked. Original +1f is ammunition: preparation sets five, consumption spends it
+and destruction clears it. Shared C already stores this in type27.animation_counter; +1d
+debris_parameter is separate. Prepared variant one also admits consumption; no new mode/deleted
+gate is inferred. An invalid retained resource can read a released slot or the same-type
+successor with the exact old binding tuple. Later canonical resources require lifetime-safe
+identity within their existing owner. See tests/test_original_support_ownership.py.
+
 No owned C/configuration/dependency/presentation changes. The accepted 426ab57 production
 build/style/memory/native/browser evidence is carried forward after checking all 261 tested
 source hashes and three program hashes. All 419 original files retain their hashes and
@@ -44,7 +57,7 @@ later dispatch/flight, PCM, full 0081/battle/outcomes and complete-game gates re
 
 ## Accept
 
-All three new required groups complete without skips or missing output; all eight audio
+All five required support groups complete without skips or missing output; all eight audio
 regression groups pass. Valid four-gun defect evidence and whole-state guards are retained.
 Source/original/reference/program pins and reproduction are recorded in compact evidence;
 obsolete completed owned logs are cleaned before commit/push. Accepted for this prerequisite

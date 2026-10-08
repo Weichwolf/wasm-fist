@@ -64,7 +64,7 @@ frozen reconstruction, not rewrite completion.
 | 0103 | Complete shared automatic fire, ordered M3/BMP rack service, real type-15 constructor and logical notifications delivered; required both-target original/canonical, full-build/style/memory and scene gates pass. Full 0081 remains open. |
 | 0104 | Active complete original ae5c/b0be and genuine parent-entry nine/twelve recovery; 0105 supplies consumed audio returns and 0106 proves support input producers/ordered resources. Full acceptance and 0081 stay open. |
 | 0105 | Complete original op-64 queue/return, consumed retreat/support coupling and authored sentinel-overread evidence delivered; all eight required groups pass. Shared PCM/intended repairs and complete 0104 remain open. |
-| 0106 | Complete original support resets/catalog producer and four-gun resource consumption delivered; three new required groups and all eight audio regression groups pass. A valid third/fourth-gun unaligned cooldown defect is preserved in the reference model. Full 0104 and shared C repairs remain open. |
+| 0106 | Complete original support resets/catalog producer, four-gun consumption and ammunition/lifetime evidence delivered; five support groups and all eight audio regression groups pass. Proved cooldown/stale-resource defects stay reference-only. Full 0104 and shared C repairs remain open. |
 | 0042 | Menus, settings, campaign/profile progression and persistent save/load. |
 | 0043 | All missions/maps/vehicles, AI, combat, objectives and resolved outcomes. |
 | 0044 | Keyboard/mouse/joystick, devices, audio timing and link behavior on both platforms. |

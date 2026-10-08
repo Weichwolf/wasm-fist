@@ -60,6 +60,33 @@ Canonical C already owns ordered artillery resources in
 stock; BMP's real smoke service has no stock gate/spend. Future consumers must
 use these owners and establish explicit support configuration/queue/clock state.
 
+## Existing ammunition and retained lifetimes
+
+Original preparation `b445` sets object word `1f` to five; artillery `1aeda/1af03`
+tests and spends it. Destruction `b3e9` clears that same word. Existing shared C
+already stores it as `type27.animation_counter`, including preparation and damage
+writes. A later consumer must rename/document and use that member; the separate
+`debris_parameter` is word `1d`. Creating another ammunition counter would break
+the established producer/destruction contract.
+
+Sixteen complete prepared/support pairs cover four classes, both authored gun
+variants and saved ammunition 0/65535. Each original preparation produces five;
+each admitted support request produces four. Prepared variant one is registered
+and consumable too. This does not justify silently adding a mode/deleted-flag gate.
+Whole DGROUP, independent height predictions and unchanged code/text are checked.
+The real height wrapper's complete EBX mailbox packet is predicted before execution,
+including the seeded upper register half; other mailbox bytes remain unchanged.
+
+Eight additional complete support returns explicitly declare an invalid retained
+resource: a real release leaves its list word unchanged, and a real same-type
+allocation/saved continuation can reuse the same address and registry/value tuple.
+The original then spends the released storage or successor's ammunition. These
+cases prove the failure of tuple-only identity checks; they do not establish
+ordinary battle reachability. Canonical resource storage must retain allocation
+lifetimes through the existing pool reference owner and prevent successor binding.
+The new two-group gate's case digest is
+`00f44bd8b68e4b0594ab3c3abd21d8b5868ee17d6aa70c8e3af46b9213248777`.
+
 ## Required evidence and reproduction
 
 The initialization gate completes two groups and 459008 returns: 196608 air
@@ -90,6 +117,9 @@ PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
   /tmp/wasm-fist-decoder-oracle/bin/python tests/test_original_support_list.py \
   --originals --review-dir /tmp/wasm-fist-0106-review
 PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
+  /tmp/wasm-fist-decoder-oracle/bin/python tests/test_original_support_ownership.py \
+  --originals --review-dir /tmp/wasm-fist-0106-review
+PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
   /tmp/wasm-fist-decoder-oracle/bin/python tests/test_original_audio_request.py \
   --originals --review-dir /tmp/wasm-fist-0106-review
 PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
@@ -97,10 +127,11 @@ PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
   --originals --review-dir /tmp/wasm-fist-0106-review
 ```
 
-All four commands are required, with zero skips and complete group counts 2/1/6/2.
-Completed results were copied from `/tmp/wasm-fist-0104-review` to the compact
-`/tmp/wasm-fist-0106-review` receipt, with exact source/reference/original pins and
-cleanup inventory. The live full 0104 run retains its own inputs and evidence.
+All five commands are required, with zero skips and complete group counts 2/1/2/6/2.
+Initialization/list/audio results were copied from `/tmp/wasm-fist-0104-review`;
+the ownership gate ran directly under `/tmp/wasm-fist-0106-review`. Its compact
+receipt retains exact source/reference/original pins and cleanup inventory.
+The live full 0104 run retains its own inputs and evidence.
 No production C, configuration, softgl or presentation changes occurred: accepted
 426ab57 evidence is carried forward after verifying 261 sources and three programs.
 The complete-game WASM streak remains zero.
