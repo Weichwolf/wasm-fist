@@ -43,6 +43,17 @@ caption/platoon prefixes remain separate negative evidence. Consume complete hea
 all nested child owners and semantic diagnostics together in shared canonical C. Recover
 remaining caller globals/device setup explicitly; no partial parent/class acceptance.
 
+Closed 0111 supplies complete genuine ab03 composition through both full 16-entry
+banks, independent whole-state prefix/diagnostic predictions and complete separate
+original child returns. All47/four-detail corpus, counter/heading/inhibition domains,
+retained sequences and real PM height/visibility/audio returns pass in seven required
+groups without skips: 409,792 parent/405,600 child returns. See
+docs/ground-command-parent.md. The shared C prototype has both complete banks and an
+outer transaction but remains unaccepted and unpublished until its own both-target
+world/event/lifetime/failure, reaching TRAIN1, full-build/style/memory and scene gates.
+Continue those C gates using this complete original reference; no partial bank or
+complete living-class/battle/PCM claim follows from the reference checkpoint.
+
 Reproduce the complete first difference and recover the nested callback plus caller/global
 contract. Add the required saved heading/counter state and connect the shared RNG transaction
 to actual canonical control and any still-delivered standalone boundary. Consume complete
