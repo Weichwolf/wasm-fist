@@ -131,6 +131,23 @@ comparison passes10,032 complete results. These new C/probe changes remain local
 until their own full both-target/canonical/lifetime/failure/style/build/memory gates;
 the earlier production receipt applies to the preceding sources only.
 
+The paired native/WASM development checks now each pass10,032 complete results
+without skips, with identical digest
+720a7a8c014b8da78a5325c05f35e6267e11d8072cc1401fb7b73edb1d945ed6.
+Strict LLVM19.1 format/tidy is terminal0 for96 owned translation units. Current
+source hashes and compact results are retained in
+/tmp/wasm-fist-0115-review/progress.json, owned-motion-development.json and
+owned-motion-style-development.json. The current full production regression is
+still running under session66424; it is not an acceptance result. Canonical,
+retained-world, lifetime, atomic-failure and memory gates remain required for
+the new target-motion composition. No current C/configuration/test changes are
+included in this documentation checkpoint.
+Eight obsolete target-motion draft copies were removed after recording their
+hashes in /tmp/wasm-fist-0115-review/cleanup.json. Current sources, live build
+trees/logs, reference tools and compact evidence remain available. Disposable
+artifacts stay under /tmp; this checkout occupies approximately349MiB including
+softgl, Git history and ignored original assets.
+
 Continue those C gates using this complete original reference; no partial bank or
 complete living-class/battle/PCM claim follows from the reference checkpoint.
 
