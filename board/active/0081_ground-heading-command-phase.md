@@ -168,6 +168,48 @@ Only formatting and strict syntax have been checked. Link/run/memory checks wait
 for the current production writer to finish; no runtime claim follows from the
 draft. The verifier and all owned C remain local and unaccepted.
 
+The canonical target-motion gate is now terminal0 under session21267: all47
+missions/eight heights/four details,188 actual prepared C worlds and3,840 ground
+actors supply92,160 complete original/native/WASM returns per target without
+skips. Of these,69,120 retain the C world and47,300 translate the actor. The
+complete output digest is
+c2331281c9229fdb60e4bc9cfb5b54c1b4abd284b95fadd5ff817644d57e47f5.
+The receipt is /tmp/wasm-fist-0115-review/owned-motion-original/corpus.json;
+owned-motion-corpus-development.json records terminal status, source pins and
+the removed raw-log hash. The current full production run passes all48 native
+CTests but remains live in its WASM regression phase under session66424.
+
+The completed isolated lifetime probe now passes240 cases each on production
+native/WASM and fully instrumented ASan/UBSan:40 empty/released/reused/reset
+repairs,104 atomic world/output rejections,8 used/unused projection cases,
+40 live orphan/retype/rebinding/self-reference cases and48 direct stage API
+rejections. Unused orders/RNG/platoon/candidate fields are preserved. The initial
+WASM byte comparison exposed unspecified padding in the legitimately assigned
+target reference. Both lifetime and slot are checked explicitly before adopting
+only that reference representation into the expected byte guard; every other
+world byte remains checked, and rejection guards normalize nothing. The receipt
+is motion-lifetime-development.json. Corrected source, isolated binaries and
+strict LLVM19.1 draft checks remain under /tmp; owned registration is still open.
+
+All three complete target-motion memory gates are terminal0 under sessions7632,
+64559 and3410 against current fully instrumented simulation/assets/probe libraries
+with production fast-math:10,032 default,10,752 retained/all28-target-type and
+92,160 all47/four-detail canonical returns. Digests match the production targets;
+sanitizer stderr is empty, with no skips. Together with the lifetime probe this
+is113,184 checked cases. The compact receipt is
+/tmp/wasm-fist-0115-review/motion-sanitizer-development.json. Completed raw logs,
+obsolete debug programs and draft style logs were removed after retaining hashes
+and terminal results. No C/configuration/test files are published by this checkpoint.
+
+The clean WASM compiler phase also re-exposes the existing dependency infinity/
+fast-math diagnostics and pthread/growing-memory linker diagnostics. The original
+dependency warning is recorded in closed0040; current warnings are not silently
+treated as a clean build result. Resolve the build policy and underlying issues
+without suppressing checks before claiming a warning-free regression. Read-only
+upstream inspection finds softgl master95f1abc49205a145050f16becb5b383bf2368541;
+the pinned checkout remains7963be1d5b5e1bebbe97ece2c655228c8bc0a838, unchanged.
+Keep any justified dependency repair/update separate from target-motion ownership.
+
 Continue those C gates using this complete original reference; no partial bank or
 complete living-class/battle/PCM claim follows from the reference checkpoint.
 
