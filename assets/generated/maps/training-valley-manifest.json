@@ -1,5 +1,5 @@
 {
-  "generator_sha256": "5b410ff6c2585a30c4cab6f430df989aba1b8afe1a84931cf4b1078e0f16c83e",
+  "generator_sha256": "7ce2352b670f4de15b8e5149de8f6331d4f87a074cf623e95e4db1979869161c",
   "height_encoding": "PNG unsigned 16-bit; world_height=min+sample/65535*(max-min)",
   "height_range": [
     0,
@@ -9,24 +9,24 @@
   "numpy_version": "2.2.4",
   "outputs": {
     "training-valley-color.png": {
-      "bytes": 1785923,
-      "sha256": "106e48443b0fc2eba5f166e329eda6c0b6c33e884ab26e8681a301a05f252be2"
+      "bytes": 2049545,
+      "sha256": "bfe3c636e0cdc74dfd3e60289ad96743784c3e74f3455b3a0540b073a4510e27"
     },
     "training-valley-height.png": {
-      "bytes": 1923516,
-      "sha256": "af17bdbea890d91029561aa7f378aa8b7dc921dbe39d7ef7e007e5e0b16bd1c0"
+      "bytes": 1929115,
+      "sha256": "55166c690eaca6db5778164631f0c5ddaa8746d6030b203d8c95eac5fe33bd7d"
     }
   },
   "periodic": true,
-  "recipe_sha256": "61ff285415aa245acab3227377ad7decead627343c8bf5513926d0bb57673215",
+  "recipe_sha256": "d8cce7af1f16eb2d5044338b4f99ce41d7d38c60ca8b2da7badba7e4f21ca3fd",
   "resolution": 1024,
   "statistics": {
-    "height_max": 113.45233233612213,
-    "height_min": 1.0964389043042034e-09,
-    "mass_error": 0.0,
-    "remaining_water": 334139.92786438344,
-    "temperature_max": 25.63622196813275,
-    "temperature_min": 21.092423974321655,
+    "height_max": 115.78069554138389,
+    "height_min": 0.0004891628947623307,
+    "mass_error": 2.9802322387695312e-08,
+    "remaining_water": 334139.9278643836,
+    "temperature_max": 25.596306057707267,
+    "temperature_min": 20.985091407698558,
     "water_fraction": 0.0
   },
   "version": 1

@@ -11,14 +11,17 @@ OPENBLAS_NUM_THREADS=1 PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
 python3 tests/test_map_generator.py
 ```
 
-Recipes are strict version-1 JSON; unknown, missing, duplicate and nonfinite
-fields fail. All authoring controls are explicit:
+Recipes are strict version-2 JSON; unknown, missing, duplicate and nonfinite
+fields fail. Version 2 adds mandatory `domain_warp` controls; use empty X/Y octave
+lists for unwarped geography. Historical version-1 recipes remain reproducible
+with their recorded generator revision. All authoring controls are explicit:
 
 | Field | Meaning |
 | --- | --- |
 | `name`, `seed`, `resolution` | Stable identity, PCG64 seed and square output size. |
 | `height_range`, `base_height` | World-height encoding bounds and initial elevation. |
 | `octaves` | Periodic gradient-noise layers: frequency, amplitude, seed offset, smooth/ridge kind and ridge power. |
+| `domain_warp` | Periodic X/Y gradient-noise octave lists, with amplitudes in normalized map coordinates (0–0.25); deform analytic contours without source rasters. Empty lists preserve unwarped coordinates. |
 | `features` | Analytic oriented hill/valley layout: normalized X/Y, both radii, angle and signed height. No source raster is embedded. |
 | `hydraulic_erosion` | Iterations, time step, rainfall, evaporation, flow rate, sediment capacity, erosion/deposition rates and bedrock height. |
 | `water` | Sea level, shoreline climate width and color depth scale. |

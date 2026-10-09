@@ -55,6 +55,37 @@ not full visual acceptance. Compact review and reproduction pins remain in
 variants are excluded from the repository baseline. This WI stays active.
 
 
+## Periodic contour/detail iteration
+
+Version-2 recipes add explicit `domain_warp.x_octaves` and `y_octaves` in
+normalized map coordinates. Each axis has validated frequency/amplitude/seed/
+kind/ridge-power controls. Empty lists preserve the prior unwarped geometry.
+Warped analytic features remain periodic; hydraulic erosion, climate, material
+composition and height/export guards remain active. No source raster is embedded.
+
+The next training baseline uses 1936 analytic features, periodic contour
+variation and finer procedural relief. Nine meaningful groups pass, adding
+independent X/Y visible effect, repeatability and torus-periodic warped geometry;
+unknown fields, unsupported recipe versions and excessive warp amplitudes fail.
+The prior eight groups retain their contracts and checks. An adaptive local
+residual pilot is rejected despite lower height error because actual color
+lighting exposes unnatural crater/bead artifacts.
+
+Actual full1024 output and equal-map-region detail views were inspected alongside
+the original and prior owned baseline. Rounded smooth silhouettes gain irregular
+ridges and fine rock relief. Palette/lighting tuning reduces the prior excessive
+shadow contrast. Fine ground material colors and original local ridge/gully shapes
+still require improvement; very-close all-family and near-ground runtime quality
+acceptance remains open. Full-size isolated reproduction passes in
+/tmp/wasm-fist-map-generator-warp-isolated, containing only three owned source/
+recipe/test files and generated output. All nine groups pass there and here;
+both complete PNGs and the manifest match exactly. Generator SHA256 is
+7ce2352b670f4de15b8e5149de8f6331d4f87a074cf623e95e4db1979869161c,
+recipe SHA256 is d8cce7af1f16eb2d5044338b4f99ce41d7d38c60ca8b2da7badba7e4f21ca3fd.
+Compact source/output hashes and actual full/detail review findings remain in
+/tmp/wasm-fist-map-generator-review/warped-relief/verified-improvement.json.
+
+
 ## Next
 
 Run and inspect the revised training recipe, tune terrain/climate/color controls

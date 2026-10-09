@@ -103,10 +103,37 @@ class MapGeneration(unittest.TestCase):
         feature['x'] = .5
         self.assertTrue(np.allclose(np.roll(at_zero, 32, axis=1), MAP.feature_surface(64, [feature]), atol=1e-12))
 
+    def test_domain_warp_controls_and_periodicity(self):
+        recipe = fixture(); recipe['resolution'] = 64
+        recipe['octaves'] = []; recipe['hydraulic_erosion']['iterations'] = 0
+        feature = {'x': .2, 'y': .4, 'radius_x': .1, 'radius_y': .07,
+                   'angle_degrees': 25, 'height': 30}
+        recipe['features'] = [feature]
+        recipe['domain_warp'] = {'x_octaves': [], 'y_octaves': []}
+        plain = MAP.generate(recipe)[0]
+        y, x = np.mgrid[:64, :64] / 64
+        self.assertTrue(np.array_equal(MAP.feature_surface(64, [feature]),
+            MAP.feature_surface(64, [feature], (y, x))))
+        for axis in ('x', 'y'):
+            modified = copy.deepcopy(recipe)
+            modified['domain_warp'][axis + '_octaves'] = [
+                {'frequency': 4, 'amplitude': .025, 'seed_offset': 77,
+                 'kind': 'smooth', 'ridge_power': 1}]
+            first = MAP.generate(modified)[0]
+            self.assertGreater(float(np.max(np.abs(first - plain))), .1)
+            self.assertTrue(np.array_equal(first, MAP.generate(modified)[0]))
+            wx = x + MAP.noise(64, modified['seed'] + 4000, modified['domain_warp']['x_octaves'])
+            wy = y + MAP.noise(64, modified['seed'] + 5000, modified['domain_warp']['y_octaves'])
+            self.assertTrue(np.allclose(MAP.feature_surface(64, [feature], (wy, wx)),
+                MAP.feature_surface(64, [feature], (wy + 1, wx + 1)), atol=1e-11))
+
     def test_invalid_recipes_fail_before_outputs(self):
-        for key, value in [('seed', True), ('resolution', 0), ('version', 1.0),
+        for key, value in [('seed', True), ('resolution', 0), ('version', 1.0), ('version', 1),
                            ('height_range', [1, 1]), ('octaves', [{'unused': 1}]),
-                           ('base_height', float('nan'))]:
+                           ('base_height', float('nan')),
+                           ('domain_warp', {'unknown': []}),
+                           ('domain_warp', {'x_octaves': [{'frequency': 4, 'amplitude': 1,
+                              'seed_offset': 0, 'kind': 'smooth', 'ridge_power': 1}], 'y_octaves': []})]:
             recipe = fixture(); recipe[key] = value
             with self.subTest(field=key), self.assertRaises(ValueError): MAP.generate(recipe)
         with tempfile.TemporaryDirectory(dir='/tmp', prefix='wasm-fist-map-invalid-') as temporary:

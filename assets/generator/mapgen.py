@@ -42,9 +42,9 @@ def validate_octaves(octaves):
 
 def validate(recipe):
     keys(recipe, ('version', 'name', 'seed', 'resolution', 'height_range', 'base_height',
-                  'octaves', 'features', 'hydraulic_erosion', 'water', 'temperature',
+                  'octaves', 'features', 'domain_warp', 'hydraulic_erosion', 'water', 'temperature',
                   'moisture', 'palette', 'materials', 'lighting', 'color_noise'), 'recipe')
-    if type(recipe['version']) is not int or recipe['version'] != 1:
+    if type(recipe['version']) is not int or recipe['version'] != 2:
         raise ValueError('Unsupported recipe version')
     if not isinstance(recipe['name'], str) or not recipe['name'] or not recipe['name'].isascii() or not all(c.isalnum() or c in '_-' for c in recipe['name']):
         raise ValueError('name: ASCII letters, digits, underscore and dash required')
@@ -64,6 +64,10 @@ def validate(recipe):
         for axis in ('radius_x', 'radius_y'): number(feature[axis], .001, 1, axis)
         number(feature['angle_degrees'], -360, 360, 'angle_degrees')
         number(feature['height'], -10000, 10000, 'feature height')
+    keys(recipe['domain_warp'], ('x_octaves', 'y_octaves'), 'domain_warp')
+    for layers in recipe['domain_warp'].values():
+        validate_octaves(layers)
+        for layer in layers: number(layer['amplitude'], 0, .25, 'normalized warp amplitude')
     erosion = recipe['hydraulic_erosion']
     fields = ('iterations', 'time_step', 'rainfall', 'evaporation', 'flow_rate',
               'sediment_capacity', 'erosion_rate', 'deposition_rate', 'bedrock_height')
@@ -122,8 +126,11 @@ def noise(size, seed, octaves):
     return result
 
 
-def feature_surface(size, features):
-    y, x = np.mgrid[:size, :size] / size
+def feature_surface(size, features, coordinates=None):
+    if coordinates is None:
+        y, x = np.mgrid[:size, :size] / size
+    else:
+        y, x = coordinates
     result = np.zeros((size, size))
     for feature in features:
         dx = (x - feature['x'] + .5) % 1 - .5
@@ -189,7 +196,10 @@ def ramp(value, start, end):
 def generate(recipe):
     validate(recipe); size = recipe['resolution']; seed = recipe['seed']
     lo, hi = recipe['height_range']
-    height = np.clip(recipe['base_height'] + noise(size, seed, recipe['octaves']) + feature_surface(size, recipe['features']), lo, hi)
+    y, x = np.mgrid[:size, :size] / size
+    y += noise(size, seed + 5000, recipe['domain_warp']['y_octaves'])
+    x += noise(size, seed + 4000, recipe['domain_warp']['x_octaves'])
+    height = np.clip(recipe['base_height'] + noise(size, seed, recipe['octaves']) + feature_surface(size, recipe['features'], (y, x)), lo, hi)
     height, runoff, mass_error = hydraulic(height, recipe['hydraulic_erosion'])
     if height.min() < lo - 1e-8 or height.max() > hi + 1e-8:
         raise ValueError('Eroded terrain exceeds configured height_range; expand the recipe range')

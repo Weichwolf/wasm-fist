@@ -1,8 +1,9 @@
 # Owned map recipes
 
-`training-valley.json` reconstructs broad D32 terrain geography as 1024 analytic
-hill/valley features, then adds owned procedural detail, hydraulic erosion,
-climate, materials and lighting. Optional original development observations
+`training-valley.json` reconstructs broad D32 terrain geography as 1936 analytic
+hill/valley features, then deforms contours with explicit periodic JSON domain-
+warp octaves and adds owned procedural detail, hydraulic erosion, climate,
+materials and lighting. Optional original development observations
 guided geography and visual tuning; no original height/color raster or game-file
 path is stored or read during generation. Noise and final texturing are new.
 
