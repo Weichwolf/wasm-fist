@@ -147,6 +147,10 @@ typedef struct {
     uint8_t object_flags;
     uint8_t secondary_flags;
     uint8_t operating_flags;
+    /* Original hexadecimal +62/+93, retained by start/readiness. These are
+     * distinct from decimal +62 behavior and +93 movement_gate. */
+    uint8_t contact_flags;
+    uint8_t contact_cooldown;
     /* Saved +36 byte; readiness clears it. Later class meaning is separate. */
     uint8_t reset_state;
     fist_vehicle_axes axes;

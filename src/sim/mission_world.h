@@ -358,6 +358,51 @@ typedef struct {
 int fist_mission_world_observe_obstacle(fist_mission_world *world,
                                         fist_obstacle_observation request);
 
+typedef struct {
+    uint16_t packet;
+    uint8_t attenuation;
+} fist_contact_sound_record;
+
+/* Borrowed original c047 records at 9fe1+45 and 9fe1+48. Authored packets are
+ * 13 and 270; retain explicit record/attenuation inputs until the complete
+ * shared audio/configuration producer is installed. This is not a PCM device. */
+typedef struct {
+    fist_contact_sound_record obstacle;
+    fist_contact_sound_record tree;
+} fist_contact_audio;
+
+typedef struct {
+    uint16_t slot;
+    /* Borrowed original 9fdf owner; NO_SLOT means unmatched. Selection is
+     * independent. The complete engine/device producer remains separate. */
+    uint16_t sound_source;
+    /* Selects which original wrapper is called, not the actor's selection. */
+    bool selected_wrapper;
+    bool coarse;
+    const fist_contact_audio *audio;
+} fist_ground_contact_request;
+
+typedef struct {
+    fist_voice_request sound;
+    /* Physical slot of the first hit, even if its tree was released. */
+    uint16_t candidate;
+    bool admitted;
+    bool hit;
+    bool tree_released;
+    bool refresh_damage_display;
+} fist_ground_contact_result;
+
+/* Complete a631/f69:aa14/common physical scan and type21 transition. Uses
+ * canonical registry order, shared directional proximity and existing obstacle
+ * prediction, damage arithmetic/RNG and pool release. Initializers retain saved
+ * contact/cooldown/tree damage. Tree scaling consumes the captured source side,
+ * never a released/reused pointer. Sound/display are logical events, not PCM.
+ * Invalid used state preserves the entire world and output atomically; unused
+ * RNG/candidate/sound payloads do not constrain early branches. */
+int fist_mission_world_ground_contacts(fist_mission_world *world,
+                                       fist_ground_contact_request request,
+                                       fist_ground_contact_result *out);
+
 /* Complete b017: control bit 4 or retained target presence returns without
  * touching target payloads/lifetimes/RNG. Otherwise consume one canonical draw
  * and only the proved conditional second draw to update requested turret

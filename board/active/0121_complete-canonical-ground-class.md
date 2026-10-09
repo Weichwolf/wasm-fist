@@ -114,9 +114,13 @@ required original groups and 434112 contact/retention observations: full used
 domains, tree consequences, all 47 prepared missions/four details, admitted real
 kernel sound and genuine source capture/retirement/reuse. It establishes the
 cached source-side lifetime defect and preserves explicit numeric scratch and
-retention comparison scopes. Active 0129 delivers the complete canonical C
+retention comparison scopes. Closed 0129 delivers the complete canonical C
 owner and documented lifetime repair through existing geometry/prediction/
-damage/RNG/pool owners. No partial class bank is installed by these references.
+damage/RNG/pool owners. All three contact programs, complete 103-unit style, 54 native regressions,
+52 WASM scripts, five zero-error Memcheck processes and actual native/browser
+scene gates pass. No partial class bank is installed. The expanded scope in
+board/GOAL.md requires owned assets and original-file-free first-playable
+integration; these original comparisons remain development references.
 
 ## Next
 

@@ -16,6 +16,8 @@ typedef struct {
     uint8_t secondary_flags;
     uint8_t ground_height;
     uint8_t variant;
+    /* Saved +1a damage byte; readiness and variant updates retain it. */
+    uint8_t damage;
 } fist_tree;
 
 typedef struct {

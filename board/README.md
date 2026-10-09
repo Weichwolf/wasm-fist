@@ -92,9 +92,9 @@ evidence, not owned-content or release-independence acceptance.
 | 0124 | Complete shared curved turret helpers/callers delivered; required original/native/WASM/retained-selector/memory/style/production and actual scene gates pass. Full0121 remains open. |
 | 0125 | Complete original selected manual composition delivered: both banks, retained selector/view inputs, full refresh, shared controls, all47 sources and proved selector safety/producer boundaries. |
 | 0126 | Complete shared selected manual composition delivered: both banks, retained inputs/controls, full refresh and atomic validation; required both-target/original/memory/style/full-production and actual scene gates pass. Full0121 remains open. |
-| 0127 | Complete original physical contacts delivered: nine required groups,434112 contact/retention observations, full tree/domains, admitted kernel sound, genuine source retirement/reuse and all47 prepared worlds pass. Shared C is active0129; full0121 remains open. |
+| 0127 | Complete original physical contacts delivered: nine required groups,434112 contact/retention observations, full tree/domains, admitted kernel sound, genuine source retirement/reuse and all47 prepared worlds pass. Shared C is delivered by0129; full0121 remains open. |
 | 0128 | Bounded original direct/predictive contact reference delivered: two required tests,16160 complete returns, explicit numerical scratch scope and genuine nested geometry calls; complete original coverage is delivered by0127. |
-| 0129 | Active complete canonical shared physical contacts: consume proved0127 through existing geometry/prediction/damage/RNG/pool owners with explicit saved fields and source lifetime policy; full both-target gates required. |
+| 0129 | Complete canonical shared physical contacts delivered: 705001 observations per native/WASM/fast-math-sanitized program, 103-unit style, 54 native regressions, 52 WASM scripts, zero-error memory and actual native/browser visual gates pass. Full class/battle/PCM and owned-content acceptance remain open. |
 | 0042 | Menus, settings, campaign/profile progression and persistent save/load. |
 | 0043 | All missions/maps/vehicles, AI, combat, objectives and resolved outcomes. |
 | 0044 | Keyboard/mouse/joystick, devices, audio timing and link behavior on both platforms. |

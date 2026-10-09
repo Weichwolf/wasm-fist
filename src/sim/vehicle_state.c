@@ -124,6 +124,8 @@ int fist_vehicle_restore(const fist_unit_definition *definition, fist_vehicle_st
         OPERATING_FLAGS = 26,
         BEHAVIOR = 62,
         BEHAVIOR_FLAGS = 99,
+        CONTACT_FLAGS = 98,
+        CONTACT_COOLDOWN = 147,
         CONTROL_FLAGS = 64,
         SECOND_PHASE = 66,
         COMMAND_MODE = 67,
@@ -170,48 +172,59 @@ int fist_vehicle_restore(const fist_unit_definition *definition, fist_vehicle_st
     }
     const uint16_t type = definition->type;
     const uint8_t *raw = definition->snapshot.data;
-    fist_vehicle_state vehicle = {
-        .type = type,
-        .registry_index = definition->registry_index,
-        .generation = definition->generation,
-        .map_x = definition->map_x,
-        .map_y = definition->map_y,
-        .altitude = definition->altitude,
-        .projection_extent = fist_read_u16le(raw + EXTENT),
-        .projection_scale = fist_read_u16le(raw + SCALE),
-        .camera_height = fist_read_u16le(raw + CAMERA_HEIGHT),
-        .control_flags = fist_read_u16le(raw + CONTROL_FLAGS),
-        .object_flags = raw[OBJECT_FLAGS],
-        .secondary_flags = raw[SECONDARY_FLAGS],
-        .operating_flags = raw[OPERATING_FLAGS],
-        .reset_state = raw[RESET_STATE],
-        .axes = {.steering = fist_read_i8(raw + STEERING_AXIS),
-                 .throttle = fist_read_i8(raw + THROTTLE_AXIS)},
-        .manual_input = {.weapon_action = raw[MANUAL_WEAPON_ACTION],
-                         .view_selector = raw[MANUAL_VIEW_SELECTOR]},
-        .random_phases = {raw[FIRST_PHASE], raw[SECOND_PHASE]},
-        .command = {.mode = raw[COMMAND_MODE],
-                    .maneuver = raw[MANEUVER],
-                    .maneuver_count = raw[MANEUVER_COUNT],
-                    .blocked_count = raw[BLOCKED_COUNT],
-                    .retreat_count = raw[RETREAT_COUNT],
-                    .maneuver_heading = fist_read_u16le(raw + MANEUVER_HEADING),
-                    .target_reference = fist_read_u16le(raw + TARGET_REFERENCE),
-                    .target_range = fist_read_u16le(raw + TARGET_RANGE),
-                    .target_heading = fist_read_u16le(raw + TARGET_HEADING),
-                    .candidate_reference = fist_read_u16le(raw + CANDIDATE_REFERENCE),
-                    .secondary_heading = fist_read_u16le(raw + SECONDARY_HEADING),
-                    .discovery_count = raw[DISCOVERY_COUNT],
-                    .goal = {fist_read_i32le(raw + GOAL), fist_read_i32le(raw + GOAL + 4)},
-                    .range = fist_read_u16le(raw + RANGE),
-                    .heading_average = fist_read_u16le(raw + HEADING_AVERAGE)},
-        .control_mode = raw[CONTROL_MODE],
-        .turret_view_mode = raw[TURRET_VIEW],
-        .hull_view_mode = raw[HULL_VIEW],
-        .behavior = raw[BEHAVIOR],
-        .behavior_flags = raw[BEHAVIOR_FLAGS],
-        .reload_countdown = raw[RELOAD],
-        .component_size = defaults[type].component_size};
+    fist_vehicle_state vehicle;
+    /* Initialize the complete representation before writing decoded members.
+     * Transaction probes also retain padding; a nonzero aggregate initializer
+     * may leave those bytes undefined when copied from a local object. */
+    unsigned char *bytes = (unsigned char *)&vehicle;
+    for (size_t index = 0; index < sizeof(vehicle); ++index) {
+        bytes[index] = 0;
+    }
+    vehicle.type = type;
+    vehicle.registry_index = definition->registry_index;
+    vehicle.generation = definition->generation;
+    vehicle.map_x = definition->map_x;
+    vehicle.map_y = definition->map_y;
+    vehicle.altitude = definition->altitude;
+    vehicle.projection_extent = fist_read_u16le(raw + EXTENT);
+    vehicle.projection_scale = fist_read_u16le(raw + SCALE);
+    vehicle.camera_height = fist_read_u16le(raw + CAMERA_HEIGHT);
+    vehicle.control_flags = fist_read_u16le(raw + CONTROL_FLAGS);
+    vehicle.object_flags = raw[OBJECT_FLAGS];
+    vehicle.secondary_flags = raw[SECONDARY_FLAGS];
+    vehicle.operating_flags = raw[OPERATING_FLAGS];
+    vehicle.contact_flags = raw[CONTACT_FLAGS];
+    vehicle.contact_cooldown = raw[CONTACT_COOLDOWN];
+    vehicle.reset_state = raw[RESET_STATE];
+    vehicle.axes.steering = fist_read_i8(raw + STEERING_AXIS);
+    vehicle.axes.throttle = fist_read_i8(raw + THROTTLE_AXIS);
+    vehicle.manual_input.weapon_action = raw[MANUAL_WEAPON_ACTION];
+    vehicle.manual_input.view_selector = raw[MANUAL_VIEW_SELECTOR];
+    vehicle.random_phases[0] = raw[FIRST_PHASE];
+    vehicle.random_phases[1] = raw[SECOND_PHASE];
+    vehicle.command.mode = raw[COMMAND_MODE];
+    vehicle.command.maneuver = raw[MANEUVER];
+    vehicle.command.maneuver_count = raw[MANEUVER_COUNT];
+    vehicle.command.blocked_count = raw[BLOCKED_COUNT];
+    vehicle.command.retreat_count = raw[RETREAT_COUNT];
+    vehicle.command.maneuver_heading = fist_read_u16le(raw + MANEUVER_HEADING);
+    vehicle.command.target_reference = fist_read_u16le(raw + TARGET_REFERENCE);
+    vehicle.command.target_range = fist_read_u16le(raw + TARGET_RANGE);
+    vehicle.command.target_heading = fist_read_u16le(raw + TARGET_HEADING);
+    vehicle.command.candidate_reference = fist_read_u16le(raw + CANDIDATE_REFERENCE);
+    vehicle.command.secondary_heading = fist_read_u16le(raw + SECONDARY_HEADING);
+    vehicle.command.discovery_count = raw[DISCOVERY_COUNT];
+    vehicle.command.goal.x = fist_read_i32le(raw + GOAL);
+    vehicle.command.goal.y = fist_read_i32le(raw + GOAL + 4);
+    vehicle.command.range = fist_read_u16le(raw + RANGE);
+    vehicle.command.heading_average = fist_read_u16le(raw + HEADING_AVERAGE);
+    vehicle.control_mode = raw[CONTROL_MODE];
+    vehicle.turret_view_mode = raw[TURRET_VIEW];
+    vehicle.hull_view_mode = raw[HULL_VIEW];
+    vehicle.behavior = raw[BEHAVIOR];
+    vehicle.behavior_flags = raw[BEHAVIOR_FLAGS];
+    vehicle.reload_countdown = raw[RELOAD];
+    vehicle.component_size = defaults[type].component_size;
     restore_motion(raw, &vehicle);
     restore_weapon_control(raw, &vehicle);
     for (size_t index = 0; index < FIST_VEHICLE_HEADING_SAMPLES; ++index) {

@@ -7,7 +7,16 @@
 #include <stddef.h>
 #include <stdint.h>
 
-enum { TREE = 21, EXTENT = 18, SCALE = 20, FLAGS = 22, SECONDARY = 23, GROUND = 24, VARIANT = 25 };
+enum {
+    TREE = 21,
+    EXTENT = 18,
+    SCALE = 20,
+    FLAGS = 22,
+    SECONDARY = 23,
+    GROUND = 24,
+    VARIANT = 25,
+    DAMAGE = 26
+};
 
 int fist_tree_restore(const fist_unit_definition *definition, fist_pool_allocation allocation,
                       fist_tree *out) {
@@ -29,7 +38,8 @@ int fist_tree_restore(const fist_unit_definition *definition, fist_pool_allocati
         .flags = raw[FLAGS],
         .secondary_flags = raw[SECONDARY],
         .ground_height = raw[GROUND],
-        .variant = raw[VARIANT]};
+        .variant = raw[VARIANT],
+        .damage = raw[DAMAGE]};
     return 0;
 }
 

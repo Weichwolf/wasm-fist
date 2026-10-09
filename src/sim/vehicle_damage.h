@@ -24,6 +24,10 @@ enum {
 typedef struct {
     /* Original e3ae/e3b0 factors, selected by the PROJECTILE side bit. */
     uint16_t source_scale[FIST_DAMAGE_SIDES];
+    /* Side captured by the canonical damage caller. Retaining the value
+     * repairs original e3b2's dereference after source retirement/reuse. The
+     * proved initial null source selects the clear side. */
+    bool damage_source_enemy;
     uint16_t selected_slot;
     uint16_t roster[FIST_UNIT_ROSTER_COUNT];
     uint16_t platoon_sizes[FIST_DAMAGE_COUNTED_PLATOONS];

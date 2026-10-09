@@ -32,7 +32,8 @@ enum {
     TARGET = 26,
     ARTILLERY = 27,
     DESTROYED_TARGET = 4,
-    AIRCRAFT_DEATH = 12
+    AIRCRAFT_DEATH = 12,
+    SOURCE_SIDE = 8
 };
 
 static int collision_views(const fist_mission_world *world, fist_collision_body *bodies,
@@ -99,6 +100,7 @@ static int damage(fist_mission_world *world, fist_projectile *source,
             publish_explosion(world, &result->other_damage.explosion);
         }
     }
+    world->combat.damage_source_enemy = (source->flags & SOURCE_SIDE) != 0;
     result->damaged = true;
     return 0;
 }
