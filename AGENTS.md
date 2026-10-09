@@ -38,6 +38,8 @@ Original pixel/palette/PCM bit identity is not an acceptance target.
   Do not restore generated engine code or reconstruction dependencies to this checkout.
   Historical register/segment/bit-parity requirements apply to that reference work only.
 - softgl is a pinned `deps/softgl` submodule. Keep dependency changes separate and justified.
+  Use unmodified upstream softgl; do not edit or publish changes to its sources.
+  Configure the shared three-helper-plus-caller rendering budget in owned application code.
   Runtime and renderer stay C11. meshoptimizer is for offline tools only; do not link it.
   Keep softgl as the only dependency in `deps/`; external reference tools belong under `/tmp`.
 - Target 60 FPS on this machine at 640x360, genuine 4x MSAA and four total render threads.

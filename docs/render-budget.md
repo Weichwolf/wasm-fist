@@ -32,9 +32,9 @@ the current game renderer still calls the single-sample creation function.
 The verified1d17a94 library and newest observed549ae30 have identical library
 content. Their automatic worker initialization reserves the caller and caps
 helpers at three only under `__EMSCRIPTEN__`. Native still chooses the logical
-CPU count as its helper count. This native default does not implement the
-required shared four-thread target and must be corrected in a separate verified
-dependency change. Explicit internal hints count helpers, and
+CPU count as its helper count. Select three helpers using the existing explicit
+worker hint in an owned renderer adapter. Use unmodified upstream softgl;
+configuration and verification belong in wasm-fist. Explicit internal hints count helpers, and
 `sg_thread_count` returns the configured helper count, excluding the caller.
 Check successfully started workers as well as configured counts when validating
 the actual native/browser profile. No60-FPS claim follows from API availability.
