@@ -60,12 +60,21 @@ Optional original-format import/research must remain separate from required flow
 
 ## Acceptance and work order
 
-Complete the currently running bounded contact proof without claiming asset or
-game independence. Then add the owned-content inventory and generation/runtime
-contracts alongside first-playable integration. Deliver an original-file-free
-first mission with owned terrain, vehicles, cockpit/UI and audible feedback;
-extend every remaining category and function until the inventory is complete.
-Original decoders are research tools, not the release content pipeline.
+Canonical contact verification is delivered by 0129. Eight procedural geography
+baselines are versioned under active 0131; full visual quality remains open. The
+47-mission terrain inventory identifies 19 reference environment combinations,
+including cloud and starfield appearances, that need owned mission/environment
+definitions. The other visual/audio categories still need complete inventories
+and replacements. See terrain-mission-inventory.md and open 0130.
+
+Complete active 0133's original-free lossless terrain packaging/loading gate,
+then configure the owned renderer's actual MSAA/helper profile in 0134 and consume
+the owned maps for near-ground native/browser visual refinement. Keep softgl
+unmodified. Continue generation/runtime contracts alongside first-playable
+integration. Deliver an original-file-free first mission with owned terrain,
+vehicles, cockpit/UI and audible feedback; extend every remaining category and
+function until the inventory is complete. Original decoders are research tools,
+not the release content pipeline. No complete owned mission is accepted yet.
 
 For each replacement, review actual native/browser images and movement, asset
 detail, cockpit/HUD usability, audible output and performance. Compare quality
