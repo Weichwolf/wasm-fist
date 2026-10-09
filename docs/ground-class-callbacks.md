@@ -533,3 +533,44 @@ control object through retained cross-actor fixed/direct calls. Strict 100-unit
 LLVM19.1.7 style, complete 52-native/50-WASM-suite/two-Node production and actual
 canonical native/browser gates pass. Exact compact pins are recorded under
 /tmp/wasm-fist-0124-review. Full manual/device/class/world/battle/PCM remains open.
+
+## Complete original selected manual composition
+
+Closed 0125 proves complete a57a through both banks on actual allocated four-class
+actors. The six required versioned fixtures and independent composed model cover
+591872 full parent domain cases, 12288 retained cross-actor calls, 4096 saved
+selector/view start/readiness cases, 265512 genuine key-tail/UI/config-store and
+parent couplings, and 86400 calls from all 47 saved sources / 960 ground actors.
+The whole-memory/eleven-register parent predictions include exact nested stack
+scratch; no instructions or providers are replaced. Source restoration preserves
+actual constructor indices. All 960 authored saved action bytes are 0.
+
+Mode words 0..5 and aliases 32768..32773 form the complete drive bank. Only
+1..4 apply axes; mode 2 then maps unsigned +a4 below 80/below 160/otherwise to
+view 1/2/6, refreshing all three per-class components and three display bytes
+before the second bank. That bank uses raw byte offsets 0/2/4/6/8. Inhibition
+skips only the drive bank; manual weapon controls can clear it. Shared selector,
+adaptive elevation controls and borrowed device clock retain across actors.
+
+The complete a521 key tail prioritizes set bits 16/32/128/256/64 in that order,
+producing actions 0/2/4/6/8; no action bit retains any previous byte. Genuine
+UI/config store prefixes prove modes 0..4 only. The sixth bank entry is a no-op
+with no UI producer claimed. The named store prefixes deliberately leave
+remaining widgets/config parsing and complete hardware/UI acceptance open.
+Decoded +a4 has no inferred physical device identity; +a3 remains unresolved.
+
+The separate 263200-case guard/negative fixture distinguishes domain checks from
+actual DOS behavior. Invalid mode 7 misroutes to the left-turret callback and
+causes a proved double turn when held after inhibition clears. Some out-of-bank
+words accidentally RET; saved action 255 genuinely causes an unmapped fetch on
+each class. Original completion alone therefore does not establish a valid
+selector. Complete shared C must reject used out-of-bank selectors atomically
+and ignore truly unused ones. This repair and all byte-retention evidence are
+specified in active 0126; no shared manual/class/device C acceptance is claimed.
+
+Retained elevation/axis/turret child regressions add 2441 complete unchanged
+returns with published digests preserved. All required commands exit 0 without
+skips. Closed 0125 contains counts, digests, exact commands, rejected-hypothesis
+explanations and compact receipt locations under /tmp/wasm-fist-0125-review.
+Full class/world scheduling, first playable battle, PCM and remaining game
+surfaces still require their own acceptance.

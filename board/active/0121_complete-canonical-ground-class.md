@@ -100,9 +100,11 @@ event, including false and repeated reverse-mode refresh. Reuse this driver
 owner. Closed 0124 delivers the complete shared curved turret family after
 935,696 required observations per native/WASM/fast-math-sanitized target, strict
 100-unit style, complete production and actual native/browser gates. Reuse its
-target cancellation and driver refresh. Active 0125 proves the complete original
+target cancellation and driver refresh. Closed 0125 proves the complete original
 selected manual parent, saved selector/view-input retention and full refresh/
-shared clock ordering before complete shared manual/class composition.
+shared clock ordering, including all 47 saved sources and used-selector repairs.
+Active 0126 implements complete shared manual composition through these owners;
+full class/device/world acceptance remains open.
 
 ## Next
 
