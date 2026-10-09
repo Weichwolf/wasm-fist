@@ -103,7 +103,10 @@ owner. Closed 0124 delivers the complete shared curved turret family after
 target cancellation and driver refresh. Closed 0125 proves the complete original
 selected manual parent, saved selector/view-input retention and full refresh/
 shared clock ordering, including all 47 saved sources and used-selector repairs.
-Active 0126 implements complete shared manual composition through these owners;
+Closed 0126 delivers complete shared manual composition through these owners:
+1250505 required observations per native/WASM/fast-math-sanitized target, strict
+101-unit style, full production regression and actual canonical scenes pass.
+Reuse fist_driver_apply_manual and its complete vehicle-state view refresh;
 full class/device/world acceptance remains open.
 
 ## Next

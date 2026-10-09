@@ -566,7 +566,8 @@ words accidentally RET; saved action 255 genuinely causes an unmapped fetch on
 each class. Original completion alone therefore does not establish a valid
 selector. Complete shared C must reject used out-of-bank selectors atomically
 and ignore truly unused ones. This repair and all byte-retention evidence are
-specified in active 0126; no shared manual/class/device C acceptance is claimed.
+delivered by closed 0126 through the existing shared children and an atomic
+manual transaction. Complete class/device consumption remains open.
 
 Retained elevation/axis/turret child regressions add 2441 complete unchanged
 returns with published digests preserved. All required commands exit 0 without
@@ -574,3 +575,62 @@ skips. Closed 0125 contains counts, digests, exact commands, rejected-hypothesis
 explanations and compact receipt locations under /tmp/wasm-fist-0125-review.
 Full class/world scheduling, first playable battle, PCM and remaining game
 surfaces still require their own acceptance.
+
+## Complete shared manual composition
+
+The complete selected manual owner is `fist_driver_apply_manual` in `sim/driver`.
+It borrows selection, drive mode and the separate device clock; the actor owns
+the saved weapon-action byte and unsigned decoded view-input byte. Initialization
+and mission preparation retain both. Their physical device identities remain
+unresolved. One controls object retains the existing adaptive elevation state
+and curved turret selector across actors.
+
+An unselected call preserves actor and controls and writes false display events.
+For a selected actor, control bit1 inhibits only the first bank. Otherwise the
+drive word loses bit15 exactly as the original indirect index does; the six
+valid modes are 0..5. Modes 0/5 retain drive/view state. Modes 1..4 consume the
+existing signed-axis owner. Mode 2 then chooses logical view 1 below 80, view 2
+below 160 and view 6 otherwise, using the unsigned decoded input. The existing
+vehicle-state owner refreshes three class components; the manual result requests
+the complete three-control view display refresh.
+
+The weapon bank executes after this view selection. Raw byte 0 is a no-op;
+2/4 invoke the existing fixed left/right curved turret callers, retaining
+selector88/232 and reusing driver refresh and target cancellation. Values 6/8
+take control and invoke the existing raise/lower owner with the borrowed device
+clock and retained adaptive controls. A refreshed view therefore affects the
+same call's curved step. No target is resolved merely to cancel its presence.
+
+The owner validates used state on copies and commits actor, controls and events
+together. A malformed used drive/action/target after otherwise successful axis
+or view work preserves all caller state and output. Inhibited drive indices
+and genuinely unused target bindings are ignored. The original out-of-bank
+misrouting, double turn and unmapped fetch proven by 0125 are rejected explicitly.
+No partial living-class bank or input-device implementation is installed.
+
+The eight required owner tests pass 1250505 observations per production native,
+WASM and production-fast-math ASan/UBSan target without skips: 591872 complete
+parent domains, 288000 held calls, 12288 retained cross-actor calls, 6144 saved
+restoration/start/readiness observations, 1944 runtime-target cases, 263857 guard
+checks and 86400 observations from all 960 ground actors in all 47 pinned sources.
+The independent parent model and AST-identical original domain generator are
+reused. Entire typed write footprints, explicit false outputs, late failures
+and complete invalid input batches are checked. Output SHA256:
+c681e2b9f98f9c7ee40a52c12fa3909d94a3498e0ed17fde4d0aaf52f26f991b.
+
+Strict LLVM 19.1.7 style passes all 101 owned translation units. Actual compilation
+commands retain every requested warning/alias/fast-math flag and owned `-Werror`;
+the instrumented build also retains address/undefined sanitizers.
+
+Full production regression passes all 53 native CTests, 51 WASM Python scripts
+(49 unittest suites / 360 tests and two plain verifiers) and both Node gates.
+The unchanged native/browser scene commands pass sequentially after provisioning
+real TRAIN1 inputs with `tests/prepare_driving_preview.py --mission`. All 13
+canonical native and six browser captures pass linkage; ten representative
+frames are inspected. Normal deadlines and every runtime assertion are retained.
+Closed 0126 records exact commands, counts, rejected preparation/interrupted
+attempts and compact evidence under `/tmp/wasm-fist-0126-review`.
+
+This delivers the complete shared manual owner. Physical device production,
+contacts, maintenance/engine and complete class/world/battle/PCM acceptance
+remain open. Final complete-game WASM streak is 0.

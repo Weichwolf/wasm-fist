@@ -157,7 +157,9 @@ int fist_vehicle_restore(const fist_unit_definition *definition, fist_vehicle_st
         STOCK = 187,
         CLASS_PARAMETER = 180,
         STEERING_AXIS = 161,
-        THROTTLE_AXIS = 162
+        THROTTLE_AXIS = 162,
+        MANUAL_WEAPON_ACTION = 160,
+        MANUAL_VIEW_SELECTOR = 164
     };
     static const size_t component_offsets[] = {191, 188, 190, 188};
     static const size_t parameter_offsets[] = {181, 250, CLASS_PARAMETER, 249};
@@ -185,6 +187,8 @@ int fist_vehicle_restore(const fist_unit_definition *definition, fist_vehicle_st
         .reset_state = raw[RESET_STATE],
         .axes = {.steering = fist_read_i8(raw + STEERING_AXIS),
                  .throttle = fist_read_i8(raw + THROTTLE_AXIS)},
+        .manual_input = {.weapon_action = raw[MANUAL_WEAPON_ACTION],
+                         .view_selector = raw[MANUAL_VIEW_SELECTOR]},
         .random_phases = {raw[FIRST_PHASE], raw[SECOND_PHASE]},
         .command = {.mode = raw[COMMAND_MODE],
                     .maneuver = raw[MANEUVER],
@@ -306,6 +310,22 @@ int fist_vehicle_initialize(const fist_unit_definition *definition, fist_random 
 
 size_t fist_vehicle_component_size(uint16_t type) {
     return type < FIST_UNIT_GROUND_VEHICLE_COUNT ? defaults[type].component_size : 0;
+}
+
+int fist_vehicle_refresh_turret_view(fist_vehicle_state *vehicle) {
+    enum { COMPONENT_REFRESH = 3 };
+    /* +ed/+ef/+f1, +f0/+f2/+f4, +e7/+e9/+eb, +ed/+ef/+f1 relative
+     * to each class's owned component start +bf/+bc/+be/+bc. */
+    static const uint8_t components[FIST_UNIT_GROUND_VEHICLE_COUNT][3] = {
+        {46, 48, 50}, {52, 54, 56}, {41, 43, 45}, {49, 51, 53}};
+    if (vehicle == NULL || vehicle->type >= FIST_UNIT_GROUND_VEHICLE_COUNT ||
+        vehicle->component_size != fist_vehicle_component_size(vehicle->type)) {
+        return -1;
+    }
+    for (size_t index = 0; index < sizeof(components[vehicle->type]); ++index) {
+        vehicle->components[components[vehicle->type][index]] = COMPONENT_REFRESH;
+    }
+    return 0;
 }
 
 int fist_vehicle_set_drive_profile(fist_vehicle_state *vehicle, uint8_t profile,

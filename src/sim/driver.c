@@ -69,6 +69,100 @@ int fist_driver_apply_axes(fist_vehicle_state *vehicle, fist_drive_control_event
     return 0;
 }
 
+static int apply_manual_drive(fist_vehicle_state *vehicle, const fist_manual_input *input,
+                              fist_manual_events *events) {
+    enum {
+        MODE_MASK = 0x7fff,
+        MODE_COUNT = 6,
+        VIEW_MODE = 2,
+        LOW_VIEW = 80,
+        HIGH_VIEW = 160,
+        FIRST_VIEW = 1,
+        SECOND_VIEW = 2,
+        LAST_VIEW = 6
+    };
+    if ((vehicle->control_flags & CONTROL_REFRESH_FLAG) != 0) {
+        return 0;
+    }
+    /* Original SHL word index discards bit 15 before the indirect lookup. */
+    const uint16_t mode = (uint16_t)(input->drive_mode & MODE_MASK);
+    if (mode >= MODE_COUNT) {
+        return -1;
+    }
+    if (mode == 0 || mode == MODE_COUNT - 1) {
+        return 0;
+    }
+    if (fist_driver_apply_axes(vehicle, &events->drive) != 0) {
+        return -1;
+    }
+    if (mode == VIEW_MODE) {
+        const uint8_t selector = vehicle->manual_input.view_selector;
+        if (selector < LOW_VIEW) {
+            vehicle->turret_view_mode = FIRST_VIEW;
+        } else if (selector < HIGH_VIEW) {
+            vehicle->turret_view_mode = SECOND_VIEW;
+        } else {
+            vehicle->turret_view_mode = LAST_VIEW;
+        }
+        if (fist_vehicle_refresh_turret_view(vehicle) != 0) {
+            return -1;
+        }
+        events->refresh_view_display = true;
+    }
+    return 0;
+}
+
+static int apply_manual_weapon(fist_vehicle_state *vehicle, const fist_manual_input *input,
+                               fist_manual_controls *controls) {
+    enum { NO_ACTION = 0, LEFT = 2, RIGHT = 4, RAISE = 6, LOWER = 8 };
+    const uint8_t action = vehicle->manual_input.weapon_action;
+    switch (action) {
+    case NO_ACTION:
+        return 0;
+    case LEFT:
+    case RIGHT:
+        return fist_weapon_turn_turret_input(
+            vehicle, action == LEFT ? FIST_WEAPON_TURRET_LEFT : FIST_WEAPON_TURRET_RIGHT,
+            &controls->turret);
+    case RAISE:
+    case LOWER:
+        if (fist_driver_take_control(vehicle) != 0) {
+            return -1;
+        }
+        return fist_weapon_adjust_elevation(
+            vehicle, action == RAISE ? FIST_WEAPON_ELEVATION_RAISE : FIST_WEAPON_ELEVATION_LOWER,
+            &controls->elevation, input->clock);
+    default:
+        return -1;
+    }
+}
+
+int fist_driver_apply_manual(fist_vehicle_state *vehicle, const fist_manual_input *input,
+                             fist_manual_controls *controls, fist_manual_events *events) {
+    if (vehicle == NULL || input == NULL || controls == NULL || events == NULL) {
+        return -1;
+    }
+    if (!input->selected) {
+        *events = (fist_manual_events){0};
+        return 0;
+    }
+    if (vehicle->type >= FIST_UNIT_GROUND_VEHICLE_COUNT ||
+        vehicle->component_size != fist_vehicle_component_size(vehicle->type)) {
+        return -1;
+    }
+    fist_vehicle_state next = *vehicle;
+    fist_manual_controls retained = *controls;
+    fist_manual_events emitted = {0};
+    if (apply_manual_drive(&next, input, &emitted) != 0 ||
+        apply_manual_weapon(&next, input, &retained) != 0) {
+        return -1;
+    }
+    *vehicle = next;
+    *controls = retained;
+    *events = emitted;
+    return 0;
+}
+
 static void apply_controls(fist_vehicle_state *vehicle, const fist_driver_controls *controls) {
     if (controls->throttle_change != 0 || controls->steering != 0 || controls->turret_change != 0) {
         take_control(vehicle);

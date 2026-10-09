@@ -116,6 +116,14 @@ typedef struct {
 } fist_vehicle_axes;
 
 typedef struct {
+    /* Original +a0/+a4 decoded inputs, retained by start and readiness.
+     * Weapon actions use byte offsets 0/2/4/6/8 when consumed. View input
+     * is unsigned; its physical device identity is not inferred here. */
+    uint8_t weapon_action;
+    uint8_t view_selector;
+} fist_vehicle_manual_input;
+
+typedef struct {
     size_t component_size;
     fist_vehicle_command command;
     int32_t map_x;
@@ -142,6 +150,7 @@ typedef struct {
     /* Saved +36 byte; readiness clears it. Later class meaning is separate. */
     uint8_t reset_state;
     fist_vehicle_axes axes;
+    fist_vehicle_manual_input manual_input;
     uint8_t control_mode;
     uint8_t turret_view_mode;
     uint8_t hull_view_mode;
@@ -211,5 +220,10 @@ int fist_vehicle_update_drive_profile(fist_vehicle_state *vehicle, fist_drive_co
 
 /* Complete original component payload size; 0 for unsupported classes. */
 size_t fist_vehicle_component_size(uint16_t type);
+
+/* Complete original per-class 17671/18029/187bc/190af view refresh.
+ * Mark all three owned turret-view components. Does not select a view or
+ * draw/update platform caches. Invalid actor preserves the whole state. */
+int fist_vehicle_refresh_turret_view(fist_vehicle_state *vehicle);
 
 #endif
