@@ -634,3 +634,48 @@ attempts and compact evidence under `/tmp/wasm-fist-0126-review`.
 This delivers the complete shared manual owner. Physical device production,
 contacts, maintenance/engine and complete class/world/battle/PCM acceptance
 remain open. Final complete-game WASM streak is 0.
+
+## Bounded original physical contact reference
+
+Closed 0128 publishes direct non-tree and near-obstacle composition references
+for active 0127. Both actual selection wrappers enter the same ordered 182-cell
+physical scan. Common admission clears control bit 8 before decrementing a
+nonzero saved cooldown at hexadecimal +93. The contact flag lives at hexadecimal
++62. These offsets differ from existing decimal-offset movement/behavior fields.
+
+Null pointers, missing candidate flag 64, candidate flag 16 and self are skipped.
+The direct comparison uses the existing directional planar proximity owner
+with candidate as source and actor as target. A nonzero high word skips the
+candidate. Otherwise the wrapped sum of both extents plus 256 is halved; distance
+below this margin is contact. A remaining gap up to 7680 calls the existing
+motion-obstacle prediction and continues the scan. That continuation uses the
+separate Euclidean numeric owner and up to 24 ordered samples. It is not another
+proximity comparison.
+
+Repeated contact sets cooldown 4. A first non-tree contact invokes genuine c047
+with selector 45, rewinds both coordinates by signed velocity times 32, negates
+the speed word and clears throttle before setting cooldown 4. No-hit clears
+contact bit 2. The published sound cases explicitly use an unmatched sound owner,
+so the real c047 returns without issuing a protected-mode request. Tree damage
+and admitted sound remain separate, unproved continuations in this model and
+are rejected explicitly rather than approximated.
+
+The required direct gate compares all 0x60000 memory bytes and eleven low-word
+return registers for 5632 actual calls, including every candidate flag byte and
+512 true directional high-word skips. The required predictive gate adds 10528
+actual calls and 69696 nested Euclidean samples. On 7016 near-obstacle returns,
+its comparison excludes only a predeclared maximum 38-byte nested numeric stack
+interval and AX/DX/BP scratch registers; every other memory byte and eight
+loop/identity/segment/stack return words are predicted independently. The 3512
+remaining returns compare complete memory and eleven words. No observed stack
+bytes are copied into expected state. This stronger direct scope and explicitly
+bounded predictive scope must remain distinct.
+
+Both versioned tests terminate successfully without skips and check original,
+fixture/model, count and output pins. The reproduction command and exact result
+digests are in closed 0128. Representative geometry/wrap coverage here does not
+complete contact-family domains, saved retention, all 47 prepared-world contacts,
+tree consequences, admitted sound or actual damage-source lifetime sequences.
+Shared contact C and complete living-class/world/battle/PCM acceptance remain
+under 0127/0121. Production programs and final complete-game WASM streak are
+unchanged.
