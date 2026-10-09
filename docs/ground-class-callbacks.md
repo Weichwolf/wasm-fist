@@ -656,9 +656,9 @@ Repeated contact sets cooldown 4. A first non-tree contact invokes genuine c047
 with selector 45, rewinds both coordinates by signed velocity times 32, negates
 the speed word and clears throttle before setting cooldown 4. No-hit clears
 contact bit 2. The published sound cases explicitly use an unmatched sound owner,
-so the real c047 returns without issuing a protected-mode request. Tree damage
-and admitted sound remain separate, unproved continuations in this model and
-are rejected explicitly rather than approximated.
+so the real c047 returns without issuing a protected-mode request. At publication
+of 0128, tree damage and admitted sound were separate unproved continuations,
+rejected explicitly. Closed 0127 extends this model with both complete paths.
 
 The required direct gate compares all 0x60000 memory bytes and eleven low-word
 return registers for 5632 actual calls, including every candidate flag byte and
@@ -676,6 +676,64 @@ fixture/model, count and output pins. The reproduction command and exact result
 digests are in closed 0128. Representative geometry/wrap coverage here does not
 complete contact-family domains, saved retention, all 47 prepared-world contacts,
 tree consequences, admitted sound or actual damage-source lifetime sequences.
-Shared contact C and complete living-class/world/battle/PCM acceptance remain
-under 0127/0121. Production programs and final complete-game WASM streak are
-unchanged.
+Closed 0127 now supplies those remaining original gates. Shared contact C is
+active 0129; complete living-class/world/battle/PCM acceptance remains under
+0121. Production programs and final complete-game WASM streak are unchanged.
+
+## Complete original physical contacts
+
+Closed 0127 extends the same independent physical contact model, retaining both
+0128 checksums and the declared numeric scratch scope. Nine required fixtures
+pass without skips in 829.719 seconds: 427968 contacts and 6144 saved-field
+retention returns. Full memory/eleven low words are compared on 353478 contacts;
+74490 predictive continuations compare every byte outside the declared 38-byte
+stack interval and eight non-scratch return words. Constructor/readiness gates
+have distinct full owned-payload/RNG/pool and standard ABI scopes. The closed WI
+records exact counts, checksums, source hashes, terminal audit and reproduction.
+
+The complete admitted path clears control bit 8 before decrementing a nonzero
+cooldown. A repeated hit sets cooldown 4 and performs no first-hit consequence.
+No hit clears contact bit 2. First non-tree hits rewind positions by signed
+velocity times 32, negate the speed word, clear throttle and set cooldown 4.
+Every control word, crossed contact/cooldown byte pair, extent word, constructor
+generation word and signed speed/throttle/velocity word is exercised; classes,
+wrappers and coordinate extremes rotate rather than forming a full Cartesian
+product. Every actual physical binding index is reached.
+
+A first tree hit halves signed speed/throttle with arithmetic right shift and
+issues sound selector 48. c31e clears its two damage metadata words, then reads
+the side of the cached damage-source pointer. The existing original RNG and
+damage arithmetic use the tree table's base 100/spread 0 and the corresponding
+catalog factor. Multiplication wraps to a word before shifting by eight. The
+tree's saved health byte +1a adds this result with byte wrap; only the resulting
+byte >=20 releases its real pool/registry binding and decrements census. Both
+retained and released paths write the complete display notifications. No new
+cooldown is stored on this first tree path. Full health-by-authored-factor and
+raw word-domain coverage includes 9565 wrapped additions that retain the tree.
+
+Actual CS0:bbb7 captures the damage source; the tree's c31e does not replace it.
+The genuine decoded-catalog producer, three-update M1 flight to a wreck, capture,
+normal impact/retirement and actual successor construction prove that the cached
+pointer can survive retirement and reuse. In eight coupled cases, later contact
+reads the successor's side and changes damage from 101 to 1 without new capture.
+The shared C input/lifetime policy must explicitly repair this proved defect
+while original reference expectations continue to describe the actual original.
+Declared consuming poses establish the coupling, not complete battle scheduling.
+
+Sound admission uses owner 9fdf and selector history 9fdd, separate from the
+logical voice cooldown. c047 obtains packet/attenuation from the real table and
+e2c2 transports op64. The 2608 contact cases couple 1408 complete actual kernel
+returns, predicting the whole kernel and seven full general registers with
+readonly bank guards. Only the actual response EAX crosses the existing ABI.
+Missing banks, disabled sound, all attenuation bytes, malformed packet skips
+and three genuine aligned allocation placements are covered. This accepts the
+logical request/transport, leaving PCM, mixer and device initialization open.
+
+All 47 missions are genuinely prepared at four details using eight real height
+sources. The 3840 ground contexts produce 15360 saved/declared-overlap contacts
+through both wrappers. Treeless UKRAINE5 consumes actual type-2 obstacles; no
+synthetic trees are inserted. Initial null source/sound states are retained.
+Complete class initialization/readiness preserves saved contact/cooldown bytes,
+and actual saved restoration/readiness/height transfer preserves tree health.
+Full domain/all-47/real source lifetimes and sound are now original reference
+evidence; shared C, class/world/battle/PCM/game remain required by 0129/0121.

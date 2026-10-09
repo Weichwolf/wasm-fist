@@ -85,8 +85,9 @@ frozen reconstruction, not rewrite completion.
 | 0124 | Complete shared curved turret helpers/callers delivered; required original/native/WASM/retained-selector/memory/style/production and actual scene gates pass. Full0121 remains open. |
 | 0125 | Complete original selected manual composition delivered: both banks, retained selector/view inputs, full refresh, shared controls, all47 sources and proved selector safety/producer boundaries. |
 | 0126 | Complete shared selected manual composition delivered: both banks, retained inputs/controls, full refresh and atomic validation; required both-target/original/memory/style/full-production and actual scene gates pass. Full0121 remains open. |
-| 0127 | Active complete original physical contacts: bounded direct/predictive reference delivered by0128; tree/sound/retention/source lifetime and all47 coverage remain before shared C. |
-| 0128 | Bounded original direct/predictive contact reference delivered: two required tests,16160 complete returns, explicit numerical scratch scope and genuine nested geometry calls; full0127 remains open. |
+| 0127 | Complete original physical contacts delivered: nine required groups,434112 contact/retention observations, full tree/domains, admitted kernel sound, genuine source retirement/reuse and all47 prepared worlds pass. Shared C is active0129; full0121 remains open. |
+| 0128 | Bounded original direct/predictive contact reference delivered: two required tests,16160 complete returns, explicit numerical scratch scope and genuine nested geometry calls; complete original coverage is delivered by0127. |
+| 0129 | Active complete canonical shared physical contacts: consume proved0127 through existing geometry/prediction/damage/RNG/pool owners with explicit saved fields and source lifetime policy; full both-target gates required. |
 | 0042 | Menus, settings, campaign/profile progression and persistent save/load. |
 | 0043 | All missions/maps/vehicles, AI, combat, objectives and resolved outcomes. |
 | 0044 | Keyboard/mouse/joystick, devices, audio timing and link behavior on both platforms. |

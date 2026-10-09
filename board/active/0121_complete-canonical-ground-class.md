@@ -109,6 +109,15 @@ Closed 0126 delivers complete shared manual composition through these owners:
 Reuse fist_driver_apply_manual and its complete vehicle-state view refresh;
 full class/device/world acceptance remains open.
 
+Closed 0127 proves complete selected/unselected physical contacts with nine
+required original groups and 434112 contact/retention observations: full used
+domains, tree consequences, all 47 prepared missions/four details, admitted real
+kernel sound and genuine source capture/retirement/reuse. It establishes the
+cached source-side lifetime defect and preserves explicit numeric scratch and
+retention comparison scopes. Active 0129 delivers the complete canonical C
+owner and documented lifetime repair through existing geometry/prediction/
+damage/RNG/pool owners. No partial class bank is installed by these references.
+
 ## Next
 
 Recover and independently predict the remaining complete common/class/behavior/
