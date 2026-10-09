@@ -40,6 +40,33 @@ TRAIN4 arid-ridges. The original sky numbers alone do not prove time of day,
 weather or lighting semantics; inspect actual imagery/behavior before naming
 owned environment presets.
 
+## D32 visual review
+
+Four actual native asset-bundle observations compare TRAIN1, AZER1, AZER3 and
+INDIA7, covering all four D32 palette/sky variants. The decoded height/color/sky
+dimensions are 256x256, 512x512 and 128x1024. Their mapped RGB colormaps have
+different hashes but visually retain nearly the same brown/olive terrain and
+ridge/gully structure. Their sky arrays differ substantially: 2 has a bright
+blue background with thin white cloud streaks; 5 has larger white/gray cloud
+formations; 7 shows a dark teal starfield; 8 has dense blue-gray cloud cover.
+These describe inspected imagery, not recovered weather or lighting behavior.
+The review shows raw sky arrays in their decoded orientation; their original
+panorama projection and camera behavior remain separate recovery work.
+
+The existing D32 generator reference uses AZER1 / 532.PAL / 5.SKY. Its saved
+height and mapped RGB color arrays are byte-identical to the new native
+observation, so the comparison remains valid for that variant. It cannot prove
+TRAIN1's sky or all environment variants. The historical reference's
+bundle_sha256 hashes the binary payload after the textual dimensions line;
+the new capture records both full-output and payload hashes explicitly.
+
+The inspected comparison, capture script, original/probe/output hashes and
+compact visual findings remain under /tmp/wasm-fist-environment-review. All23
+pinned terrain files and all four scenario inputs were checked before and after
+use. These reference images must not be packaged into the owned game. Procedural
+sky/cloud/star content and mission-specific lighting still need implementation
+and actual native/browser scene review.
+
 ## Evidence and reproduction
 
 Inventory capture compared complete current native scenario-probe transcripts
