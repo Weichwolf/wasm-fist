@@ -1,6 +1,6 @@
 # Armored Fist
 
-A readable C11 reimplementation of Armored Fist for native platforms and WebAssembly,
-using softgl for rendering. It preserves the original game's behavior while improving
-visual quality. Development is in progress; the decompiled and patched reference lives
-on the `ghidra` branch.
+A C11 reimplementation of Armored Fist for native platforms and WebAssembly using
+softgl, targeting complete original-file independence with rebuilt Blender assets,
+procedural terrain/textures and new audio of substantially higher quality.
+Development is in progress; the frozen reconstruction lives on `ghidra`.

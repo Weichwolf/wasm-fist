@@ -4,7 +4,7 @@ Depends: 0041
 
 ## Contract
 
-Improve terrain, models, lighting, camera/HUD and presentation continuously while preserving tested gameplay behavior and useful performance. Visible quality is an acceptance priority: inspect actual native and browser output and movement, rather than inferring quality from numerical results or image hashes. Follow `docs/visual-review.md`.
+Rebuild every visual asset with Blender and procedural textures/JSON-generated terrain, including complete high-quality cockpits/interiors, and greatly surpass original quality in every category. Improve lighting, camera/HUD and presentation continuously while preserving tested gameplay behavior and useful performance. The finished game needs no original files. Visible quality is an acceptance priority: inspect actual native and browser output and movement, rather than inferring quality from numerical results or image hashes. Follow 0130, `docs/owned-content.md` and `docs/visual-review.md`.
 
 ## Evidence
 

@@ -4,9 +4,13 @@ Depends: 0040
 
 ## Contract
 
-Decode one real map and vehicle into typed C state; render and play a full mission on native and WASM with controls, HUD, weapons, objectives/outcome and audible events.
+Load one complete owned map/mission and rebuilt Blender vehicle/cockpit into typed C state; render and play a full mission on native and WASM with controls, HUD, weapons, objectives/outcome and newly generated audible events, without original game files. Follow the expanded objective in board/GOAL.md and owned-content pipeline 0130.
 
 ## Evidence
+
+Scope extension 2026-10-09: original-file-based evidence below remains historical
+functional/format research. The current preview is not original-file-independent
+and does not supply the required rebuilt content or new audio.
 
 Renderer integration and the original scenario envelope/metadata decoder are delivered. See closed
 0048 for complete 47-mission, 4213-record native/WASM evidence. Closed 0051 supplies all 22 original
@@ -170,4 +174,4 @@ this does not complete a mission.
 
 ## Accept
 
-One complete mission runs interactively on both platforms from real provisioned data, with correct movement/combat/objective outcome and audible events. Asset/behavior tests and actual visual checks cover the bounded milestone. This does not close all-mission coverage.
+One complete mission runs interactively on both platforms using only versioned owned/generated content, with rebuilt terrain, vehicle/cockpit/UI, correct movement/combat/objective outcome and newly generated audible events. Clean-checkout builds and reaching runs require no original files or downloads. Asset/behavior/audio tests and actual visual/moving-scene/listening checks establish substantially improved quality for this milestone. This does not close all-mission/content coverage.

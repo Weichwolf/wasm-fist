@@ -4,7 +4,7 @@ Depends: 0041
 
 ## Contract
 
-All maps, missions and vehicles implement original gameplay rules, AI, weapons, damage, objectives and success/failure outcomes.
+All owned maps/missions and rebuilt Blender vehicles/cockpits implement original gameplay rules, AI, weapons, damage, objectives and success/failure outcomes. Generate terrain/colormaps from versioned JSON recipes; no runtime original file requirement. Follow 0130 and docs/owned-content.md.
 
 ## Evidence
 
@@ -16,4 +16,4 @@ Build a mission/map/vehicle/rule inventory with original observations; extend th
 
 ## Accept
 
-Every inventory entry has complete reaching runs on native/WASM, including resolved success/failure, relevant vehicle switches and AI/combat behavior; absent content fails.
+Every inventory entry has complete original-file-free reaching runs on native/WASM, including resolved success/failure, relevant vehicle switches, cockpit interaction and AI/combat behavior. All owned models, textures/maps and effects are visually reviewed and substantially surpass original quality; absent content fails.

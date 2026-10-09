@@ -5,10 +5,17 @@ owns implementation, one bounded step at a time. Continue **0041** after prepara
 The old board is preserved verbatim under `reference/`; its IDs and requirements describe the
 frozen reconstruction, not rewrite completion.
 
+The complete objective is `GOAL.md`. The 2026-10-09 scope extension requires every
+asset to be rebuilt with much higher quality and the complete game to run without
+original files. Follow `../docs/owned-content.md` and open 0130 alongside first-
+playable integration. Original-dependent historical evidence remains reference
+evidence, not owned-content or release-independence acceptance.
+
 ## Work order
 
 | WI | Deliverable |
 | --- | --- |
+| 0130 | Complete owned-content inventory, Blender/procedural/JSON-map/new-audio pipeline and original-file-free loading/package gates. |
 | 0040 | Reference freeze, reproducible softgl integration, strict tooling and rewrite boundaries. |
 | 0041 | First playable mission through bounded asset/world/control/HUD/audio steps. |
 | 0048 → 0051 → 0052 → 0053/0049 | Scenario readers, terrain bundles/palette maps and first real inspection scene delivered. |
