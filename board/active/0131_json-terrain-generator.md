@@ -121,13 +121,13 @@ independence, near-ground runtime or60-FPS acceptance is claimed by these pilots
 
 ## Next
 
-Run and inspect the revised training recipe, tune terrain/climate/color controls
-against actual reference images and validate high-resolution output. Version the
-generator/tool pin, recipe, final draft outputs and reproduction commands after
-their bounded contract is verified; keep this WI active until the full visual
-comparison requirement is met. Extend recipes to every original terrain family,
-add near-ground/native/browser checks during shared owned-map runtime integration,
-and preserve final first-playable/complete-game acceptance as separate work.
+All eight family baselines and their complete repeated1024-square outputs are
+versioned. Continue local ridge/gully and fine material refinement against actual
+references, keeping this WI active until full visual acceptance. Use shared owned
+terrain runtime input0133 to enable near-ground native/browser checks without
+original images or palettes. Review real scene geometry/materials and motion,
+then version each verified improvement. First-playable/complete-game acceptance
+remains separate and required.
 
 ## Accept
 

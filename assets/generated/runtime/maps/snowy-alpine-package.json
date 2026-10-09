@@ -1,0 +1,15 @@
+{
+  "format": "FMAP1",
+  "generator_manifest_sha256": "896170b72d8275652b281b0ed193341458333766461211ab764d3c6e17b4789a",
+  "name": "snowy-alpine",
+  "outputs": {
+    "snowy-alpine.fmap": {
+      "bytes": 5242944,
+      "sha256": "dd5fe0e6c08b4352bb25d1426103eb6da9451a9c060c8e7e6fd7547fd2be4912"
+    }
+  },
+  "packer_sha256": "f37a7c0e04746761ad4c00f9ae1d39b339b8ac79e1f1658a077f3728b7b79069",
+  "recipe_sha256": "eb2f2a8034870915139395ef916af4e66db7bf6e0c6d9e096081eda462f29532",
+  "resolution": 1024,
+  "version": 1
+}

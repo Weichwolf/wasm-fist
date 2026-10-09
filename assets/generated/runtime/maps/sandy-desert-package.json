@@ -1,0 +1,15 @@
+{
+  "format": "FMAP1",
+  "generator_manifest_sha256": "9f5d27aae76725de250ada9cf374dfc8d12a3424d9b4a1a9c8f98d57b791483c",
+  "name": "sandy-desert",
+  "outputs": {
+    "sandy-desert.fmap": {
+      "bytes": 5242944,
+      "sha256": "282d405a205275c45ade1fbf80ddd666755b08bf7eacedc98935f03a1ef7361e"
+    }
+  },
+  "packer_sha256": "f37a7c0e04746761ad4c00f9ae1d39b339b8ac79e1f1658a077f3728b7b79069",
+  "recipe_sha256": "c82e69cb9f655015ca3bf0702f713b760dcbb308405f528c09efd198cb35fa5c",
+  "resolution": 1024,
+  "version": 1
+}

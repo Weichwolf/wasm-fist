@@ -1,0 +1,15 @@
+{
+  "format": "FMAP1",
+  "generator_manifest_sha256": "4fe876e78b54975ae13b2c082a79464705ca46b5ffa6fa1e8e8c846c6ad1aebd",
+  "name": "dry-mountains",
+  "outputs": {
+    "dry-mountains.fmap": {
+      "bytes": 5242944,
+      "sha256": "63885b700e25c9e30dcacc1128c8fe56f6317e08045b6ef7c2534e4d6a46aace"
+    }
+  },
+  "packer_sha256": "f37a7c0e04746761ad4c00f9ae1d39b339b8ac79e1f1658a077f3728b7b79069",
+  "recipe_sha256": "e6f9527925c30901fe1fc26d352addf34a651c5856fd336c3941d81c4bf97108",
+  "resolution": 1024,
+  "version": 1
+}

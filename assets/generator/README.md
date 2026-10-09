@@ -55,9 +55,14 @@ statistics and output hashes. Decode heights as
 `minimum + sample / 65535 * (maximum - minimum)`. PNGs contain complete unfiltered
 rows with checked chunk CRCs. The manifest records generation, not visual approval.
 
-The training recipe is a development baseline. Actual reference comparisons and
-quality findings belong to active 0131; all terrain families and owned C11 runtime
-loading remain open. Passing generator tests does not prove a complete game or
+All eight recipes are development baselines. Actual reference comparisons and
+quality findings belong to active 0131; full family visual acceptance and owned runtime scene
+integration remain open. Passing generator tests does not prove a complete game or
 the requested visual similarity. Keep review captures under `/tmp`, version the
 authoring recipe and validated generated baseline under `assets/`, and iterate
 actual images before accepting quality.
+
+`pack_maps.py` losslessly prepares generator outputs for shared C11 loading,
+without a runtime PNG/deflate dependency. It checks the recipe/manifest and every
+PNG hash, chunk, stream and row before writing a batch. See
+`docs/owned-map-format.md` for FMAP1 layout and the package reproduction command.

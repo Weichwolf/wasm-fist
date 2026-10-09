@@ -48,7 +48,7 @@ if(EMSCRIPTEN)
 endif()
 
 add_library(fist_assets STATIC src/assets/scenario.c src/assets/orders.c src/assets/units.c src/assets/model.c src/assets/vehicle.c src/assets/klc.c
-    src/assets/palette.c src/assets/resource.c src/assets/terrain.c src/assets/heightfield.c src/render/model_bitmap.c)
+    src/assets/palette.c src/assets/resource.c src/assets/terrain.c src/assets/heightfield.c src/assets/owned_terrain.c src/render/model_bitmap.c)
 target_include_directories(fist_assets PUBLIC src)
 target_link_libraries(fist_assets PRIVATE fist_build_options)
 target_compile_options(fist_assets PRIVATE -Werror)
@@ -291,6 +291,16 @@ target_compile_options(fist_asset_probe PRIVATE -Werror)
 add_executable(fist_heightfield_probe tests/heightfield_probe.c)
 target_link_libraries(fist_heightfield_probe PRIVATE fist_assets fist_probe_io fist_build_options)
 target_compile_options(fist_heightfield_probe PRIVATE -Werror)
+add_executable(fist_owned_terrain_probe tests/owned_terrain_probe.c)
+target_link_libraries(fist_owned_terrain_probe PRIVATE fist_assets fist_probe_io fist_build_options m)
+target_compile_options(fist_owned_terrain_probe PRIVATE -Werror)
+if(EMSCRIPTEN)
+    set_target_properties(fist_owned_terrain_probe PROPERTIES SUFFIX ".js")
+    # Bound this asset test's heap for real partial-allocation failure/recovery.
+    # The renderer/game shared-memory budget is configured separately above.
+    target_link_options(fist_owned_terrain_probe PRIVATE -sNODERAWFS=1 -sEXIT_RUNTIME=1
+        -sALLOW_MEMORY_GROWTH=1 -sMAXIMUM_MEMORY=33554432 -sABORTING_MALLOC=0)
+endif()
 if(EMSCRIPTEN)
     set_target_properties(fist_heightfield_probe PROPERTIES SUFFIX ".js")
     # A bounded probe heap makes real allocation-failure cases reproducible.
@@ -507,6 +517,9 @@ if(BUILD_TESTING AND NOT EMSCRIPTEN)
     add_test(NAME heightfield_contract COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_SOURCE_DIR}/tests/test_heightfield.py
         --target native --native-probe $<TARGET_FILE:fist_heightfield_probe>)
+    add_test(NAME owned_terrain_contract COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_SOURCE_DIR}/tests/test_owned_terrain.py
+        --target native --native-probe $<TARGET_FILE:fist_owned_terrain_probe>)
     add_test(NAME vehicle_maintenance_contract COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_SOURCE_DIR}/tests/test_vehicle_maintenance.py
         --target native --native-probe $<TARGET_FILE:fist_vehicle_motion_probe>)

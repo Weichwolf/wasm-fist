@@ -17,6 +17,8 @@ evidence, not owned-content or release-independence acceptance.
 | --- | --- |
 | 0130 | Complete owned-content inventory, Blender/procedural/JSON-map/new-audio pipeline and original-file-free loading/package gates. |
 | 0131 | Active JSON heightmap/colormap generator: explicit octaves, hydraulic erosion, climate/palette/water controls and iterative original-reference visual comparison; original-free generator tests pass, full quality/runtime coverage remains open. |
+| 0133 | Lossless owned FMAP packaging, shared C11 decoding/ownership and periodic triangle sampling delivered: 105-unit strict style, 55-native/53-WASM-script production gate, all 11 owned groups on both targets, clean sanitizer/Memcheck checks and all eight complete bundles pass. Runtime scene/game/quality gates remain open. |
+| 0134 | Next owned renderer integration: genuine4x MSAA and three helpers plus caller on both targets using existing softgl configuration; never modify the library. |
 | 0132 | Current softgl library integration delivered: strict103-unit style, complete54-native/52-WASM-script gates and actual native/browser visual compatibility pass; newest observed pin has identical verified library content. Performance and owned-game acceptance remain open. |
 | 0040 | Reference freeze, reproducible softgl integration, strict tooling and rewrite boundaries. |
 | 0041 | First playable mission through bounded asset/world/control/HUD/audio steps. |

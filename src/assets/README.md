@@ -1,8 +1,10 @@
 # Asset ownership
 
-Decode validated original map/model/texture/palette/mission/audio data into typed host structures.
+Owned generated content is the required runtime input; original-format readers remain optional
+development/import references. `owned_terrain.c` loads complete FMAP1 height/RGB planes without
+original files and owns periodic triangle sampling; see `docs/owned-map-format.md` and WI0133.
 Original files remain ignored under `armoredfist/`. Tests use reproducible synthetic fixtures or
-local provisioned originals. `scenario.c` now decodes complete FSG envelopes, typed metadata and
+optional local provisioned originals. `scenario.c` now decodes complete FSG envelopes, typed metadata and
 bounded unit/chunk views; see `docs/scenario-format.md` and WI 0048. KLC/resource/palette readers
 and owned terrain bundles are delivered (0051/0052); see `docs/terrain-format.md` and
 `docs/terrain-loading.md`. `units.c` owns typed snapshot identity/pose and the original normal-side

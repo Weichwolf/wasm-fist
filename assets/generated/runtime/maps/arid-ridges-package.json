@@ -1,0 +1,15 @@
+{
+  "format": "FMAP1",
+  "generator_manifest_sha256": "8fed73270e038481be8fe9c9c0193ce385b13ac72c686bc6fd8f559536caedbc",
+  "name": "arid-ridges",
+  "outputs": {
+    "arid-ridges.fmap": {
+      "bytes": 5242944,
+      "sha256": "24f4676af1b533d9148eb14dbbf2a1c7573e053168b7cd0fb500b603e6d4f075"
+    }
+  },
+  "packer_sha256": "f37a7c0e04746761ad4c00f9ae1d39b339b8ac79e1f1658a077f3728b7b79069",
+  "recipe_sha256": "ecc4a1a310c247d7ce142192bdca4086626e662f36f4fbb9183538f27661103f",
+  "resolution": 1024,
+  "version": 1
+}

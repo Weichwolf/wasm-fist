@@ -1,0 +1,15 @@
+{
+  "format": "FMAP1",
+  "generator_manifest_sha256": "f2cae9a3ad25c41a86852449f9c001ae152e26d2bd167afc810a1c40b41af990",
+  "name": "rocky-highlands",
+  "outputs": {
+    "rocky-highlands.fmap": {
+      "bytes": 5242944,
+      "sha256": "fdf15069ce0affad3f1fd88eef336ed60dbcefbc627d1a65aae5c0b99052f5c7"
+    }
+  },
+  "packer_sha256": "f37a7c0e04746761ad4c00f9ae1d39b339b8ac79e1f1658a077f3728b7b79069",
+  "recipe_sha256": "750b57b44d2d2aad6fce69ac5a34689c0472b8f50223e8b8ac5dcd456656cc01",
+  "resolution": 1024,
+  "version": 1
+}
