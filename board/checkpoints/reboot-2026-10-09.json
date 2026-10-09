@@ -1,0 +1,159 @@
+{
+  "timestamp_utc": "2026-10-09T16:46:16.982078+00:00",
+  "base_commit": "61706425b9d9717f698fef99164fbae9f87470ac",
+  "local_source_ref": "refs/checkpoints/reboot-2026-10-09",
+  "core_files_verified": 270,
+  "core_manifest_sha256": "1fef0d470f62587a1319fca9e195ff70b46d1ccdb0b4e28d0f51e03029cdfe9e",
+  "softgl_pin": "1d17a944d873eb3e9eee551a96b46776366d7c3d",
+  "receipts": {
+    "browser-motion": {
+      "command": [
+        "python3",
+        "tests/verify_browser.py",
+        "--build-dir",
+        "/tmp/wasm-fist-owned-scene-production/wasm",
+        "--owned-motion",
+        "--native-motion-dir",
+        "/tmp/wasm-fist-owned-scene-final-review/native-motion",
+        "--output-dir",
+        "/tmp/wasm-fist-owned-scene-final-review/browser-motion",
+        "--port",
+        "8143"
+      ],
+      "cwd": "/tmp/wasm-fist-owned-scene-source",
+      "exit_code": 1,
+      "elapsed_seconds": 132.14250421524048,
+      "log_sha256": "f8658f9d2174e3b35ff6c4cdf37143485b7ce28eb00e016475293b1f86a29728"
+    },
+    "browser-static": {
+      "command": [
+        "python3",
+        "tests/verify_browser.py",
+        "--build-dir",
+        "/tmp/wasm-fist-owned-scene-production/wasm",
+        "--owned-terrain",
+        "--output-dir",
+        "/tmp/wasm-fist-owned-scene-final-review/browser-static",
+        "--port",
+        "8143"
+      ],
+      "cwd": "/tmp/wasm-fist-owned-scene-source",
+      "exit_code": 0,
+      "elapsed_seconds": 76.54934287071228,
+      "log_sha256": "bc8039aadfc1a2c83f2ac2e1ffe1ba66c8316c87ddbb60fbb78775a9a74a9ccd"
+    },
+    "native-build": {
+      "command": [
+        "cmake",
+        "--build",
+        "/tmp/wasm-fist-owned-scene-production/native"
+      ],
+      "cwd": "/tmp/wasm-fist-owned-scene-source",
+      "exit_code": 0,
+      "elapsed_seconds": 11.613489389419556,
+      "log_sha256": "8795190f8f2afd25804fd97e970797b1ba99a162bd605e75f45939e9ff00c735"
+    },
+    "native-configure": {
+      "command": [
+        "cmake",
+        "-S",
+        "/tmp/wasm-fist-owned-scene-source",
+        "-B",
+        "/tmp/wasm-fist-owned-scene-production/native",
+        "-G",
+        "Ninja",
+        "-DCMAKE_C_COMPILER=clang",
+        "-DCMAKE_BUILD_TYPE=RelWithDebInfo"
+      ],
+      "cwd": "/tmp/wasm-fist-owned-scene-source",
+      "exit_code": 0,
+      "elapsed_seconds": 0.5395619869232178,
+      "log_sha256": "ac18a7260aa01bc4d9b1a5111c4a1613a75467b641c81064de16da84e19b74ba"
+    },
+    "native-motion": {
+      "command": [
+        "python3",
+        "tests/verify_owned_terrain_native.py",
+        "--native-preview",
+        "/tmp/wasm-fist-owned-scene-production/native/fist_owned_terrain_motion_preview",
+        "--output-dir",
+        "/tmp/wasm-fist-owned-scene-final-review/native-motion"
+      ],
+      "cwd": "/tmp/wasm-fist-owned-scene-source",
+      "exit_code": 0,
+      "elapsed_seconds": 691.5430297851562,
+      "log_sha256": "dba02f0633f9d2e7e4903e17790be0dbe5c7b2d8b0185799b0d1a2a252d300d0"
+    },
+    "owned-assets-all": {
+      "command": [
+        "python3",
+        "tests/test_owned_terrain.py",
+        "--target",
+        "all",
+        "--build-root",
+        "/tmp/wasm-fist-owned-scene-production"
+      ],
+      "cwd": "/tmp/wasm-fist-owned-scene-source",
+      "exit_code": 0,
+      "elapsed_seconds": 11.770302534103394,
+      "log_sha256": "ae43c0c8cfb0180fe39dc10b33e693d538f0798875993a45f465a403144cb601"
+    },
+    "production-all": {
+      "command": [
+        "bash",
+        "tools/build.sh",
+        "all"
+      ],
+      "cwd": "/tmp/wasm-fist-owned-scene-source",
+      "exit_code": 0,
+      "elapsed_seconds": 5820.638455152512,
+      "log_sha256": "4a63ff67b8b733d2b09ea399e7d08310e911ee416a074015eda3ba494ae2af8b"
+    },
+    "scene-all": {
+      "command": [
+        "python3",
+        "tests/test_owned_terrain_scene.py",
+        "--target",
+        "all",
+        "--build-root",
+        "/tmp/wasm-fist-owned-scene-production"
+      ],
+      "cwd": "/tmp/wasm-fist-owned-scene-source",
+      "exit_code": 0,
+      "elapsed_seconds": 14.38593077659607,
+      "log_sha256": "b6fbaf292fdd61c73f28d086142d78ff2367478bcf3ea265610634189efd55bf"
+    },
+    "style": {
+      "command": [
+        "python3",
+        "tools/check_style.py",
+        "--build-dir",
+        "/tmp/wasm-fist-owned-scene-production/native"
+      ],
+      "cwd": "/tmp/wasm-fist-owned-scene-source",
+      "exit_code": 0,
+      "elapsed_seconds": 80.95865106582642,
+      "log_sha256": "b1dcb0882810c2c9b2f0d24ee3e94212d2f14a357abf9dc224c4a6f09f8082f3"
+    }
+  },
+  "shutdown": {
+    "post_service": "inactive/dead, MainPID=0, empty cgroup",
+    "primary_service": "failed, terminal exit 1, MainPID=0, empty cgroup",
+    "corrected_browser_motion": "interrupted for user-requested reboot; no terminal success",
+    "final_sanitizer_and_memcheck": "not started",
+    "final_complete_game_wasm_streak": 0
+  },
+  "counts": {
+    "owned_style_units": 112,
+    "native_ctest_registrations": 57,
+    "wasm_python_suites": 55,
+    "wasm_node_smokes": 2,
+    "scene_groups_both_targets": 10,
+    "owned_asset_groups_both_targets": 11,
+    "static_browser_views": 16,
+    "native_motion_frames": 1024,
+    "native_visible_window_captures": 48,
+    "native_full_geometry_checkpoints": 112
+  },
+  "scope": "Completed invocations are evidence for this source snapshot only. Historical original-only tests can skip without optional reference flags. WI 0135 remains active; no full-game, final quality or 60 FPS acceptance."
+}
