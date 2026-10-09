@@ -27,14 +27,27 @@ representative owned scenes meet the target with documented reserve.
 
 ## Current integration evidence
 
-The public softgl context API supports `softgl_create_multisample(..., 4)`;
-the current game renderer still calls the single-sample creation function.
-The verified1d17a94 library and newest observed549ae30 have identical library
-content. Their automatic worker initialization reserves the caller and caps
-helpers at three only under `__EMSCRIPTEN__`. Native still chooses the logical
-CPU count as its helper count. Select three helpers using the existing explicit
-worker hint in an owned renderer adapter. Use unmodified upstream softgl;
-configuration and verification belong in wasm-fist. Explicit internal hints count helpers, and
-`sg_thread_count` returns the configured helper count, excluding the caller.
-Check successfully started workers as well as configured counts when validating
-the actual native/browser profile. No60-FPS claim follows from API availability.
+The owned renderer now provides `fist_renderer_create_multisample(..., 4)` and
+`fist_renderer_get_profile`. The adapter requires an actual four-sample
+framebuffer and three successfully started helpers before exposing the context.
+The existing single-sample preview remains available through the same adapter;
+the owned terrain scene is the next consumer of the target profile under 0135.
+
+softgl remains unchanged at 1d17a944d873eb3e9eee551a96b46776366d7c3d. The
+newest observed 549ae30 has identical library content. Upstream initializes an
+automatic pool before returning a context: native uses CPU-count helpers, while
+WASM caps helpers at three. The owned adapter replaces that idle pool with three
+helpers before submitting any draw. This limits rendering threads; it does not
+prevent temporary automatic thread creation during native context construction.
+Private API coupling stays in `src/render/softgl_profile.c`. Explicit internal
+hints and `sg_thread_count` count configured helpers, excluding the caller;
+the adapter separately counts successful starts and rejects partial startup.
+
+Native and real Chromium diagnostic frames establish four-sample coverage,
+including subpixel shapes, against independent geometry at every RGBA byte.
+Context lifecycle, startup-failure recovery and strict style checks pass.
+The complete production and memory gates pass under closed 0134: 56 native tests,
+54 WASM scripts, six actual browser modes, and all seven renderer groups under
+sanitizers and Memcheck. All nine Memcheck processes have zero errors and zero
+unreleased bytes/blocks.
+These integration diagnostics do not establish owned terrain quality or 60 FPS.

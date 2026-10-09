@@ -339,8 +339,9 @@ if(EMSCRIPTEN)
     target_link_options(fist_terrain_probe PRIVATE -sNODERAWFS=1 -sEXIT_RUNTIME=1)
 endif()
 
-add_library(fist_render STATIC src/render/renderer.c src/render/terrain_scene.c src/render/vehicle_scene.c src/render/hud.c)
+add_library(fist_render STATIC src/render/renderer.c src/render/softgl_profile.c src/render/terrain_scene.c src/render/vehicle_scene.c src/render/hud.c)
 target_include_directories(fist_render PUBLIC src)
+target_include_directories(fist_render SYSTEM PRIVATE deps/softgl/libsoftgl/src)
 target_link_libraries(fist_render PRIVATE softgl fist_assets fist_build_options)
 target_compile_options(fist_render PRIVATE -Werror)
 
@@ -412,9 +413,28 @@ if(EMSCRIPTEN)
     configure_file(src/platform/wasm/index.html index.html COPYONLY)
 endif()
 
+add_executable(fist_render_profile_probe tests/render_profile_probe.c)
+target_link_libraries(fist_render_profile_probe PRIVATE fist_render softgl fist_build_options)
+target_compile_options(fist_render_profile_probe PRIVATE -Werror)
+target_link_options(fist_render_profile_probe PRIVATE -Wl,--wrap=pthread_create)
+if(EMSCRIPTEN)
+    target_link_libraries(fist_render_profile_probe PRIVATE fist_wasm_render_options)
+    target_compile_options(fist_render_profile_probe PRIVATE -msimd128 -pthread)
+    target_link_options(fist_render_profile_probe PRIVATE
+        "--js-library=${CMAKE_SOURCE_DIR}/src/platform/wasm/present.js"
+        -msimd128 -pthread -sPTHREAD_POOL_SIZE=3 -sEXIT_RUNTIME=1
+        -sMODULARIZE=1 -sINVOKE_RUN=0 -sEXPORT_NAME=createFistRenderProfile
+        -sENVIRONMENT=web,node "-sEXPORTED_RUNTIME_METHODS=['FS','callMain']")
+    set_target_properties(fist_render_profile_probe PROPERTIES SUFFIX ".js")
+    configure_file(src/platform/wasm/render-profile.html render-profile.html COPYONLY)
+endif()
+
 include(CTest)
 if(BUILD_TESTING AND NOT EMSCRIPTEN)
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    add_test(NAME render_profile_contract COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_SOURCE_DIR}/tests/test_render_profile.py
+        --target native --native-probe $<TARGET_FILE:fist_render_profile_probe>)
     add_test(NAME mission_combat_contract COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_SOURCE_DIR}/tests/test_mission_combat.py
         --target native --native-probe $<TARGET_FILE:fist_mission_combat_probe>)

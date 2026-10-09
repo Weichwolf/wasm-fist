@@ -20,10 +20,13 @@ def main():
     parser.add_argument("--screenshot", type=pathlib.Path)
     parser.add_argument("--terrain", action="store_true", help="Check prepared terrain.html instead of the triangle")
     parser.add_argument("--driving", action="store_true", help="Check timed input and complete controlled scene presentation")
+    parser.add_argument("--render-profile", action="store_true", help="Check real MSAA, helpers and full canvas bytes")
     parser.add_argument("--output-dir", type=pathlib.Path, help="Driving frame captures under /tmp")
     args = parser.parse_args()
-    if args.terrain and args.driving:
+    if sum((args.terrain, args.driving, args.render_profile)) > 1:
         parser.error("Choose one browser scene")
+    if args.render_profile and not args.output_dir:
+        parser.error("Renderer profile evidence requires --output-dir under /tmp")
     if args.output_dir and not args.output_dir.resolve().is_relative_to(pathlib.Path("/tmp")):
         parser.error("Driving captures belong under /tmp")
     module = args.browser_tools / "node_modules/playwright"
@@ -52,7 +55,16 @@ def main():
         if args.driving:
             command = ["node", str(ROOT / "tests/check_driving_browser.cjs"),
                        url + "/driving.html", str(args.output_dir) if args.output_dir else ""]
-        subprocess.run(command, check=True, timeout=30, env=env)
+        if args.render_profile:
+            command = ["node", str(ROOT / "tests/check_render_profile_browser.cjs"),
+                       url, str(args.output_dir)]
+        subprocess.run(command, check=True, timeout=150 if args.render_profile else 30, env=env)
+        if args.render_profile:
+            from test_render_profile import expected_frame
+            for samples in (0, 4):
+                frame = (args.output_dir / f"browser-{samples}.rgba").read_bytes()
+                if frame != expected_frame(samples):
+                    raise AssertionError(f"Browser {samples}-sample frame differs from analytic coverage")
     finally:
         server.terminate()
         server.wait(timeout=5)

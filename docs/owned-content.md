@@ -67,11 +67,11 @@ including cloud and starfield appearances, that need owned mission/environment
 definitions. The other visual/audio categories still need complete inventories
 and replacements. See terrain-mission-inventory.md and open 0130.
 
-Complete active 0133's original-free lossless terrain packaging/loading gate,
-then configure the owned renderer's actual MSAA/helper profile in 0134 and consume
-the owned maps for near-ground native/browser visual refinement. Keep softgl
-unmodified. Continue generation/runtime contracts alongside first-playable
-integration. Deliver an original-file-free first mission with owned terrain,
+0133's original-free lossless terrain packaging/loading gate is delivered.
+0134's owned actual MSAA/helper profile, browser and memory gates are delivered.
+Consume the owned maps in retained scene 0135 for near-ground native/browser
+visual refinement. Keep softgl unmodified. Continue generation/runtime contracts
+alongside first-playable integration. Deliver an original-file-free first mission with owned terrain,
 vehicles, cockpit/UI and audible feedback; extend every remaining category and
 function until the inventory is complete. Original decoders are research tools,
 not the release content pipeline. No complete owned mission is accepted yet.

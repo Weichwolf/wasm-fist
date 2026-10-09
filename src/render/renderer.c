@@ -1,6 +1,7 @@
 #include "render/renderer.h"
 #include "assets/terrain.h"
 #include "render/hud.h"
+#include "render/softgl_profile.h"
 #include "render/terrain_scene.h"
 
 #include <GL/softgl.h>
@@ -12,19 +13,27 @@ struct fist_renderer {
 };
 
 fist_renderer *fist_renderer_create(int width, int height) {
-    if (width <= 0 || height <= 0) {
-        return NULL;
-    }
+    return fist_renderer_create_multisample(width, height, 0);
+}
+
+fist_renderer *fist_renderer_create_multisample(int width, int height, int samples) {
     fist_renderer *renderer = calloc(1, sizeof(*renderer));
     if (renderer == NULL) {
         return NULL;
     }
-    renderer->context = softgl_create(width, height);
+    renderer->context = fist_softgl_create_profile(width, height, samples);
     if (renderer->context == NULL) {
         free(renderer);
         return NULL;
     }
     return renderer;
+}
+
+int fist_renderer_get_profile(const fist_renderer *renderer, fist_render_profile *out) {
+    if (renderer == NULL) {
+        return -1;
+    }
+    return fist_softgl_get_profile(renderer->context, out);
 }
 
 void fist_renderer_destroy(fist_renderer *renderer) {

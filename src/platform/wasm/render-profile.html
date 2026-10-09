@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Armored Fist renderer profile diagnostic</title>
+<style>
+body { background: #15191d; color: #e7e9ec; font: 18px system-ui; margin: 2rem; }
+canvas { width: 640px; height: 360px; }
+pre { white-space: pre-wrap; }
+</style>
+<h1>Renderer profile diagnostic</h1>
+<canvas id="preview" aria-label="MSAA sample coverage fixture"></canvas>
+<pre id="status">Loading…</pre>
+<script src="fist_render_profile_probe.js"></script>
+<script>
+(async () => {
+    const mode = new URLSearchParams(location.search).get('mode') || '4';
+    const output = [];
+    let exitCode;
+    const module = await createFistRenderProfile({
+        noInitialRun: true,
+        print: text => output.push(text),
+        onExit: code => { exitCode = code; },
+        onAbort: reason => { throw new Error(String(reason)); }
+    });
+    const hasFrame = mode === '0' || mode === '4';
+    const args = hasFrame ? [mode, '/frame.rgba'] : [mode];
+    const returned = module.callMain(args);
+    if (exitCode !== 0 || returned !== exitCode) throw new Error('Incomplete or failed C run');
+    window.fistProfileResult = {
+        mode, exitCode, returned,
+        shared: module.HEAPU8.buffer instanceof SharedArrayBuffer,
+        heapBytes: module.HEAPU8.buffer.byteLength,
+        output: output.length ? JSON.parse(output.join('\n')) : null,
+        frame: hasFrame ? Array.from(module.FS.readFile('/frame.rgba')) : null
+    };
+    document.getElementById('status').textContent = output.join('\n') || 'Contracts passed';
+})().catch(error => {
+    document.getElementById('status').textContent = String(error);
+    window.fistProfileFailure = String(error);
+});
+</script>
+</html>

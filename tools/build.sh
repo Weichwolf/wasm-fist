@@ -17,6 +17,7 @@ if [[ $target == wasm || $target == all ]]; then
     emcmake cmake -S "$root" -B "$output/wasm" -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo
     cmake --build "$output/wasm"
     timeout 30s node "$root/tests/check_wasm.cjs" "$output/wasm/fist_renderer_probe.js" 2147483648
+    python3 "$root/tests/test_render_profile.py" --target wasm --build-root "$output"
     python3 "$root/tests/test_scenario.py" --target wasm --build-root "$output"
     python3 "$root/tests/test_ground_phase.py" --target wasm --build-root "$output"
     python3 "$root/tests/test_ground_target_motion.py" --target wasm --build-root "$output"

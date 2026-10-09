@@ -10,6 +10,19 @@
 
 typedef struct fist_renderer fist_renderer;
 
+enum { FIST_RENDER_HELPERS = 3, FIST_RENDER_TARGET_SAMPLES = 4 };
+
+typedef struct {
+    int width;
+    int height;
+    int sample_buffers;
+    int samples;
+    int multisample_enabled;
+    int configured_helpers;
+    int started_helpers;
+    int total_threads;
+} fist_render_profile;
+
 typedef struct {
     /* Original integer map coordinates. Altitude is in decoded height units;
      * heading is one unsigned 16-bit turn, pitch is radians (positive up). */
@@ -32,6 +45,11 @@ typedef struct {
 /* One render-thread owner. Pixels are tightly packed RGBA8, bottom row first;
  * the borrowed view remains valid until the next draw or destruction. */
 fist_renderer *fist_renderer_create(int width, int height);
+/* Accept zero samples for diagnostics or four for the target profile. Both
+ * require three successfully started helpers before the first draw. */
+fist_renderer *fist_renderer_create_multisample(int width, int height, int samples);
+/* Observe actual framebuffer/worker state; failure leaves out unchanged. */
+int fist_renderer_get_profile(const fist_renderer *renderer, fist_render_profile *out);
 void fist_renderer_destroy(fist_renderer *renderer);
 const uint8_t *fist_renderer_pixels(fist_renderer *renderer);
 
