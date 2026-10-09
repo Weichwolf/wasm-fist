@@ -51,3 +51,22 @@ The complete production and memory gates pass under closed 0134: 56 native tests
 sanitizers and Memcheck. All nine Memcheck processes have zero errors and zero
 unreleased bytes/blocks.
 These integration diagnostics do not establish owned terrain quality or 60 FPS.
+
+## Owned terrain layout diagnosis
+
+Active 0135 uses retained client-array geometry with 32-cell blocks in a global
+1025-wide grid. One block references 1089 vertices but spans 32833 source indices.
+The upstream indexed transform path processes that whole range. An eight-frame
+native Callgrind run records exactly 17073160 prepared vertex calls for 65 blocks
+per frame, agreeing with 32833x65x8; vertex processing accounts for 53.77% of its
+instruction events. This explains avoidable work in the application layout,
+without implying a softgl defect or requiring any dependency changes.
+
+Open 0136 specifies compact block storage and public retained GL buffers, exact
+same-target image/lifetime checks and production motion measurements. Compact
+1024-square storage would duplicate shared block boundaries by 6.14%, giving
+1115136 retained vertices while removing the approximately 30.15-fold index-span
+inflation. These counts are a layout derivation, not a promised FPS multiplier.
+Callgrind timings under instrumentation and concurrent validation load do not
+establish the 60-FPS target. Evidence and reproduction are retained under
+`/tmp/wasm-fist-owned-scene-review/perf-terrain`.
