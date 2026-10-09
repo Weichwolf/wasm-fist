@@ -1,0 +1,33 @@
+{
+  "generator_sha256": "a214229df2312a01d196be287b314a5ea0e6086ebe3ca626a7c77b2f9b457498",
+  "height_encoding": "PNG unsigned 16-bit; world_height=min+sample/65535*(max-min)",
+  "height_range": [
+    0,
+    255
+  ],
+  "name": "dry-mountains",
+  "numpy_version": "2.2.4",
+  "outputs": {
+    "dry-mountains-color.png": {
+      "bytes": 2467107,
+      "sha256": "f79b7b426e52b4600fdd96bd2ffa65ca6c0d860d9e193b5a48dff9d462c36048"
+    },
+    "dry-mountains-height.png": {
+      "bytes": 1912502,
+      "sha256": "70f893bd13c5e1839b9f7354d88eb2cb0ee5b2fb583051b44934fef879cbe019"
+    }
+  },
+  "periodic": true,
+  "recipe_sha256": "e6f9527925c30901fe1fc26d352addf34a651c5856fd336c3941d81c4bf97108",
+  "resolution": 1024,
+  "statistics": {
+    "height_max": 101.9385525387834,
+    "height_min": 1.556161672494097e-23,
+    "mass_error": -2.2351741790771484e-08,
+    "remaining_water": 334139.92786438356,
+    "temperature_max": 33.79715924507072,
+    "temperature_min": 30.08737208050847,
+    "water_fraction": 0.0
+  },
+  "version": 1
+}

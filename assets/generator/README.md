@@ -9,6 +9,10 @@ OPENBLAS_NUM_THREADS=1 PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
   python3 assets/generator/mapgen.py assets/maps/training-valley.json \
   --output-dir /tmp/wasm-fist-generated-maps
 python3 tests/test_map_generator.py
+
+# Generate every owned family sequentially after validating all recipes.
+OPENBLAS_NUM_THREADS=1 PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
+  python3 assets/generator/generate_maps.py --output-dir /tmp/wasm-fist-generated-maps
 ```
 
 Recipes are strict version-2 JSON; unknown, missing, duplicate and nonfinite
@@ -39,6 +43,11 @@ cannot exceed available material; remaining sediment settles before output, and
 total terrain material is checked. Tuning must account for output resolution.
 An eroded height outside the configured export range fails instead of clipping
 away material. These are artistic terrain controls, not vehicle physics constants.
+
+Dryness selects sand in lowlands before elevation and slope select upland/rock.
+A dry climate must not erase the configured elevation materials. Temperature
+selects snow, while the configured rock-slope transition keeps steep rock faces
+exposed. These deliberate visual rules are covered by separate behavior tests.
 
 Outputs are a lossless unsigned 16-bit grayscale height PNG, an RGB8 colormap and
 a manifest with recipe/generator hashes, NumPy version, dimensions, encoding,

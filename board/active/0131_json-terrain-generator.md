@@ -86,6 +86,39 @@ Compact source/output hashes and actual full/detail review findings remain in
 /tmp/wasm-fist-map-generator-review/warped-relief/verified-improvement.json.
 
 
+## Family/material iteration
+
+Seven additional complete own recipes cover the other observed D03/D06/D07/D08/
+D12/D30/D31 geography families at1024-square; optional development references
+influence analytic geography only. Forest/desert/alpine pilot comparisons were
+actually inspected individually. Neon forest, overly gray uplands and uniform
+sand shading were rejected/tuned. Original local ridge/gully morphology and
+fine material variations remain different; final quality acceptance stays open.
+
+The material composition now deliberately applies dryness to lowlands before
+upland/rock elevation/slope transitions. A dry climate therefore retains authored
+highland materials. Snow uses temperature and existing rock-slope controls to
+leave steep rock exposed. Two behavior groups specify these visual design rules.
+The previous nine groups retain their contracts. Complete eight-recipe identity/
+schema/seed coverage and actual batch success/preflight failure add two more:
+13 meaningful groups pass. Batch generation validates every input before any
+output, rejects mismatched names and executes maps sequentially.
+
+Two frozen original-file-free trees contain only12 owned source/recipe/test files
+for full-size generation and independent repeated output comparison. The live
+supervisor is wasm-fist-map-families.service, with receipts under
+/tmp/wasm-fist-map-family-complete-review. Full16-PNG/eight-manifest repetition now passes: all24 complete files match
+exactly between both independent original-file-free trees. Four actual terminal
+receipts exit0;13 groups pass without skips in each tree. All eight final-size
+height/color comparisons were actually inspected and individual findings recorded.
+Generator SHA256 is a214229df2312a01d196be287b314a5ea0e6086ebe3ca626a7c77b2f9b457498.
+Complete source/output hashes and actual command/terminal/visual evidence are in
+/tmp/wasm-fist-map-family-complete-review/acceptance-audit.json. The bounded
+family authoring/material/generation baseline is verified and versioned; final
+very-close local morphology/material and native/browser quality remain open. No complete-game or runtime file-
+independence, near-ground runtime or60-FPS acceptance is claimed by these pilots.
+
+
 ## Next
 
 Run and inspect the revised training recipe, tune terrain/climate/color controls

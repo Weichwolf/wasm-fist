@@ -1,0 +1,33 @@
+{
+  "generator_sha256": "a214229df2312a01d196be287b314a5ea0e6086ebe3ca626a7c77b2f9b457498",
+  "height_encoding": "PNG unsigned 16-bit; world_height=min+sample/65535*(max-min)",
+  "height_range": [
+    0,
+    255
+  ],
+  "name": "sandy-desert",
+  "numpy_version": "2.2.4",
+  "outputs": {
+    "sandy-desert-color.png": {
+      "bytes": 2052489,
+      "sha256": "af56b1c17e08e6510fce274efc1f744206fef13d142218e0b7c5ee42909edb27"
+    },
+    "sandy-desert-height.png": {
+      "bytes": 1863189,
+      "sha256": "ba5da432f64725411a6d252cbe9efd241ad804228045b63704bfa3f71b1af5e7"
+    }
+  },
+  "periodic": true,
+  "recipe_sha256": "c82e69cb9f655015ca3bf0702f713b760dcbb308405f528c09efd198cb35fa5c",
+  "resolution": 1024,
+  "statistics": {
+    "height_max": 94.38017525519959,
+    "height_min": 0.0017480347151038946,
+    "mass_error": 3.725290298461914e-09,
+    "remaining_water": 334139.9278643837,
+    "temperature_max": 38.82346641413972,
+    "temperature_min": 35.39317041309497,
+    "water_fraction": 0.0
+  },
+  "version": 1
+}

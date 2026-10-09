@@ -1,5 +1,5 @@
 {
-  "generator_sha256": "7ce2352b670f4de15b8e5149de8f6331d4f87a074cf623e95e4db1979869161c",
+  "generator_sha256": "a214229df2312a01d196be287b314a5ea0e6086ebe3ca626a7c77b2f9b457498",
   "height_encoding": "PNG unsigned 16-bit; world_height=min+sample/65535*(max-min)",
   "height_range": [
     0,
@@ -9,8 +9,8 @@
   "numpy_version": "2.2.4",
   "outputs": {
     "training-valley-color.png": {
-      "bytes": 2049545,
-      "sha256": "bfe3c636e0cdc74dfd3e60289ad96743784c3e74f3455b3a0540b073a4510e27"
+      "bytes": 2009460,
+      "sha256": "38ad87dd186420444b2a69f33935ecc2650f12468ee974a55f755f9ae209e4a0"
     },
     "training-valley-height.png": {
       "bytes": 1929115,

@@ -1,0 +1,33 @@
+{
+  "generator_sha256": "a214229df2312a01d196be287b314a5ea0e6086ebe3ca626a7c77b2f9b457498",
+  "height_encoding": "PNG unsigned 16-bit; world_height=min+sample/65535*(max-min)",
+  "height_range": [
+    0,
+    255
+  ],
+  "name": "limestone-valleys",
+  "numpy_version": "2.2.4",
+  "outputs": {
+    "limestone-valleys-color.png": {
+      "bytes": 2483813,
+      "sha256": "d320a437ad1425843342c93230c3bd2d9f06d10825e324af259ee1961f522183"
+    },
+    "limestone-valleys-height.png": {
+      "bytes": 1924970,
+      "sha256": "18f975cd67fce3ed66a4761b85c3b164abb44a61bb79257057ec36bf9ee3a5c7"
+    }
+  },
+  "periodic": true,
+  "recipe_sha256": "002d6777d2fc1306e8c1243000be897b05fcbf6c5e06bf6a5a179b2f0c9e7b5d",
+  "resolution": 1024,
+  "statistics": {
+    "height_max": 113.3368549741918,
+    "height_min": 3.206752149577883,
+    "mass_error": -2.9802322387695312e-08,
+    "remaining_water": 334139.9278643835,
+    "temperature_max": 29.560996534016425,
+    "temperature_min": 25.77609948920956,
+    "water_fraction": 0.0
+  },
+  "version": 1
+}

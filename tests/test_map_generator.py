@@ -52,6 +52,19 @@ def png(data):
 
 
 class MapGeneration(unittest.TestCase):
+    def test_all_map_family_recipes_are_complete(self):
+        expected = ['arid-ridges', 'dry-mountains', 'limestone-valleys',
+                    'rocky-highlands', 'sandy-desert', 'snowy-alpine',
+                    'temperate-forest', 'training-valley']
+        paths = sorted((ROOT / 'assets/maps').glob('*.json'))
+        self.assertEqual([path.stem for path in paths], expected)
+        seeds = set()
+        for path in paths:
+            recipe = MAP.load_recipe(path); MAP.validate(recipe)
+            self.assertEqual(recipe['name'], path.stem)
+            self.assertEqual(recipe['resolution'], 1024)
+            self.assertNotIn(recipe['seed'], seeds); seeds.add(recipe['seed'])
+
     def test_repeatable_without_original_assets(self):
         recipe = fixture()
         first = MAP.generate(recipe); second = MAP.generate(copy.deepcopy(recipe))
@@ -103,6 +116,33 @@ class MapGeneration(unittest.TestCase):
         feature['x'] = .5
         self.assertTrue(np.allclose(np.roll(at_zero, 32, axis=1), MAP.feature_surface(64, [feature]), atol=1e-12))
 
+    def test_dry_climate_preserves_elevation_materials(self):
+        recipe = fixture(); recipe['octaves'] = []; recipe['features'] = []
+        recipe['hydraulic_erosion']['iterations'] = 0
+        recipe['domain_warp'] = {'x_octaves': [], 'y_octaves': []}
+        recipe['moisture'].update(base=0, water_gain=0, octaves=[])
+        recipe['color_noise'] = []; recipe['lighting'].update(ambient=1, diffuse=0)
+        recipe['materials'].update(upland_start=40, upland_end=80)
+        recipe['palette'].update(sand=[200, 100, 50], upland=[50, 50, 100])
+        recipe['base_height'] = 20
+        self.assertTrue(np.all(MAP.generate(recipe)[1] == [200, 100, 50]))
+        recipe['base_height'] = 80
+        self.assertTrue(np.all(MAP.generate(recipe)[1] == [50, 50, 100]))
+
+    def test_cold_climate_exposes_steep_rock(self):
+        recipe = fixture(); recipe['octaves'] = []
+        recipe['domain_warp'] = {'x_octaves': [], 'y_octaves': []}
+        recipe['hydraulic_erosion']['iterations'] = 0
+        recipe['features'] = [{'x': .5, 'y': .5, 'radius_x': .1, 'radius_y': .1,
+                               'angle_degrees': 0, 'height': 30}]
+        recipe['temperature'].update(base_celsius=-40, latitude_gradient=0, octaves=[])
+        recipe['materials'].update(rock_slope_start=50, rock_slope_end=100)
+        recipe['color_noise'] = []; recipe['lighting'].update(ambient=1, diffuse=0)
+        rgb = MAP.generate(recipe)[1]
+        self.assertTrue(np.any(np.all(rgb == recipe['palette']['rock'], axis=2)))
+        self.assertTrue(np.any(np.all(rgb == recipe['palette']['snow'], axis=2)))
+        self.assertTrue(np.array_equal(rgb[16, 16], recipe['palette']['snow']))
+
     def test_domain_warp_controls_and_periodicity(self):
         recipe = fixture(); recipe['resolution'] = 64
         recipe['octaves'] = []; recipe['hydraulic_erosion']['iterations'] = 0
@@ -147,6 +187,33 @@ class MapGeneration(unittest.TestCase):
             deposition_rate=.1, evaporation=.05)
         with self.assertRaisesRegex(ValueError, 'height_range'):
             MAP.generate(recipe)
+
+    def test_batch_complete_maps_and_preflight_rejection(self):
+        with tempfile.TemporaryDirectory(dir='/tmp', prefix='wasm-fist-map-batch-') as temporary:
+            directory = Path(temporary); recipes = directory / 'recipes'; recipes.mkdir()
+            for name in ('first-map', 'second-map'):
+                recipe = fixture(); recipe['name'] = name
+                (recipes / (name + '.json')).write_text(json.dumps(recipe))
+            batch = ROOT / 'assets/generator/generate_maps.py'
+            output = directory / 'output'
+            command = ['python3', str(batch), '--recipes-dir', str(recipes), '--output-dir', str(output)]
+            result = subprocess.run(command, capture_output=True, text=True, timeout=30, check=True)
+            rows = [json.loads(row) for row in result.stdout.splitlines()]
+            self.assertEqual(rows[-1], {'success': True, 'maps': ['first-map', 'second-map']})
+            self.assertEqual(len(rows), 3)
+            for name in rows[-1]['maps']:
+                manifest = json.loads((output / (name + '-manifest.json')).read_text())
+                self.assertEqual(len(manifest['outputs']), 2)
+                for asset, expected in manifest['outputs'].items():
+                    self.assertEqual(hashlib.sha256((output / asset).read_bytes()).hexdigest(), expected['sha256'])
+            bad = fixture(); bad['name'] = 'wrong-name'
+            (recipes / 'third-map.json').write_text(json.dumps(bad))
+            rejected = directory / 'rejected'
+            command[-1] = str(rejected)
+            result = subprocess.run(command, capture_output=True, text=True, timeout=30)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('match recipe filenames', result.stderr)
+            self.assertFalse(rejected.exists(), 'Validate every recipe before generating any output')
 
     def test_cli_complete_png_and_manifest(self):
         with tempfile.TemporaryDirectory(dir='/tmp', prefix='wasm-fist-map-contract-') as temporary:

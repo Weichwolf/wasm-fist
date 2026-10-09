@@ -1,0 +1,33 @@
+{
+  "generator_sha256": "a214229df2312a01d196be287b314a5ea0e6086ebe3ca626a7c77b2f9b457498",
+  "height_encoding": "PNG unsigned 16-bit; world_height=min+sample/65535*(max-min)",
+  "height_range": [
+    0,
+    255
+  ],
+  "name": "rocky-highlands",
+  "numpy_version": "2.2.4",
+  "outputs": {
+    "rocky-highlands-color.png": {
+      "bytes": 2337416,
+      "sha256": "f471eac5d1a4ff495bb3f58dea44380a3ebb887c705a7003557f378b28dcabbd"
+    },
+    "rocky-highlands-height.png": {
+      "bytes": 1982490,
+      "sha256": "a271440b97be3ea7c5f78d730a346aabec0dc69ce940fcd50e741f7bf036b2f1"
+    }
+  },
+  "periodic": true,
+  "recipe_sha256": "750b57b44d2d2aad6fce69ac5a34689c0472b8f50223e8b8ac5dcd456656cc01",
+  "resolution": 1024,
+  "statistics": {
+    "height_max": 128.3979034117247,
+    "height_min": 0.6031321961163507,
+    "mass_error": 7.450580596923828e-09,
+    "remaining_water": 334139.9278643834,
+    "temperature_max": 18.71460500144643,
+    "temperature_min": 12.831903930022786,
+    "water_fraction": 0.0
+  },
+  "version": 1
+}

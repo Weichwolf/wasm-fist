@@ -210,10 +210,15 @@ def generate(recipe):
     dx = (np.roll(height, -1, 1) - np.roll(height, 1, 1)) * size / 2
     dy = (np.roll(height, -1, 0) - np.roll(height, 1, 0)) * size / 2
     slope = np.hypot(dx, dy); palette = {key: np.array(value, float) for key, value in recipe['palette'].items()}
-    rgb = blend(palette['lowland'], palette['upland'], ramp(height, materials['upland_start'], materials['upland_end']))
-    rgb = blend(rgb, palette['sand'], 1 - ramp(wet, materials['dry_moisture'], materials['dry_moisture'] + materials['dry_transition']))
-    rgb = blend(rgb, palette['rock'], ramp(slope, materials['rock_slope_start'], materials['rock_slope_end']))
-    rgb = blend(rgb, palette['snow'], 1 - ramp(temp, materials['snow_temperature'], materials['snow_temperature'] + materials['snow_transition']))
+    # Dry lowlands become sand; elevation/slope still select upland and rock.
+    dry = 1 - ramp(wet, materials['dry_moisture'], materials['dry_moisture'] + materials['dry_transition'])
+    rgb = blend(palette['lowland'], palette['sand'], dry)
+    rgb = blend(rgb, palette['upland'], ramp(height, materials['upland_start'], materials['upland_end']))
+    rock = ramp(slope, materials['rock_slope_start'], materials['rock_slope_end'])
+    rgb = blend(rgb, palette['rock'], rock)
+    snow = 1 - ramp(temp, materials['snow_temperature'], materials['snow_temperature'] + materials['snow_transition'])
+    # Steep rock remains exposed in cold climates.
+    rgb = blend(rgb, palette['snow'], snow * (1 - rock))
     rgb *= 1 + noise(size, seed + 3000, recipe['color_noise'])[..., None]
     light = recipe['lighting']; az, el = math.radians(light['azimuth_degrees']), math.radians(light['elevation_degrees'])
     nx, ny = -dx / light['normal_scale'], -dy / light['normal_scale']
