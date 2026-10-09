@@ -19,6 +19,13 @@ development evidence; they do not satisfy owned-content or release independence.
 The current controlled preview still requires original assets. No original-file-
 free first mission, complete replacement inventory or new audio is accepted.
 
+The terrain association inventory in docs/terrain-mission-inventory.md covers
+all47 pinned scenarios: eight height/color geography pairs but19 normalized
+palette/sky environment combinations. Every complete native metadata transcript
+was compared with the independent scenario interpretation and source hashes
+checked before/after use. The eight owned map baselines cover geography only;
+own mission/environment definitions and the other content categories remain open.
+
 ## Next
 
 Start with active0131's JSON heightmap/colormap generator and iterative actual
