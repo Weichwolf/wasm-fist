@@ -1,0 +1,2 @@
+# Offline authoring only; no runtime dependency.
+numpy==2.2.4

@@ -1,0 +1,33 @@
+{
+  "generator_sha256": "5b410ff6c2585a30c4cab6f430df989aba1b8afe1a84931cf4b1078e0f16c83e",
+  "height_encoding": "PNG unsigned 16-bit; world_height=min+sample/65535*(max-min)",
+  "height_range": [
+    0,
+    255
+  ],
+  "name": "training-valley",
+  "numpy_version": "2.2.4",
+  "outputs": {
+    "training-valley-color.png": {
+      "bytes": 1785923,
+      "sha256": "106e48443b0fc2eba5f166e329eda6c0b6c33e884ab26e8681a301a05f252be2"
+    },
+    "training-valley-height.png": {
+      "bytes": 1923516,
+      "sha256": "af17bdbea890d91029561aa7f378aa8b7dc921dbe39d7ef7e007e5e0b16bd1c0"
+    }
+  },
+  "periodic": true,
+  "recipe_sha256": "61ff285415aa245acab3227377ad7decead627343c8bf5513926d0bb57673215",
+  "resolution": 1024,
+  "statistics": {
+    "height_max": 113.45233233612213,
+    "height_min": 1.0964389043042034e-09,
+    "mass_error": 0.0,
+    "remaining_water": 334139.92786438344,
+    "temperature_max": 25.63622196813275,
+    "temperature_min": 21.092423974321655,
+    "water_fraction": 0.0
+  },
+  "version": 1
+}

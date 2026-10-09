@@ -21,7 +21,9 @@ free first mission, complete replacement inventory or new audio is accepted.
 
 ## Next
 
-Inventory all required visual/audio/mission categories, identify every runtime
+Start with active0131's JSON heightmap/colormap generator and iterative actual
+original-reference visual comparison, as explicitly requested. Inventory all
+required visual/audio/mission categories, identify every runtime
 original-file dependency, define owned schemas and deterministic generation
 manifests, and pin Blender/offline generation tools. Create the first genuine
 owned terrain/vehicle/cockpit/UI/audio set and its original-file-free native/WASM

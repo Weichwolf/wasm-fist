@@ -17,6 +17,10 @@ Original pixel/palette/PCM bit identity is not an acceptance target.
 - Rebuild every visual asset in the repository: Blender models, complete vehicle interiors and
   cockpits, environment objects, effects, UI and all other inventoried content. Generate textures
   procedurally; generate heightmaps and colormaps through a JSON-parameterized map generator.
+  Prioritize this generator next. All octave, hydraulic erosion, palette, water-level,
+  temperature/climate and related controls must be explicit in JSON. Iteratively inspect
+  generated maps against original development references until their terrain forms and visual
+  character are very close, while increasing resolution/detail; generation must need no originals.
   Create new audio for every inventoried sound/music/voice requirement. No original visual,
   terrain, palette, cockpit or audio asset may be needed or shipped by the completed game.
 - Keep Blender sources, generation scripts, JSON recipes and final generated runtime assets in
@@ -36,6 +40,11 @@ Original pixel/palette/PCM bit identity is not an acceptance target.
 - softgl is a pinned `deps/softgl` submodule. Keep dependency changes separate and justified.
   Runtime and renderer stay C11. meshoptimizer is for offline tools only; do not link it.
   Keep softgl as the only dependency in `deps/`; external reference tools belong under `/tmp`.
+- Target 60 FPS on this machine at 640x360, genuine 4x MSAA and four total render threads.
+  Treat the user's 100000-200000 triangles and 20-30 materials/frame as initial scene planning
+  estimates, not measured 60-FPS capacity. Measure representative owned scenes with reserve
+  for overdraw, alpha tests, complex materials, simulation/audio and presentation; do not reduce
+  requested image quality or disable MSAA to claim the target. Follow docs/render-budget.md.
 - Keep `armoredfist/` ignored and read-only; provision optional development references and run
   isolated copies. Never make original provisioning a requirement for the shipped game.
 - Enforce `.clang-format` and `.clang-tidy` with LLVM 19.1.x on owned rewrite C/headers.

@@ -16,6 +16,7 @@ evidence, not owned-content or release-independence acceptance.
 | WI | Deliverable |
 | --- | --- |
 | 0130 | Complete owned-content inventory, Blender/procedural/JSON-map/new-audio pipeline and original-file-free loading/package gates. |
+| 0131 | Active JSON heightmap/colormap generator: explicit octaves, hydraulic erosion, climate/palette/water controls and iterative original-reference visual comparison; original-free generator tests pass, full quality/runtime coverage remains open. |
 | 0040 | Reference freeze, reproducible softgl integration, strict tooling and rewrite boundaries. |
 | 0041 | First playable mission through bounded asset/world/control/HUD/audio steps. |
 | 0048 → 0051 → 0052 → 0053/0049 | Scenario readers, terrain bundles/palette maps and first real inspection scene delivered. |
