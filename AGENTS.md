@@ -29,6 +29,9 @@ Original pixel/palette/PCM bit identity is no longer an acceptance target.
 - Tests specify behavior. Change expectations only with evidence or an intentional visual design
   change. Missing output/coverage and incomplete runs fail. Original bit-parity tests do not
   govern deliberate visual improvements.
+- Treat visible graphics as an acceptance priority. Review actual native and browser images
+  and motion for terrain, units, camera, effects and HUD; record concrete quality findings.
+  Numerical tests and changed image hashes do not establish visual quality. Follow 0046.
 - Build sequentially with one writer. Disposable builds/logs/captures/isolated assets belong in
   `/tmp`. Clean obsolete owned artifacts after each success; retain compact summaries and version
   reproduction commands/fixtures. Do not erase unrelated jobs or evidence still in use.
