@@ -29,7 +29,12 @@ target_compile_options(fist_build_options INTERFACE
     -Wall -Wextra -Wpedantic
     -Wno-unused-parameter -Wno-unused-function
     -fno-strict-aliasing -ffast-math)
-target_link_libraries(softgl PRIVATE fist_build_options)
+# Preserve softgl's depth infinities and combiner arithmetic while retaining
+# fast math for owned simulation/audio and the library's other optimizations.
+add_library(fist_softgl_math_options INTERFACE)
+target_compile_options(fist_softgl_math_options INTERFACE
+    -fno-associative-math -fsigned-zeros -fno-finite-math-only)
+target_link_libraries(softgl PRIVATE fist_build_options fist_softgl_math_options)
 
 if(EMSCRIPTEN)
     target_link_options(fist_build_options INTERFACE -Werror)
@@ -384,7 +389,8 @@ target_link_libraries(fist_renderer_probe PRIVATE fist_render fist_build_options
 target_compile_options(fist_renderer_probe PRIVATE -Werror)
 if(EMSCRIPTEN)
     target_link_libraries(fist_renderer_probe PRIVATE fist_wasm_render_options)
-    target_compile_options(softgl PRIVATE -msimd128 -pthread)
+    # Match softgl's documented Emscripten SSE-to-SIMD128 compatibility path.
+    target_compile_options(softgl PRIVATE -msimd128 -msse4.1 -pthread)
     target_compile_options(fist_render PRIVATE -msimd128 -pthread)
     target_compile_options(fist_renderer_probe PRIVATE -msimd128 -pthread)
     target_link_options(fist_renderer_probe PRIVATE
